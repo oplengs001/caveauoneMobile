@@ -8,6 +8,7 @@ import {
   SafeAreaView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { InventoryBottle, Location, MasterWine } from "../../types";
@@ -21,6 +22,7 @@ type BottleView = InventoryBottle & {
 export default function InventoryScreen() {
   const [bottles, setBottles] = useState<BottleView[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const fetchInventory = async () => {
     setLoading(true);
@@ -127,23 +129,47 @@ export default function InventoryScreen() {
     );
   };
 
+  const filteredBottles = bottles.filter((bottle) => {
+    if (!searchQuery) {
+      return true;
+    }
+    const lowercasedQuery = searchQuery.toLowerCase();
+    const wineName = bottle.masterWineData?.name?.toLowerCase() || "";
+    const vintage = bottle.masterWineData?.vintage?.toLowerCase() || "";
+    const failSafeCode = bottle.failSafeCode?.toLowerCase() || "";
+
+    return (
+      wineName.includes(lowercasedQuery) ||
+      vintage.includes(lowercasedQuery) ||
+      failSafeCode.includes(lowercasedQuery)
+    );
+  });
+
   return (
     <SafeAreaView style={styles.container}>
       <Stack.Screen options={{ title: "Inventory" }} />
-      {loading ? (
-        <ActivityIndicator
-          size="large"
-          color="#ffffff"
-          style={{ marginTop: 20 }}
+      <View style={styles.searchContainer}>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search by wine, vintage, or code..."
+          placeholderTextColor="#9ca3af"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          clearButtonMode="while-editing"
         />
+      </View>
+      {loading ? (
+        <ActivityIndicator size="large" color="#ffffff" style={{ flex: 1 }} />
       ) : (
         <FlatList
-          data={bottles}
+          data={filteredBottles}
           renderItem={renderItem}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
           ListEmptyComponent={
-            <Text style={styles.emptyText}>No bottles found.</Text>
+            <Text style={styles.emptyText}>
+              {searchQuery ? "No results found." : "No bottles found."}
+            </Text>
           }
         />
       )}
@@ -154,10 +180,25 @@ export default function InventoryScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+
     backgroundColor: "#111827",
   },
+  searchContainer: {
+    marginTop: 12,
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+  },
+  searchInput: {
+    backgroundColor: "#1f2937",
+    color: "#ffffff",
+    fontSize: 16,
+    padding: 12,
+    borderRadius: 8,
+  },
   listContent: {
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 16,
   },
   itemContainer: {
     backgroundColor: "#1f2937",
