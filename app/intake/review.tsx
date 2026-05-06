@@ -125,7 +125,7 @@ export default function ReviewScreen() {
         )}
 
         <View style={styles.extractionCard}>
-          <Text style={styles.cardHeader}>AI Extraction Result</Text>
+          <Text style={styles.cardHeader}>Extraction Result</Text>
 
           {isAnalyzing ? (
             <View style={styles.loadingContainer}>

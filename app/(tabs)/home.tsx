@@ -53,6 +53,19 @@ export default function HomeScreen() {
               </View>
             </View>
           </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.actionButton, { backgroundColor: '#8b5cf6' }]}
+            onPress={() => router.push('/inventory')}
+          >
+            <View style={styles.buttonContent}>
+              <IconSymbol name="list.bullet.rectangle.portrait.fill" size={48} color="#ffffff" />
+              <View style={styles.buttonTextContainer}>
+                <Text style={styles.buttonTitle}>Inventory Lookup</Text>
+                <Text style={styles.buttonDesc}>View and search for bottles in the warehouse</Text>
+              </View>
+            </View>
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </SafeAreaView>
