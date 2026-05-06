@@ -56,8 +56,16 @@ export default function ScanScreen() {
     <View style={styles.container}>
       <CameraView style={styles.camera} facing="back" ref={cameraRef}>
         <SafeAreaView style={styles.overlay}>
-          <View style={styles.header}>
-            <Text style={styles.instructionText}>Snap a photo of the supplier receipt</Text>
+          <View style={styles.topSection}>
+            <View style={styles.topControls}>
+              <TouchableOpacity onPress={() => router.back()} style={styles.closeButton}>
+                <IconSymbol name="xmark" size={28} color="#fff" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.header}>
+              <Text style={styles.instructionText}>Snap a photo of the supplier receipt</Text>
+            </View>
           </View>
 
           <View style={styles.footer}>
@@ -115,16 +123,37 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'space-between',
   },
+  topSection: {
+    width: '100%',
+  },
+  topControls: {
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    width: '100%',
+  },
+  closeButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   header: {
     backgroundColor: 'rgba(0,0,0,0.6)',
-    padding: 24,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
     alignItems: 'center',
-    marginTop: 40,
+    alignSelf: 'center',
+    borderRadius: 24,
+    marginTop: 20,
   },
   instructionText: {
     color: '#fff',
-    fontSize: 24,
-    fontWeight: '800',
+    fontSize: 16,
+    fontWeight: '700',
     textAlign: 'center',
     letterSpacing: 0.5,
   },

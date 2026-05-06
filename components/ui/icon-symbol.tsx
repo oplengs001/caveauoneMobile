@@ -25,6 +25,7 @@ const MAPPING = {
   'plus': 'add',
   'printer.fill': 'print',
   'camera.fill': 'photo-camera',
+  'xmark': 'close',
 } as IconMapping;
 
 /**
