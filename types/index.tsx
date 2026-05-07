@@ -35,3 +35,9 @@ export interface Location {
   type: string;
   capacity?: number;
 }
+
+export interface IndividualLabelData {
+  wineName: string;
+  sku: string;
+  dateAdded: string;
+}

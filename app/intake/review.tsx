@@ -24,7 +24,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { InventoryBottle, MasterWine } from "../../types";
+import { IndividualLabelData, InventoryBottle, MasterWine } from "../../types";
 
 const NEXT_JS_API_URL = "http://192.168.1.16:3000";
 
@@ -152,6 +152,7 @@ export default function ReviewScreen() {
       const dateStr = `${today.getMonth() + 1}${today.getDate()}${today.getFullYear().toString().slice(2)}`;
 
       const inventoryBottlesCollection = collection(db, "inventory_bottles");
+      const labelsToGenerate: IndividualLabelData[] = []; // Array to collect all labels
       const masterWinesCollection = collection(db, "master_wines");
 
       // Fetch all existing master wines to efficiently check for duplicates
@@ -211,17 +212,18 @@ export default function ReviewScreen() {
             createdAt: new Date(),
             updatedAt: new Date(),
           };
-          await addDoc(inventoryBottlesCollection, newBottle);
+          const docRef = await addDoc(inventoryBottlesCollection, newBottle);
           totalBottlesProcessed++;
+          labelsToGenerate.push({
+            wineName: wine.wineName,
+            sku: wine.sku || `BTL-${docRef.id.slice(0, 8)}`,
+            dateAdded: dateStr,
+          });
         }
       }
 
-      if (shouldPrintLabels) {
-        // Call printLabels for each wine type, as it was originally structured.
-        // The total count in the alert will reflect all individual bottles.
-        for (const wine of wines) {
-          await printLabels(wine.wineName, wine.quantity, dateStr);
-        }
+      if (shouldPrintLabels && labelsToGenerate.length > 0) {
+        await printLabels(labelsToGenerate);
       }
 
       Alert.alert(
