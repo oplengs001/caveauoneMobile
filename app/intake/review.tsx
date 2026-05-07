@@ -279,10 +279,7 @@ export default function ReviewScreen() {
             </View>
           ) : (
             wines.map((wine, index) => (
-              <View
-                key={wine.id}
-                style={[styles.wineItem, index > 0 && styles.wineItemBorder]}
-              >
+              <View key={wine.id} style={styles.wineItem}>
                 <View style={styles.wineHeader}>
                   <Text style={styles.label}>
                     WINE {wines.length > 1 ? index + 1 : ""}
@@ -303,14 +300,34 @@ export default function ReviewScreen() {
                   }
                 />
 
+                {/* --- Prioritized Fields --- */}
+                <View style={{ marginBottom: 16 }}>
+                  <Text style={styles.label}>QUANTITY</Text>
+                  <View style={styles.stepperContainer}>
+                    <TouchableOpacity
+                      style={styles.stepperButton}
+                      onPress={() => handleUpdateQuantity(wine.id, -1)}
+                    >
+                      <IconSymbol name="minus" size={24} color="#fff" />
+                    </TouchableOpacity>
+                    <Text style={styles.quantityValue}>{wine.quantity}</Text>
+                    <TouchableOpacity
+                      style={styles.stepperButton}
+                      onPress={() => handleUpdateQuantity(wine.id, 1)}
+                    >
+                      <IconSymbol name="plus" size={24} color="#fff" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
                 <View style={styles.row}>
                   <View style={styles.col}>
-                    <Text style={styles.label}>VINTAGE</Text>
+                    <Text style={styles.label}>SKU</Text>
                     <TextInput
                       style={styles.input}
-                      value={wine.vintage}
+                      value={wine.sku}
                       onChangeText={(text) =>
-                        handleUpdateWineDetails(wine.id, "vintage", text)
+                        handleUpdateWineDetails(wine.id, "sku", text)
                       }
                     />
                   </View>
@@ -331,63 +348,52 @@ export default function ReviewScreen() {
                   </View>
                 </View>
 
-                <Text style={styles.label}>PRODUCER</Text>
-                <TextInput
-                  style={styles.input}
-                  value={wine.producer}
-                  onChangeText={(text) =>
-                    handleUpdateWineDetails(wine.id, "producer", text)
-                  }
-                />
-
-                <View style={styles.row}>
-                  <View style={styles.col}>
-                    <Text style={styles.label}>REGION</Text>
-                    <TextInput
-                      style={styles.input}
-                      value={wine.region}
-                      onChangeText={(text) =>
-                        handleUpdateWineDetails(wine.id, "region", text)
-                      }
-                    />
+                {/* --- Secondary Details Section --- */}
+                <View style={styles.secondaryDetailsContainer}>
+                  <View style={styles.row}>
+                    <View style={styles.col}>
+                      <Text style={styles.secondaryLabel}>PRODUCER</Text>
+                      <TextInput
+                        style={styles.secondaryInput}
+                        value={wine.producer}
+                        onChangeText={(text) =>
+                          handleUpdateWineDetails(wine.id, "producer", text)
+                        }
+                      />
+                    </View>
+                    <View style={styles.col}>
+                      <Text style={styles.secondaryLabel}>VINTAGE</Text>
+                      <TextInput
+                        style={styles.secondaryInput}
+                        value={wine.vintage}
+                        onChangeText={(text) =>
+                          handleUpdateWineDetails(wine.id, "vintage", text)
+                        }
+                      />
+                    </View>
                   </View>
-                  <View style={styles.col}>
-                    <Text style={styles.label}>TYPE</Text>
-                    <TextInput
-                      style={styles.input}
-                      value={wine.type}
-                      onChangeText={(text) =>
-                        handleUpdateWineDetails(wine.id, "type", text)
-                      }
-                    />
-                  </View>
-                </View>
 
-                <Text style={styles.label}>SKU</Text>
-                <TextInput
-                  style={styles.input}
-                  value={wine.sku}
-                  onChangeText={(text) =>
-                    handleUpdateWineDetails(wine.id, "sku", text)
-                  }
-                />
-
-                <View>
-                  <Text style={styles.label}>QUANTITY</Text>
-                  <View style={styles.stepperContainer}>
-                    <TouchableOpacity
-                      style={styles.stepperButton}
-                      onPress={() => handleUpdateQuantity(wine.id, -1)}
-                    >
-                      <IconSymbol name="minus" size={24} color="#fff" />
-                    </TouchableOpacity>
-                    <Text style={styles.quantityValue}>{wine.quantity}</Text>
-                    <TouchableOpacity
-                      style={styles.stepperButton}
-                      onPress={() => handleUpdateQuantity(wine.id, 1)}
-                    >
-                      <IconSymbol name="plus" size={24} color="#fff" />
-                    </TouchableOpacity>
+                  <View style={styles.row}>
+                    <View style={styles.col}>
+                      <Text style={styles.secondaryLabel}>REGION</Text>
+                      <TextInput
+                        style={styles.secondaryInput}
+                        value={wine.region}
+                        onChangeText={(text) =>
+                          handleUpdateWineDetails(wine.id, "region", text)
+                        }
+                      />
+                    </View>
+                    <View style={styles.col}>
+                      <Text style={styles.secondaryLabel}>TYPE</Text>
+                      <TextInput
+                        style={styles.secondaryInput}
+                        value={wine.type}
+                        onChangeText={(text) =>
+                          handleUpdateWineDetails(wine.id, "type", text)
+                        }
+                      />
+                    </View>
                   </View>
                 </View>
               </View>
@@ -486,16 +492,17 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     textAlign: "center",
   },
-  wineItem: { marginBottom: 24 },
-  wineItemBorder: {
-    borderTopWidth: 1,
-    borderTopColor: "#374151",
-    paddingTop: 24,
+  wineItem: {
+    backgroundColor: "#111827",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
   },
   wineHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    marginBottom: 16,
   },
   label: {
     color: "#9ca3af",
@@ -520,6 +527,29 @@ const styles = StyleSheet.create({
   },
   col: {
     flex: 1,
+  },
+  secondaryDetailsContainer: {
+    borderTopWidth: 1,
+    borderTopColor: "#374151",
+    marginTop: 16,
+    paddingTop: 16,
+  },
+  secondaryLabel: {
+    color: "#9ca3af",
+    fontSize: 12,
+    fontWeight: "600",
+    marginBottom: 6,
+    letterSpacing: 0.8,
+  },
+  secondaryInput: {
+    backgroundColor: "#374151",
+    color: "#fff",
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 14,
+    marginBottom: 12,
+    fontWeight: "500",
   },
   stepperContainer: {
     flexDirection: "row",
