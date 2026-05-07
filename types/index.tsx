@@ -22,7 +22,7 @@ export interface InventoryBottle {
   id: string;
   masterWineRef: DocumentReference;
   locationRef: DocumentReference | null;
-  failSafeCode: string;
+  sku: string;
   status: "received" | "shelved" | "consumed" | "damaged" | "lost";
   receiptId?: string;
   createdAt: Date;

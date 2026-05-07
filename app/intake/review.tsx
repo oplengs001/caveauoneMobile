@@ -202,16 +202,10 @@ export default function ReviewScreen() {
 
         // Add inventory bottles based on quantity
         for (let i = 0; i < wine.quantity; i++) {
-          const randomCode = Math.random()
-            .toString(36)
-            .substring(2, 8)
-            .toUpperCase();
-          const failSafeCode = `CVA-${randomCode}`;
-
           const newBottle: Omit<InventoryBottle, "id"> = {
             masterWineRef: masterWineRef,
             locationRef: null, // No initial location
-            failSafeCode: failSafeCode,
+            sku: wine.sku || "",
             status: "received",
             receiptId: "", // No receipt ID for now
             createdAt: new Date(),

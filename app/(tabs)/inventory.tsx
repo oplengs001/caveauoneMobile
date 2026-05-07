@@ -120,7 +120,7 @@ export default function InventoryScreen() {
           </View>
         </View>
         <Text style={styles.itemSubtitle}>
-          {item.masterWineData?.vintage || "N/V"} - {item.failSafeCode}
+          {item.masterWineData?.vintage || "N/V"} - {item.sku}
         </Text>
         <Text style={styles.itemLocation}>
           Location: {item.locationData?.name || "Not Shelved"}
@@ -136,12 +136,12 @@ export default function InventoryScreen() {
     const lowercasedQuery = searchQuery.toLowerCase();
     const wineName = bottle.masterWineData?.name?.toLowerCase() || "";
     const vintage = bottle.masterWineData?.vintage?.toLowerCase() || "";
-    const failSafeCode = bottle.failSafeCode?.toLowerCase() || "";
+    const sku = bottle.sku?.toLowerCase() || "";
 
     return (
       wineName.includes(lowercasedQuery) ||
       vintage.includes(lowercasedQuery) ||
-      failSafeCode.includes(lowercasedQuery)
+      sku.includes(lowercasedQuery)
     );
   });
 
