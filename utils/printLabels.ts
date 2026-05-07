@@ -1,12 +1,8 @@
 import * as Print from "expo-print";
 import QRCode from "qrcode";
-import { Platform } from "react-native";
-import { IndividualLabelData } from "../types"; // Assuming IndividualLabelData is defined in types/index.tsx
+import { IndividualLabelData } from "../types";
 
 export const printLabels = async (labelsToPrint: IndividualLabelData[]) => {
-  // A4 dimensions: 210mm x 297mm
-  // We want to fit 20 labels (e.g., 4 columns x 5 rows) on an A4 page.
-  // Each label will be approximately 45mm x 50mm (allowing for margins and gaps).
   const labelHtmlPromises = labelsToPrint.map(async (label) => {
     const svgString = await QRCode.toString(label.sku, {
       type: "svg",
@@ -17,9 +13,11 @@ export const printLabels = async (labelsToPrint: IndividualLabelData[]) => {
     return `
       <div class="label-item">
         <div class="label-content">
-          <p class="label-wine-name">${label.wineName}</p>
+          <div class="label-wine-name"><span>${label.wineName}</span></div>
           <div class="qr-code-container">${svgString}</div>
-          <p class="label-sku-date">SKU: ${label.sku} | ${label.dateAdded}</p>
+          <div class="label-footer">
+            <p class="label-sku-date">SKU: ${label.sku}</p>
+          </div>
         </div>
       </div>
     `;
@@ -34,70 +32,61 @@ export const printLabels = async (labelsToPrint: IndividualLabelData[]) => {
         <style>
           @page {
             size: A4;
-            margin: 0;
+            margin: 10mm;
           }
           body {
             font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
             margin: 0;
-            padding: 10mm; /* Overall padding for the A4 sheet */
-            box-sizing: border-box;
+            padding: 0;
             display: grid;
-            grid-template-columns: repeat(4, 1fr); /* 4 columns */
-            grid-template-rows: repeat(5, 1fr); /* 5 rows */
-            gap: 5mm; /* Gap between labels */
-            height: 277mm; /* A4 height - 2*padding */
-            width: 190mm; /* A4 width - 2*padding */
-            /* Ensure content fits within A4 and handles multiple pages */
-            page-break-after: auto; /* Allow pages to break naturally */
-          }
-          .label-container {
-            /* This class is no longer used directly for individual labels in the new grid layout */
+            grid-template-columns: repeat(4, 47.5mm); 
+            grid-template-rows: repeat(5, 55.4mm); 
+            border-top: .4mm dashed #bbb;
+            border-left: .4mm dashed #bbb;
+            width: fit-content;
           }
           .label-item {
             display: flex;
             justify-content: center;
             align-items: center;
-            border: 0.25mm dashed #ccc; /* Thin cutter line */
             box-sizing: border-box;
-            padding: 2mm; /* Inner padding for content */
+            padding: 3mm;
             text-align: center;
-            overflow: hidden; /* Ensure content doesn't spill */
+            overflow: hidden;
+            border-right: .4mm dashed #bbb;
+            border-bottom: .4mm dashed #bbb;
           }
           .label-content {
             width: 100%;
             height: 100%;
             display: flex;
             flex-direction: column;
-            justify-content: space-around;
+            justify-content: center; /* Center everything as a group */
             align-items: center;
           }
-          .label-header {
-            font-size: 10pt;
-            margin: 0;
-            text-transform: uppercase;
-            font-weight: bold;
-          }
           .label-wine-name {
-            font-size: 8pt;
-            margin: 2pt 0;
-            font-weight: 500;
-            line-height: 1.2;
-            max-height: 2.4em; /* Limit to 2 lines */
+            flex: 1; /* Takes up all remaining top space dynamically */
+            width: 100%;
+            display: flex;
+            align-items: center; /* Vertically centers the text */
+            justify-content: center;
             overflow: hidden;
           }
-          .label-sku-date {
-            font-size: 7pt;
-            font-weight: normal;
-            color: #555;
-            margin: 0;
-          }
-          h1 {
-            /* Overridden by .label-header */
+          .label-wine-name span {
+            font-size: 7pt; /* Scaled to fit long words */
+            font-weight: bold;
+            line-height: 1.1;
+            word-break: break-word;
+            display: -webkit-box;
+            -webkit-line-clamp: 2; /* Safely allow up to 4 lines now */
+            -webkit-box-orient: vertical;
+            overflow: hidden;
           }
           .qr-code-container {
-            width: 30mm;
-            height: 30mm;
-            margin-top: 5pt;
+            width: 35mm; /* Scaled down to guarantee text room */
+            height: 35mm;
+            flex-shrink: 0; /* Prevents the QR code from squishing */
+            margin: 1.5mm 0;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -105,6 +94,20 @@ export const printLabels = async (labelsToPrint: IndividualLabelData[]) => {
           .qr-code-container svg {
             width: 100%;
             height: 100%;
+          }
+          .label-footer {
+            flex-shrink: 0; /* Ensures footer never squishes */
+            width: 100%;
+          }
+          .label-sku-date {
+            font-size: 7pt;
+            color: #444;
+            margin: 0;
+            line-height: 1.2;
+          }
+          
+          .label-item:nth-child(20n) {
+            page-break-after: always;
           }
         </style>
       </head>
@@ -115,10 +118,7 @@ export const printLabels = async (labelsToPrint: IndividualLabelData[]) => {
   `;
 
   try {
-    await Print.printAsync({
-      html,
-      printerUrl: Platform.OS === "ios" ? undefined : undefined, // Assuming default or user-selected printer
-    });
+    await Print.printAsync({ html });
   } catch (error) {
     console.error("Error printing labels:", error);
     throw error;
