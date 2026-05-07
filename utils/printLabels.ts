@@ -17,6 +17,7 @@ export const printLabels = async (labelsToPrint: IndividualLabelData[]) => {
     return `
       <div class="label-item">
         <div class="label-content">
+          <p class="label-wine-name">${label.wineName}</p>
           <div class="qr-code-container">${svgString}</div>
           <p class="label-sku-date">SKU: ${label.sku} | ${label.dateAdded}</p>
         </div>
