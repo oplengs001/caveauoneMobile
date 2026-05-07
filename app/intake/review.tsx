@@ -1,8 +1,16 @@
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { printLabels } from "@/utils/printLabels";
 // 1. UPDATED: Import from 'expo-file-system/legacy'
+import { db } from "@/lib/firebase";
 import * as FileSystem from "expo-file-system/legacy";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import {
+  addDoc,
+  collection,
+  doc,
+  DocumentReference,
+  getDocs,
+} from "firebase/firestore";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -12,9 +20,11 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
+import { InventoryBottle, MasterWine } from "../../types";
 
 const NEXT_JS_API_URL = "http://192.168.1.16:3000";
 
@@ -22,6 +32,12 @@ interface ExtractedWine {
   id: string;
   wineName: string;
   quantity: number;
+  vintage: string;
+  price: number;
+  producer?: string;
+  region?: string;
+  type?: string;
+  sku?: string;
 }
 
 export default function ReviewScreen() {
@@ -61,22 +77,23 @@ export default function ReviewScreen() {
 
       const data = await response.json();
       console.log(data, "Data");
+
+      const mapItemToWine = (item: any, index: number): ExtractedWine => ({
+        id: `${Date.now()}-${index}`,
+        wineName: item.wineName || "Unknown Wine",
+        quantity: item.quantity || 1,
+        vintage: item.vintage || "",
+        price: item.price || 0,
+        producer: item.producer || "",
+        region: item.region || "",
+        type: item.type || "",
+        sku: item.sku || "",
+      });
+
       if (Array.isArray(data)) {
-        setWines(
-          data.map((item: any, index: number) => ({
-            id: `${Date.now()}-${index}`,
-            wineName: item.wineName || "Unknown Wine",
-            quantity: item.quantity || 1,
-          })),
-        );
+        setWines(data.map(mapItemToWine));
       } else {
-        setWines([
-          {
-            id: `${Date.now()}-0`,
-            wineName: data.wineName || "Unknown Wine",
-            quantity: data.quantity || 1,
-          },
-        ]);
+        setWines([mapItemToWine(data, 0)]);
       }
     } catch (error) {
       console.error("Analysis Error:", error);
@@ -89,6 +106,12 @@ export default function ReviewScreen() {
           id: "manual-0",
           wineName: "Manual Entry Required",
           quantity: 1,
+          vintage: "",
+          price: 0,
+          producer: "",
+          region: "",
+          type: "",
+          sku: "",
         },
       ]);
     } finally {
@@ -110,8 +133,17 @@ export default function ReviewScreen() {
     setWines((prev) => prev.filter((wine) => wine.id !== id));
   };
 
+  const handleUpdateWineDetails = (
+    id: string,
+    field: keyof Omit<ExtractedWine, "id" | "quantity">,
+    value: string | number,
+  ) => {
+    setWines((prev) =>
+      prev.map((wine) => (wine.id === id ? { ...wine, [field]: value } : wine)),
+    );
+  };
+
   const handleConfirm = async () => {
-    // Renamed and consolidated logic
     if (wines.length === 0) return;
 
     setIsPrinting(true);
@@ -119,7 +151,80 @@ export default function ReviewScreen() {
       const today = new Date();
       const dateStr = `${today.getMonth() + 1}${today.getDate()}${today.getFullYear().toString().slice(2)}`;
 
+      const inventoryBottlesCollection = collection(db, "inventory_bottles");
+      const masterWinesCollection = collection(db, "master_wines");
+
+      // Fetch all existing master wines to efficiently check for duplicates
+      const allMasterWinesSnap = await getDocs(masterWinesCollection);
+      const existingMasterWines = new Map<string, MasterWine>(
+        allMasterWinesSnap.docs.map((doc) => [
+          doc.data().name.toLowerCase(),
+          { id: doc.id, ...doc.data() } as MasterWine,
+        ]),
+      );
+
+      let totalBottlesProcessed = 0;
+
+      for (const wine of wines) {
+        let masterWineRef: DocumentReference;
+        let masterWineData: MasterWine | undefined;
+
+        const normalizedWineName = wine.wineName.toLowerCase();
+        masterWineData = existingMasterWines.get(normalizedWineName);
+
+        if (masterWineData) {
+          // Wine exists, get its reference
+          masterWineRef = doc(db, "master_wines", masterWineData.id);
+        } else {
+          // Wine does not exist, create a new master wine entry
+          // Attempt to extract vintage from wineName, e.g., "Chateau Margaux 2018"
+          const vintageMatch = wine.wineName.match(/\b(19|20)\d{2}\b/);
+          const vintage =
+            wine.vintage || (vintageMatch ? vintageMatch[0] : "N/V");
+
+          const newMasterWine: Omit<MasterWine, "id"> = {
+            name: wine.wineName,
+            vintage: vintage,
+            price: wine.price || 0,
+            producer: wine.producer || "",
+            region: wine.region || "",
+            type: wine.type || "",
+            sku: wine.sku || "",
+          };
+          const newMasterWineDocRef = await addDoc(
+            masterWinesCollection,
+            newMasterWine,
+          );
+          masterWineRef = newMasterWineDocRef;
+          masterWineData = { id: newMasterWineDocRef.id, ...newMasterWine };
+          existingMasterWines.set(normalizedWineName, masterWineData); // Add to map for subsequent checks
+        }
+
+        // Add inventory bottles based on quantity
+        for (let i = 0; i < wine.quantity; i++) {
+          const randomCode = Math.random()
+            .toString(36)
+            .substring(2, 8)
+            .toUpperCase();
+          const failSafeCode = `CVA-${randomCode}`;
+
+          const newBottle: Omit<InventoryBottle, "id"> = {
+            masterWineRef: masterWineRef,
+            locationRef: null, // No initial location
+            failSafeCode: failSafeCode,
+            status: "received",
+            receiptId: "", // No receipt ID for now
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          };
+          await addDoc(inventoryBottlesCollection, newBottle);
+          totalBottlesProcessed++;
+        }
+      }
+
       if (shouldPrintLabels) {
+        // Call printLabels for each wine type, as it was originally structured.
+        // The total count in the alert will reflect all individual bottles.
         for (const wine of wines) {
           await printLabels(wine.wineName, wine.quantity, dateStr);
         }
@@ -128,8 +233,8 @@ export default function ReviewScreen() {
       Alert.alert(
         shouldPrintLabels ? "Success" : "Confirmed",
         shouldPrintLabels
-          ? `${wines.reduce((acc, wine) => acc + wine.quantity, 0)} label(s) sent to printer successfully.`
-          : `${wines.reduce((acc, wine) => acc + wine.quantity, 0)} bottle(s) confirmed without printing.`,
+          ? `${totalBottlesProcessed} label(s) sent to printer successfully.`
+          : `${totalBottlesProcessed} bottle(s) confirmed without printing.`,
         [
           {
             text: "Return to Dashboard",
@@ -138,13 +243,11 @@ export default function ReviewScreen() {
         ],
       );
     } catch (error) {
-      console.error("Print Error:", error);
-      if (shouldPrintLabels) {
-        Alert.alert(
-          "Printing Failed",
-          "There was an issue generating the labels.",
-        );
-      }
+      console.error("Processing Error:", error);
+      Alert.alert(
+        "Processing Failed",
+        "There was an issue processing the wines and inventory. Please try again.",
+      );
     } finally {
       setIsPrinting(false);
     }
@@ -191,9 +294,85 @@ export default function ReviewScreen() {
                   )}
                 </View>
 
-                <Text style={styles.value}>{wine.wineName}</Text>
+                <Text style={styles.label}>WINE NAME</Text>
+                <TextInput
+                  style={styles.input}
+                  value={wine.wineName}
+                  onChangeText={(text) =>
+                    handleUpdateWineDetails(wine.id, "wineName", text)
+                  }
+                />
 
-                <View style={styles.quantitySection}>
+                <View style={styles.row}>
+                  <View style={styles.col}>
+                    <Text style={styles.label}>VINTAGE</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={wine.vintage}
+                      onChangeText={(text) =>
+                        handleUpdateWineDetails(wine.id, "vintage", text)
+                      }
+                    />
+                  </View>
+                  <View style={styles.col}>
+                    <Text style={styles.label}>PRICE</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={String(wine.price)}
+                      onChangeText={(text) =>
+                        handleUpdateWineDetails(
+                          wine.id,
+                          "price",
+                          parseFloat(text) || 0,
+                        )
+                      }
+                      keyboardType="numeric"
+                    />
+                  </View>
+                </View>
+
+                <Text style={styles.label}>PRODUCER</Text>
+                <TextInput
+                  style={styles.input}
+                  value={wine.producer}
+                  onChangeText={(text) =>
+                    handleUpdateWineDetails(wine.id, "producer", text)
+                  }
+                />
+
+                <View style={styles.row}>
+                  <View style={styles.col}>
+                    <Text style={styles.label}>REGION</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={wine.region}
+                      onChangeText={(text) =>
+                        handleUpdateWineDetails(wine.id, "region", text)
+                      }
+                    />
+                  </View>
+                  <View style={styles.col}>
+                    <Text style={styles.label}>TYPE</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={wine.type}
+                      onChangeText={(text) =>
+                        handleUpdateWineDetails(wine.id, "type", text)
+                      }
+                    />
+                  </View>
+                </View>
+
+                <Text style={styles.label}>SKU</Text>
+                <TextInput
+                  style={styles.input}
+                  value={wine.sku}
+                  onChangeText={(text) =>
+                    handleUpdateWineDetails(wine.id, "sku", text)
+                  }
+                />
+
+                <View>
                   <Text style={styles.label}>QUANTITY</Text>
                   <View style={styles.stepperContainer}>
                     <TouchableOpacity
@@ -325,8 +504,23 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     letterSpacing: 1,
   },
-  value: { color: "#fff", fontSize: 24, fontWeight: "900", marginBottom: 20 },
-  quantitySection: { marginTop: 0 },
+  input: {
+    backgroundColor: "#374151",
+    color: "#fff",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
+    marginBottom: 16,
+    fontWeight: "600",
+  },
+  row: {
+    flexDirection: "row",
+    gap: 16,
+  },
+  col: {
+    flex: 1,
+  },
   stepperContainer: {
     flexDirection: "row",
     alignItems: "center",
