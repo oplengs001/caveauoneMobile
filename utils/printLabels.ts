@@ -4,7 +4,7 @@ import { IndividualLabelData } from "../types";
 
 export const printLabels = async (labelsToPrint: IndividualLabelData[]) => {
   const labelHtmlPromises = labelsToPrint.map(async (label) => {
-    const svgString = await QRCode.toString(label.sku, {
+    const svgString = await QRCode.toString(label.bottleId, {
       type: "svg",
       errorCorrectionLevel: "H",
       margin: 1,

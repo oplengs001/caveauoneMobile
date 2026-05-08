@@ -218,6 +218,7 @@ export default function ReviewScreen() {
             wineName: wine.wineName,
             sku: wine.sku || `BTL-${docRef.id.slice(0, 8)}`,
             dateAdded: dateStr,
+            bottleId: docRef.id,
           });
         }
       }

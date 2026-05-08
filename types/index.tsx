@@ -36,8 +36,26 @@ export interface Location {
   capacity?: number;
 }
 
+export interface PulloutRequestItem {
+  masterWineId: string;
+  wineName: string;
+  requestedQty: number;
+  pulledQty: number;
+  pulledBottleIds: string[];
+}
+
+export interface PulloutRequest {
+  id: string;
+  wineRequestId: string;
+  items: PulloutRequestItem[];
+  status: "pending" | "in_progress" | "completed";
+  createdAt: any;
+  updatedAt: any;
+}
+
 export interface IndividualLabelData {
   wineName: string;
   sku: string;
   dateAdded: string;
+  bottleId: string;
 }

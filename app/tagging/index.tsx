@@ -61,13 +61,12 @@ export default function TaggingScreen() {
     setScannedSku(data);
     
     try {
-      // Find the bottle by SKU
-      const bottlesRef = collection(db, "inventory_bottles");
-      const q = query(bottlesRef, where("sku", "==", data));
-      const querySnapshot = await getDocs(q);
+      // Find the bottle by ID (the scanned data is now the bottle ID)
+      const bottleRef = doc(db, "inventory_bottles", data);
+      const bottleSnap = await getDoc(bottleRef);
 
-      if (querySnapshot.empty) {
-        Alert.alert("Not Found", `No bottle found with SKU: ${data}`, [
+      if (!bottleSnap.exists()) {
+        Alert.alert("Not Found", `No bottle found with ID: ${data}`, [
           { text: "Try Again", onPress: () => {
             setScannedSku(null);
             setLoading(false);
@@ -76,8 +75,7 @@ export default function TaggingScreen() {
         return;
       }
 
-      const bottleDoc = querySnapshot.docs[0];
-      const bottleData = { id: bottleDoc.id, ...bottleDoc.data() } as InventoryBottle;
+      const bottleData = { id: bottleSnap.id, ...bottleSnap.data() } as InventoryBottle;
       setBottle(bottleData);
 
       // Fetch master wine details

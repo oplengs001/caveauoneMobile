@@ -43,7 +43,7 @@ export default function HomeScreen() {
 
           <TouchableOpacity
             style={[styles.actionButton, { backgroundColor: '#f59e0b' }]}
-            onPress={() => { }}
+            onPress={() => router.push('/pullout')}
           >
             <View style={styles.buttonContent}>
               <IconSymbol name="tray.and.arrow.up.fill" size={48} color="#ffffff" />
