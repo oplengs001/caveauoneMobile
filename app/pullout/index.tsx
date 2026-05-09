@@ -1,6 +1,6 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { db } from "@/lib/firebase";
-import { useRouter, Stack } from "expo-router";
+import { useRouter, Stack, useFocusEffect } from "expo-router";
 import {
   collection,
   getDocs,
@@ -91,9 +91,11 @@ export default function PulloutRequestsScreen() {
     }
   };
 
-  useEffect(() => {
-    fetchRequests(selectedTab, true);
-  }, [selectedTab]);
+  useFocusEffect(
+    useCallback(() => {
+      fetchRequests(selectedTab, true);
+    }, [selectedTab])
+  );
 
   const onRefresh = useCallback(() => {
     fetchRequests(selectedTab, true);

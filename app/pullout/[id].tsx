@@ -152,6 +152,74 @@ export default function PulloutDetailScreen() {
     }
   };
 
+  const handleSkipItem = (index: number) => {
+    if (!request) return;
+
+    Alert.alert(
+      "Skip Item?",
+      "Mark this bottle as unavailable? You can still complete the request after skipping.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Skip Item",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const newItems = [...request.items];
+              newItems[index] = { 
+                ...newItems[index], 
+                skipped: true, 
+                skippedAt: new Date() 
+              };
+
+              await updateDoc(doc(db, "pullout_requests", id as string), {
+                items: newItems,
+                updatedAt: new Date(),
+              });
+              
+              setRequest(prev => prev ? { ...prev, items: newItems } : null);
+            } catch (error) {
+              console.error("Error skipping item:", error);
+              Alert.alert("Error", "Failed to skip item.");
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleCompleteRequest = async () => {
+    if (!request) return;
+
+    const hasSkipped = request.items.some(i => i.skipped);
+    
+    Alert.alert(
+      "Complete Request?",
+      hasSkipped 
+        ? "Warning: Some items were skipped. Are you sure you want to finalize this request?" 
+        : "All items have been pulled. Ready to complete?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Complete",
+          onPress: async () => {
+            try {
+              await updateDoc(doc(db, "pullout_requests", id as string), {
+                status: "completed",
+                completedAt: new Date(),
+                updatedAt: new Date(),
+              });
+              router.back();
+            } catch (error) {
+              console.error("Error completing request:", error);
+              Alert.alert("Error", "Failed to complete request.");
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const handleSearch = async (specificSku?: string) => {
     const term = specificSku || searchQuery.trim();
     if (!term) {
@@ -300,25 +368,53 @@ export default function PulloutDetailScreen() {
             <View style={styles.itemsList}>
               {request.items.map((item, index) => {
                 const isFulfilled = item.pulledQty >= item.requestedQty;
+                const isSkipped = item.skipped;
+                
                 return (
-                  <TouchableOpacity
+                  <View
                     key={index}
-                    style={[styles.itemCard, isFulfilled && styles.itemCardFulfilled]}
-                    onPress={() => !isFulfilled && handleSearch(item.sku)}
+                    style={[
+                      styles.itemCard, 
+                      isFulfilled && styles.itemCardFulfilled,
+                      isSkipped && styles.itemCardSkipped
+                    ]}
                   >
-                    <View style={styles.itemInfo}>
-                      <Text style={styles.itemName}>{item.wineName}</Text>
+                    <TouchableOpacity 
+                      style={styles.itemInfo}
+                      onPress={() => !isFulfilled && !isSkipped && handleSearch(item.sku)}
+                    >
+                      <Text style={[styles.itemName, isSkipped && styles.textMuted]}>
+                        {item.wineName}
+                      </Text>
                       <Text style={styles.itemSku}>SKU: {item.sku}</Text>
                       <Text style={styles.itemProgress}>
-                        {item.pulledQty} of {item.requestedQty} pulled
+                        {isSkipped ? "SKIPPED" : `${item.pulledQty} of ${item.requestedQty} pulled`}
                       </Text>
+                    </TouchableOpacity>
+
+                    <View style={styles.itemActions}>
+                      {isFulfilled ? (
+                        <IconSymbol name="checkmark.circle.fill" size={24} color="#10b981" />
+                      ) : isSkipped ? (
+                        <IconSymbol name="exclamationmark.triangle.fill" size={24} color="#ef4444" />
+                      ) : (
+                        <View style={styles.actionButtons}>
+                          <TouchableOpacity 
+                            onPress={() => handleSearch(item.sku)}
+                            style={styles.actionIcon}
+                          >
+                            <IconSymbol name="magnifyingglass" size={20} color="#3b82f6" />
+                          </TouchableOpacity>
+                          <TouchableOpacity 
+                            onPress={() => handleSkipItem(index)}
+                            style={styles.skipButton}
+                          >
+                            <Text style={styles.skipButtonText}>Skip</Text>
+                          </TouchableOpacity>
+                        </View>
+                      )}
                     </View>
-                    {isFulfilled ? (
-                      <IconSymbol name="checkmark.circle.fill" size={24} color="#10b981" />
-                    ) : (
-                      <IconSymbol name="magnifyingglass" size={20} color="#3b82f6" />
-                    )}
-                  </TouchableOpacity>
+                  </View>
                 );
               })}
             </View>
@@ -326,16 +422,26 @@ export default function PulloutDetailScreen() {
 
           {request.status !== 'completed' && (
             <View style={styles.footer}>
-              <TouchableOpacity
-                style={styles.scanButton}
-                onPress={() => {
-                  isProcessing.current = false;
-                  setScanning(true);
-                }}
-              >
-                <IconSymbol name="qrcode.viewfinder" size={24} color="#fff" />
-                <Text style={styles.scanButtonText}>Scan to Pull Bottle</Text>
-              </TouchableOpacity>
+              {request.items.every(i => (i.pulledQty >= i.requestedQty) || i.skipped) ? (
+                <TouchableOpacity
+                  style={[styles.completeButton]}
+                  onPress={handleCompleteRequest}
+                >
+                  <IconSymbol name="checkmark.seal.fill" size={24} color="#fff" />
+                  <Text style={styles.completeButtonText}>Complete Request</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={styles.scanButton}
+                  onPress={() => {
+                    isProcessing.current = false;
+                    setScanning(true);
+                  }}
+                >
+                  <IconSymbol name="qrcode.viewfinder" size={24} color="#fff" />
+                  <Text style={styles.scanButtonText}>Scan to Pull Bottle</Text>
+                </TouchableOpacity>
+              )}
             </View>
           )}
         </>
@@ -410,6 +516,39 @@ const styles = StyleSheet.create({
     borderColor: "#064e3b",
     backgroundColor: "#064e3b33",
   },
+  itemCardSkipped: {
+    borderColor: "#7f1d1d",
+    backgroundColor: "#7f1d1d33",
+  },
+  textMuted: {
+    textDecorationLine: "line-through",
+    opacity: 0.5,
+  },
+  itemActions: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  actionButtons: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  actionIcon: {
+    padding: 8,
+  },
+  skipButton: {
+    backgroundColor: "#374151",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#4b5563",
+  },
+  skipButtonText: {
+    color: "#ef4444",
+    fontSize: 12,
+    fontWeight: "700",
+  },
   itemInfo: {
     flex: 1,
   },
@@ -452,6 +591,20 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   scanButtonText: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "800",
+  },
+  completeButton: {
+    backgroundColor: "#10b981",
+    height: 64,
+    borderRadius: 16,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 12,
+  },
+  completeButtonText: {
     color: "#fff",
     fontSize: 18,
     fontWeight: "800",
