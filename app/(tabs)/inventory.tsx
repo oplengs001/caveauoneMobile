@@ -1,4 +1,13 @@
-import { IconSymbol } from "@/components/ui/icon-symbol";
+import { 
+  ChevronLeft, 
+  Printer, 
+  Check, 
+  PackageOpen, 
+  Search as SearchIcon,
+  Filter,
+  Box,
+  LayoutGrid
+} from 'lucide-react-native';
 import { db } from "@/lib/firebase";
 import { Stack } from "expo-router";
 import { 
@@ -49,7 +58,6 @@ export default function InventoryScreen() {
   const [showUnshelvedOnly, setShowUnshelvedOnly] = useState(false);
   const router = useRouter();
 
-  // Caches to avoid redundant lookups
   const [wineCache] = useState(new Map<string, MasterWine>());
   const [locationCache] = useState(new Map<string, Location>());
 
@@ -234,7 +242,7 @@ export default function InventoryScreen() {
           <View style={styles.titleContainer}>
             {isSelectionMode && (
               <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
-                {isSelected && <IconSymbol name="checkmark" size={12} color="#fff" />}
+                {isSelected && <Check size={12} color="#fff" strokeWidth={3} />}
               </View>
             )}
             <Text style={styles.itemTitle} numberOfLines={1}>
@@ -262,8 +270,6 @@ export default function InventoryScreen() {
     );
   };
 
-  const filteredBottles = bottles;
-
   return (
     <SafeAreaView style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
@@ -280,7 +286,7 @@ export default function InventoryScreen() {
           }} 
           style={styles.backButton}
         >
-          <IconSymbol name="chevron.left" size={24} color="#fff" />
+          <ChevronLeft size={28} color="#fff" strokeWidth={2.5} />
         </TouchableOpacity>
         
         <Text style={styles.title} numberOfLines={1}>
@@ -305,26 +311,24 @@ export default function InventoryScreen() {
                 onPress={() => setShowUnshelvedOnly(!showUnshelvedOnly)}
                 activeOpacity={0.7}
               >
-                <IconSymbol
-                  name="tray.and.arrow.down.fill"
+                <PackageOpen
                   size={16}
                   color={showUnshelvedOnly ? "#000" : "#fff"}
+                  strokeWidth={2.5}
                 />
                 <Text style={[styles.headerActionText, showUnshelvedOnly && styles.headerActionTextActive]}>
                   Unshelved
                 </Text>
               </TouchableOpacity>
 
-              {!isSelectionMode && (
-                <TouchableOpacity
-                  style={styles.headerActionChip}
-                  onPress={() => setIsSelectionMode(true)}
-                  activeOpacity={0.7}
-                >
-                  <IconSymbol name="printer.fill" size={16} color="#3b82f6" />
-                  <Text style={styles.headerActionText}>Print</Text>
-                </TouchableOpacity>
-              )}
+              <TouchableOpacity
+                style={styles.headerActionChip}
+                onPress={() => setIsSelectionMode(true)}
+                activeOpacity={0.7}
+              >
+                <Printer size={16} color="#6366f1" strokeWidth={2.5} />
+                <Text style={styles.headerActionText}>Print</Text>
+              </TouchableOpacity>
             </View>
           )}
         </View>
@@ -332,21 +336,25 @@ export default function InventoryScreen() {
       
       <View style={styles.topControls}>
         <View style={styles.searchContainer}>
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search SKU..."
-            placeholderTextColor="#9ca3af"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            clearButtonMode="while-editing"
-          />
+          <View style={styles.searchWrapper}>
+            <SearchIcon size={20} color="#9ca3af" style={styles.searchIcon} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search SKU..."
+              placeholderTextColor="#9ca3af"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              clearButtonMode="while-editing"
+            />
+          </View>
         </View>
       </View>
+
       {loading ? (
-        <ActivityIndicator size="large" color="#ffffff" style={{ flex: 1 }} />
+        <ActivityIndicator size="large" color="#4f46e5" style={{ flex: 1 }} />
       ) : (
         <FlatList
-          data={filteredBottles}
+          data={bottles}
           renderItem={renderItem}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
@@ -354,20 +362,23 @@ export default function InventoryScreen() {
           onEndReachedThreshold={0.5}
           ListFooterComponent={() => (
             loadingMore ? (
-              <ActivityIndicator size="small" color="#ffffff" style={{ marginVertical: 20 }} />
+              <ActivityIndicator size="small" color="#4f46e5" style={{ marginVertical: 20 }} />
             ) : null
           )}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              tintColor="#ffffff"
+              tintColor="#4f46e5"
             />
           }
           ListEmptyComponent={
-            <Text style={styles.emptyText}>
-              {searchQuery ? "No results found." : "No bottles found."}
-            </Text>
+            <View style={styles.emptyContainer}>
+              <Box size={64} color="#334155" strokeWidth={1} />
+              <Text style={styles.emptyText}>
+                {searchQuery ? "No results found." : "No bottles found."}
+              </Text>
+            </View>
           }
         />
       )}
@@ -375,14 +386,14 @@ export default function InventoryScreen() {
       {isSelectionMode && (
         <View style={styles.batchActionBar}>
           <View style={styles.batchInfo}>
-            <Text style={styles.batchCount}>{selectedIds.size} labels to print</Text>
+            <Text style={styles.batchCount}>{selectedIds.size} labels selected</Text>
           </View>
           <TouchableOpacity
             style={[styles.printButton, selectedIds.size === 0 && styles.printButtonDisabled]}
             disabled={selectedIds.size === 0}
             onPress={handleBatchPrint}
           >
-            <IconSymbol name="printer.fill" size={20} color="#fff" />
+            <Printer size={20} color="#fff" strokeWidth={2.5} />
             <Text style={styles.printButtonText}>Print Batch</Text>
           </TouchableOpacity>
         </View>
@@ -390,6 +401,231 @@ export default function InventoryScreen() {
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#0f172a",
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 24,
+    paddingBottom: 20,
+  },
+  backButton: {
+    marginRight: 12,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: "900",
+    color: "#fff",
+    flex: 1,
+    textTransform: 'uppercase',
+    letterSpacing: -0.5,
+  },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  actionRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  headerActionChip: {
+    flexDirection: "row",
+    height: 40,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    backgroundColor: "#1e293b",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#334155",
+    gap: 6,
+  },
+  headerActionText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  headerActionTextActive: {
+    color: "#000",
+  },
+  headerActionChipActive: {
+    backgroundColor: "#f59e0b",
+    borderColor: "#f59e0b",
+  },
+  cancelButton: {
+    backgroundColor: "#334155",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  cancelText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  topControls: {
+    paddingHorizontal: 24,
+    paddingBottom: 16,
+  },
+  searchContainer: {
+    marginBottom: 4,
+  },
+  searchWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: "#1e293b",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#334155",
+    paddingHorizontal: 16,
+  },
+  searchIcon: {
+    marginRight: 12,
+  },
+  searchInput: {
+    flex: 1,
+    color: "#ffffff",
+    fontSize: 16,
+    height: 60,
+    fontWeight: "600",
+  },
+  listContent: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 100,
+  },
+  itemContainer: {
+    backgroundColor: "#1e293b",
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#334155",
+  },
+  itemSelected: {
+    borderColor: "#f59e0b",
+    backgroundColor: "#f59e0b10",
+  },
+  titleContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    gap: 12,
+  },
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: "#334155",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  checkboxSelected: {
+    backgroundColor: "#f59e0b",
+    borderColor: "#f59e0b",
+  },
+  itemHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  itemTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#ffffff",
+    flex: 1,
+  },
+  itemSubtitle: {
+    fontSize: 14,
+    color: "#94a3b8",
+    marginBottom: 6,
+    fontWeight: '500',
+  },
+  itemLocation: {
+    fontSize: 13,
+    color: "#64748b",
+    fontWeight: '600',
+  },
+  statusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  statusText: {
+    fontSize: 11,
+    fontWeight: "800",
+    textTransform: 'uppercase',
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 80,
+    gap: 16,
+  },
+  emptyText: {
+    color: "#475569",
+    textAlign: "center",
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  batchActionBar: {
+    position: "absolute",
+    bottom: 32,
+    left: 24,
+    right: 24,
+    backgroundColor: "#1e293b",
+    padding: 16,
+    borderRadius: 24,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 10,
+    borderWidth: 1,
+    borderColor: "#334155",
+  },
+  batchInfo: {
+    flex: 1,
+    paddingLeft: 8,
+  },
+  batchCount: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  printButton: {
+    backgroundColor: "#f59e0b",
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    shadowColor: "#f59e0b",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  printButtonDisabled: {
+    backgroundColor: "#334155",
+    opacity: 0.5,
+    shadowOpacity: 0,
+  },
+  printButtonText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "900",
+  },
+});
 
 const styles = StyleSheet.create({
   container: {

@@ -1,4 +1,11 @@
-import { IconSymbol } from '@/components/ui/icon-symbol';
+import { 
+  PackageSearch, 
+  MapPin, 
+  Truck, 
+  Search,
+  PackageOpen,
+  Wine
+} from 'lucide-react-native';
 import { Stack, useRouter } from 'expo-router';
 import React from 'react';
 import { SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -11,20 +18,25 @@ export default function HomeScreen() {
       <Stack.Screen options={{ headerShown: false }} />
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
-          <Text style={styles.title}>Warehouse Operations</Text>
-          <Text style={styles.subtitle}>Select a task to begin</Text>
+          <View style={styles.logoContainer}>
+            <View style={styles.logoBadge}>
+              <Wine size={24} color="#ffffff" strokeWidth={2.5} />
+            </View>
+            <Text style={styles.title}>CaveauOne</Text>
+          </View>
+          <Text style={styles.subtitle}>Warehouse Management System</Text>
         </View>
 
         <View style={styles.buttonContainer}>
           <TouchableOpacity
-            style={[styles.actionButton, { backgroundColor: '#3b82f6' }]}
+            style={[styles.actionButton, { backgroundColor: '#4f46e5' }]}
             onPress={() => router.push('/intake/scan')}
           >
             <View style={styles.buttonContent}>
-              <IconSymbol name="tray.and.arrow.down.fill" size={48} color="#ffffff" />
+              <PackageSearch size={48} color="#ffffff" strokeWidth={2} />
               <View style={styles.buttonTextContainer}>
                 <Text style={styles.buttonTitle}>Receive Delivery</Text>
-                <Text style={styles.buttonDesc}>Scan supplier receipts and intake wine</Text>
+                <Text style={styles.buttonDesc}>Scan and intake new arrivals</Text>
               </View>
             </View>
           </TouchableOpacity>
@@ -34,10 +46,10 @@ export default function HomeScreen() {
             onPress={() => router.push('/tagging')}
           >
             <View style={styles.buttonContent}>
-              <IconSymbol name="location.fill" size={48} color="#ffffff" />
+              <MapPin size={48} color="#ffffff" strokeWidth={2} />
               <View style={styles.buttonTextContainer}>
                 <Text style={styles.buttonTitle}>Location Tagging</Text>
-                <Text style={styles.buttonDesc}>Update bottle storage locations</Text>
+                <Text style={styles.buttonDesc}>Assign bottles to bin locations</Text>
               </View>
             </View>
           </TouchableOpacity>
@@ -47,23 +59,23 @@ export default function HomeScreen() {
             onPress={() => router.push('/pullout')}
           >
             <View style={styles.buttonContent}>
-              <IconSymbol name="tray.and.arrow.up.fill" size={48} color="#ffffff" />
+              <Truck size={48} color="#ffffff" strokeWidth={2} />
               <View style={styles.buttonTextContainer}>
-                <Text style={styles.buttonTitle}>Pullout Requests</Text>
-                <Text style={styles.buttonDesc}>Prepare wines for outbound delivery</Text>
+                <Text style={styles.buttonTitle}>Pullout Tasks</Text>
+                <Text style={styles.buttonDesc}>Fulfill outbound requests</Text>
               </View>
             </View>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.actionButton, { backgroundColor: '#8b5cf6' }]}
+            style={[styles.actionButton, { backgroundColor: '#6366f1' }]}
             onPress={() => router.push('/inventory')}
           >
             <View style={styles.buttonContent}>
-              <IconSymbol name="list.bullet.rectangle.portrait.fill" size={48} color="#ffffff" />
+              <Search size={48} color="#ffffff" strokeWidth={2} />
               <View style={styles.buttonTextContainer}>
-                <Text style={styles.buttonTitle}>Inventory Lookup</Text>
-                <Text style={styles.buttonDesc}>View and search for bottles in the warehouse</Text>
+                <Text style={styles.buttonTitle}>Inventory Search</Text>
+                <Text style={styles.buttonDesc}>Search by SKU or Wine Name</Text>
               </View>
             </View>
           </TouchableOpacity>
@@ -76,36 +88,56 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#111827',
+    backgroundColor: '#0f172a',
   },
   scrollContent: {
     padding: 24,
   },
   header: {
-    marginTop: 24,
-    marginBottom: 40,
+    marginTop: 40,
+    marginBottom: 48,
   },
-  title: {
-    fontSize: 32,
-    fontWeight: '900',
-    color: '#ffffff',
-    marginBottom: 8,
+  logoContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 4,
   },
-  subtitle: {
-    fontSize: 18,
-    color: '#9ca3af',
-  },
-  buttonContainer: {
-    gap: 24,
-  },
-  actionButton: {
-    borderRadius: 16,
-    padding: 24,
-    elevation: 4,
-    shadowColor: '#000',
+  logoBadge: {
+    width: 40,
+    height: 40,
+    backgroundColor: '#4f46e5',
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#4f46e5',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: '900',
+    color: '#ffffff',
+    letterSpacing: -1,
+    textTransform: 'uppercase',
+  },
+  subtitle: {
+    fontSize: 16,
+    color: '#64748b',
+    fontWeight: '600',
+  },
+  buttonContainer: {
+    gap: 20,
+  },
+  actionButton: {
+    borderRadius: 24,
+    padding: 24,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.4,
+    shadowRadius: 20,
   },
   buttonContent: {
     flexDirection: 'row',
@@ -116,14 +148,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   buttonTitle: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '800',
     color: '#ffffff',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   buttonDesc: {
-    fontSize: 14,
-    color: '#e5e7eb',
+    fontSize: 13,
+    color: 'rgba(255, 255, 255, 0.8)',
     fontWeight: '500',
   },
 });

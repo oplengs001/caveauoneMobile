@@ -1,4 +1,17 @@
-import { IconSymbol } from "@/components/ui/icon-symbol";
+import { 
+  Camera, 
+  ChevronLeft, 
+  MapPin, 
+  CheckCircle2, 
+  RefreshCw, 
+  X, 
+  ScanQrCode,
+  Check,
+  AlertTriangle,
+  Loader2,
+  Box,
+  Map
+} from 'lucide-react-native';
 import { db } from "@/lib/firebase";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useRouter, Stack } from "expo-router";
@@ -63,15 +76,15 @@ export default function TaggingScreen() {
     setScannedSku(data);
     
     try {
-      // Find the bottle by ID (the scanned data is now the bottle ID)
       const bottleRef = doc(db, "inventory_bottles", data);
       const bottleSnap = await getDoc(bottleRef);
 
       if (!bottleSnap.exists()) {
-        Alert.alert("Not Found", `No bottle found with ID: ${data}`, [
+        Alert.alert("Invalid QR", "This QR code does not belong to any bottle in the system.", [
           { text: "Try Again", onPress: () => {
             setScannedSku(null);
             setLoading(false);
+            isProcessing.current = false;
           }}
         ]);
         return;
@@ -80,7 +93,6 @@ export default function TaggingScreen() {
       const bottleData = { id: bottleSnap.id, ...bottleSnap.data() } as InventoryBottle;
       setBottle(bottleData);
 
-      // Fetch master wine details
       if (bottleData.masterWineRef) {
         const wineSnap = await getDoc(bottleData.masterWineRef);
         if (wineSnap.exists()) {
@@ -91,7 +103,7 @@ export default function TaggingScreen() {
       setState("displaying");
     } catch (error) {
       console.error("Error fetching bottle details:", error);
-      Alert.alert("Error", "Failed to fetch bottle details.");
+      Alert.alert("Error", "Failed to retrieve bottle data.");
       isProcessing.current = false;
     } finally {
       setLoading(false);
@@ -112,7 +124,7 @@ export default function TaggingScreen() {
         updatedAt: new Date(),
       });
 
-      Alert.alert("Success", "Bottle has been shelved successfully.", [
+      Alert.alert("Success", "Bottle has been assigned to location.", [
         {
           text: "Scan Next",
           onPress: () => {
@@ -131,20 +143,18 @@ export default function TaggingScreen() {
       ]);
     } catch (error) {
       console.error("Error updating bottle:", error);
-      Alert.alert("Error", "Failed to update bottle location.");
+      Alert.alert("Error", "Failed to finalize shelving.");
       setState("displaying");
     }
   };
 
-  if (!permission) {
-    return <View style={styles.container} />;
-  }
+  if (!permission) return <View style={styles.container} />;
 
   if (!permission.granted) {
     return (
       <View style={styles.permissionContainer}>
-        <IconSymbol name="camera.fill" size={64} color="#9ca3af" />
-        <Text style={styles.permissionText}>We need your permission to show the camera</Text>
+        <Camera size={80} color="#334155" strokeWidth={1} />
+        <Text style={styles.permissionText}>Camera access is required to scan bottle QR codes.</Text>
         <TouchableOpacity style={styles.permissionButton} onPress={requestPermission}>
           <Text style={styles.permissionButtonText}>Grant Permission</Text>
         </TouchableOpacity>
@@ -166,10 +176,17 @@ export default function TaggingScreen() {
             }}
           >
             <View style={styles.overlay}>
-              <View style={styles.scanTarget} />
-              <Text style={styles.instructionText}>Align QR code within the frame</Text>
+              <View style={styles.scanTargetContainer}>
+                <View style={styles.scanTarget} />
+                <View style={[styles.corner, styles.topLeft]} />
+                <View style={[styles.corner, styles.topRight]} />
+                <View style={[styles.corner, styles.bottomLeft]} />
+                <View style={[styles.corner, styles.bottomRight]} />
+                <ScanQrCode size={40} color="rgba(16, 185, 129, 0.5)" style={styles.centerIcon} />
+              </View>
+              <Text style={styles.instructionText}>CENTER QR CODE IN FRAME</Text>
               <TouchableOpacity onPress={() => router.back()} style={styles.closeButton}>
-                <IconSymbol name="chevron.left" size={24} color="#fff" />
+                <X size={28} color="#fff" />
               </TouchableOpacity>
             </View>
           </CameraView>
@@ -177,22 +194,31 @@ export default function TaggingScreen() {
       ) : (
         <View style={styles.detailsContainer}>
           <View style={styles.header}>
-            <TouchableOpacity onPress={() => setState("scanning")} style={styles.backButton}>
-              <IconSymbol name="chevron.left" size={24} color="#fff" />
-              <Text style={styles.backText}>Rescan</Text>
+            <TouchableOpacity onPress={() => { isProcessing.current = false; setState("scanning"); }} style={styles.backButton}>
+              <RefreshCw size={20} color="#fff" strokeWidth={2.5} />
+              <Text style={styles.backText}>RESCAN</Text>
             </TouchableOpacity>
             <Text style={styles.title}>Tag Location</Text>
           </View>
 
           <View style={styles.card}>
-            <Text style={styles.skuLabel}>SKU: {bottle?.sku}</Text>
-            <Text style={styles.wineName}>{wine?.name || "Loading..."}</Text>
-            <Text style={styles.wineDetails}>
-              {wine?.vintage} • {wine?.producer || "No Producer"}
-            </Text>
+            <View className="flex-row items-center gap-2 mb-2">
+              <Box size={14} color="#10b981" />
+              <Text style={styles.skuLabel}>BOTTLE ID: {bottle?.id.slice(0, 12).toUpperCase()}</Text>
+            </View>
+            <Text style={styles.wineName}>{wine?.name || "Processing..."}</Text>
+            <View style={styles.wineMetaRow}>
+              <Text style={styles.wineVintage}>{wine?.vintage}</Text>
+              <View style={styles.metaDot} />
+              <Text style={styles.wineProducer}>{wine?.producer || "Independent Producer"}</Text>
+            </View>
           </View>
 
-          <Text style={styles.sectionTitle}>Select Storage Location</Text>
+          <View style={styles.sectionHeader}>
+            <Map size={18} color="#64748b" />
+            <Text style={styles.sectionTitle}>Select Storage Location</Text>
+          </View>
+          
           <FlatList
             data={locations}
             keyExtractor={(item) => item.id}
@@ -206,10 +232,10 @@ export default function TaggingScreen() {
                 ]}
                 onPress={() => setSelectedLocationId(item.id)}
               >
-                <IconSymbol
-                  name="location.fill"
-                  size={24}
-                  color={selectedLocationId === item.id ? "#fff" : "#9ca3af"}
+                <MapPin
+                  size={28}
+                  color={selectedLocationId === item.id ? "#fff" : "#475569"}
+                  strokeWidth={selectedLocationId === item.id ? 2.5 : 2}
                 />
                 <Text
                   style={[
@@ -219,11 +245,14 @@ export default function TaggingScreen() {
                 >
                   {item.name}
                 </Text>
-                <Text style={styles.locationType}>{item.type}</Text>
+                <Text style={styles.locationType}>{item.type.toUpperCase()}</Text>
               </TouchableOpacity>
             )}
             ListEmptyComponent={
-              <Text style={styles.emptyText}>No locations found.</Text>
+              <View style={styles.emptyContainer}>
+                <AlertTriangle size={48} color="#334155" />
+                <Text style={styles.emptyText}>No storage locations configured.</Text>
+              </View>
             }
             contentContainerStyle={styles.locationList}
           />
@@ -238,9 +267,12 @@ export default function TaggingScreen() {
               disabled={!selectedLocationId || state === "updating"}
             >
               {state === "updating" ? (
-                <ActivityIndicator color="#fff" />
+                <Loader2 size={24} color="#fff" style={{ animate: 'spin' }} />
               ) : (
-                <Text style={styles.confirmButtonText}>Confirm Tagging</Text>
+                <>
+                  <CheckCircle2 size={24} color="#fff" strokeWidth={2.5} />
+                  <Text style={styles.confirmButtonText}>FINALIZE SHELVING</Text>
+                </>
               )}
             </TouchableOpacity>
           </View>
@@ -249,6 +281,242 @@ export default function TaggingScreen() {
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: { 
+    flex: 1, 
+    backgroundColor: "#0f172a" 
+  },
+  permissionContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 32,
+    backgroundColor: '#0f172a',
+  },
+  permissionText: {
+    color: "#94a3b8",
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: "center",
+    marginTop: 24,
+    lineHeight: 24,
+    marginBottom: 40,
+  },
+  permissionButton: {
+    backgroundColor: "#4f46e5",
+    paddingVertical: 18,
+    paddingHorizontal: 40,
+    borderRadius: 20,
+    shadowColor: "#4f46e5",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 8,
+  },
+  permissionButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "900",
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  scannerContainer: { flex: 1 },
+  camera: { flex: 1 },
+  overlay: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.7)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  scanTargetContainer: {
+    width: 260,
+    height: 260,
+    position: 'relative',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  scanTarget: {
+    width: 260,
+    height: 260,
+    backgroundColor: "rgba(16, 185, 129, 0.05)",
+    borderRadius: 32,
+  },
+  centerIcon: {
+    position: 'absolute',
+  },
+  corner: {
+    position: 'absolute',
+    width: 40,
+    height: 40,
+    borderColor: '#10b981',
+    borderWidth: 4,
+  },
+  topLeft: { top: -2, left: -2, borderBottomWidth: 0, borderRightWidth: 0, borderTopLeftRadius: 32 },
+  topRight: { top: -2, right: -2, borderBottomWidth: 0, borderLeftWidth: 0, borderTopRightRadius: 32 },
+  bottomLeft: { bottom: -2, left: -2, borderTopWidth: 0, borderRightWidth: 0, borderBottomLeftRadius: 32 },
+  bottomRight: { bottom: -2, right: -2, borderTopWidth: 0, borderLeftWidth: 0, borderBottomRightRadius: 32 },
+  instructionText: {
+    color: "#fff",
+    marginTop: 40,
+    fontSize: 12,
+    fontWeight: "900",
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+  },
+  closeButton: {
+    position: "absolute",
+    top: 60,
+    left: 24,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "rgba(15, 23, 42, 0.8)",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  detailsContainer: { flex: 1, padding: 24 },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 32,
+  },
+  backButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#1e293b",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    marginRight: 16,
+    borderWidth: 1,
+    borderColor: '#334155',
+    gap: 8,
+  },
+  backText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 1,
+  },
+  title: {
+    color: "#fff",
+    fontSize: 22,
+    fontWeight: "900",
+    textTransform: 'uppercase',
+    letterSpacing: -0.5,
+  },
+  card: {
+    backgroundColor: "#1e293b",
+    borderRadius: 24,
+    padding: 24,
+    marginBottom: 32,
+    borderWidth: 1,
+    borderColor: "#334155",
+  },
+  skuLabel: {
+    color: "#10b981",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1.5,
+  },
+  wineName: {
+    color: "#fff",
+    fontSize: 22,
+    fontWeight: "900",
+    marginBottom: 8,
+    letterSpacing: -0.5,
+  },
+  wineMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  wineVintage: { color: "#6366f1", fontSize: 16, fontWeight: "800" },
+  metaDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: '#334155' },
+  wineProducer: { color: "#64748b", fontSize: 14, fontWeight: "600" },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 20,
+  },
+  sectionTitle: {
+    color: "#64748b",
+    fontSize: 12,
+    fontWeight: "900",
+    textTransform: 'uppercase',
+    letterSpacing: 1.5,
+  },
+  locationList: { paddingBottom: 120 },
+  locationRow: { justifyContent: "space-between", gap: 12 },
+  locationItem: {
+    backgroundColor: "#1e293b",
+    borderRadius: 24,
+    padding: 20,
+    marginBottom: 12,
+    flex: 1,
+    alignItems: "center",
+    borderWidth: 2,
+    borderColor: "#334155",
+    gap: 10,
+  },
+  locationItemSelected: {
+    borderColor: "#4f46e5",
+    backgroundColor: "#1e293b",
+    shadowColor: "#4f46e5",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+  },
+  locationName: {
+    color: "#94a3b8",
+    fontSize: 16,
+    fontWeight: "800",
+    textAlign: "center",
+  },
+  locationNameSelected: { color: "#fff" },
+  locationType: {
+    color: "#475569",
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 1,
+  },
+  emptyContainer: { alignItems: 'center', paddingVertical: 60, gap: 16 },
+  emptyText: { color: "#475569", fontSize: 14, fontWeight: '700', textAlign: "center" },
+  footer: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 24,
+    backgroundColor: "transparent",
+  },
+  confirmButton: {
+    backgroundColor: "#10b981",
+    height: 72,
+    borderRadius: 24,
+    justifyContent: "center",
+    alignItems: "center",
+    flexDirection: 'row',
+    gap: 12,
+    shadowColor: "#10b981",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 8,
+  },
+  confirmButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "900",
+    textTransform: 'uppercase',
+    letterSpacing: 1.5,
+  },
+  buttonDisabled: { opacity: 0.3 },
+});
 
 const styles = StyleSheet.create({
   container: {

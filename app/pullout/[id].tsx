@@ -1,4 +1,13 @@
-import { IconSymbol } from "@/components/ui/icon-symbol";
+import { 
+  ChevronLeft, 
+  Search, 
+  CheckCircle2, 
+  AlertCircle, 
+  ScanQrCode,
+  MapPin,
+  PackageSearch,
+  Check
+} from 'lucide-react-native';
 import { db } from "@/lib/firebase";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
@@ -121,7 +130,7 @@ export default function PulloutDetailScreen() {
         bottleData.id,
       ];
 
-      const allFulfilled = updatedItems.every(i => i.pulledQty >= i.requestedQty);
+      const allFulfilled = updatedItems.every(i => (i.pulledQty >= i.requestedQty) || i.skipped);
 
       await updateDoc(doc(db, "pullout_requests", request.id), {
         items: updatedItems,
@@ -231,7 +240,6 @@ export default function PulloutDetailScreen() {
 
     setSearchLoading(true);
     try {
-      // 1. Search bottles by SKU (Omni search primarily uses SKU for now)
       const bottlesRef = collection(db, "inventory_bottles");
       const q = query(
         bottlesRef,
@@ -308,28 +316,31 @@ export default function PulloutDetailScreen() {
       <Stack.Screen options={{ headerShown: false }} />
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <IconSymbol name="chevron.left" size={24} color="#fff" />
+          <ChevronLeft size={28} color="#fff" strokeWidth={2.5} />
         </TouchableOpacity>
         <Text style={styles.title}>Pullout Details</Text>
       </View>
 
       {loading && !request ? (
-        <ActivityIndicator size="large" color="#f59e0b" style={{ flex: 1 }} />
+        <ActivityIndicator size="large" color="#4f46e5" style={{ flex: 1 }} />
       ) : request ? (
         <>
           <ScrollView contentContainerStyle={styles.scrollContent}>
             <View style={styles.statusCard}>
-              <Text style={styles.statusLabel}>STATUS</Text>
+              <Text style={styles.statusLabel}>TASK STATUS</Text>
               <Text style={styles.statusValue}>{request.status.replace('_', ' ').toUpperCase()}</Text>
             </View>
 
             <View style={styles.searchSection}>
-              <Text style={styles.sectionTitle}>Check Inventory Location</Text>
+              <View style={styles.sectionHeader}>
+                <MapPin size={16} color="#6366f1" />
+                <Text style={styles.sectionTitle}>Check Location</Text>
+              </View>
               <View style={styles.searchBar}>
                 <TextInput
                   style={styles.searchInput}
-                  placeholder="Enter SKU to locate bottle..."
-                  placeholderTextColor="#9ca3af"
+                  placeholder="Enter SKU..."
+                  placeholderTextColor="#475569"
                   value={searchQuery}
                   onChangeText={setSearchQuery}
                   autoCapitalize="characters"
@@ -342,7 +353,7 @@ export default function PulloutDetailScreen() {
                   {searchLoading ? (
                     <ActivityIndicator size="small" color="#fff" />
                   ) : (
-                    <IconSymbol name="magnifyingglass" size={20} color="#fff" />
+                    <Search size={20} color="#fff" strokeWidth={2.5} />
                   )}
                 </TouchableOpacity>
               </View>
@@ -353,7 +364,7 @@ export default function PulloutDetailScreen() {
                     <View key={res.id} style={styles.searchResultItem}>
                       <View style={styles.resultInfo}>
                         <Text style={styles.resultWineName}>{res.wineName}</Text>
-                        <Text style={styles.resultLocation}>Location: {res.locationName}</Text>
+                        <Text style={styles.resultLocation}>Located at: {res.locationName}</Text>
                       </View>
                       <View style={styles.resultBadge}>
                         <Text style={styles.resultStatus}>{res.status.toUpperCase()}</Text>
@@ -364,11 +375,15 @@ export default function PulloutDetailScreen() {
               )}
             </View>
 
-            <Text style={styles.sectionTitle}>Items to Pull</Text>
+            <View style={styles.sectionHeader}>
+              <PackageSearch size={16} color="#6366f1" />
+              <Text style={styles.sectionTitle}>Items to Pull</Text>
+            </View>
             <View style={styles.itemsList}>
               {request.items.map((item, index) => {
                 const isFulfilled = item.pulledQty >= item.requestedQty;
                 const isSkipped = item.skipped;
+                const progress = Math.min(1, item.pulledQty / item.requestedQty);
 
                 return (
                   <View
@@ -379,40 +394,64 @@ export default function PulloutDetailScreen() {
                       isSkipped && styles.itemCardSkipped
                     ]}
                   >
-                    <TouchableOpacity
-                      style={styles.itemInfo}
-                      onPress={() => !isFulfilled && !isSkipped && handleSearch(item.sku)}
-                    >
-                      <Text style={[styles.itemName, isSkipped && styles.textMuted]}>
-                        {item.wineName}
-                      </Text>
-                      <Text style={styles.itemSku}>SKU: {item.sku}</Text>
-                      <Text style={styles.itemProgress}>
-                        {isSkipped ? "SKIPPED" : `${item.pulledQty} of ${item.requestedQty} pulled`}
-                      </Text>
-                    </TouchableOpacity>
-
-                    <View style={styles.itemActions}>
-                      {isFulfilled ? (
-                        <IconSymbol name="checkmark.circle.fill" size={24} color="#10b981" />
-                      ) : isSkipped ? (
-                        <IconSymbol name="exclamationmark.triangle.fill" size={24} color="#ef4444" />
-                      ) : (
-                        <View style={styles.actionButtons}>
-                          <TouchableOpacity
-                            onPress={() => handleSearch(item.sku)}
-                            style={styles.actionIcon}
-                          >
-                            <IconSymbol name="magnifyingglass" size={20} color="#3b82f6" />
-                          </TouchableOpacity>
-                          <TouchableOpacity
-                            onPress={() => handleSkipItem(index)}
-                            style={styles.skipButton}
-                          >
-                            <Text style={styles.skipButtonText}>Skip</Text>
-                          </TouchableOpacity>
+                    <View style={styles.itemMain}>
+                      <TouchableOpacity
+                        style={styles.itemInfo}
+                        onPress={() => !isFulfilled && !isSkipped && handleSearch(item.sku)}
+                      >
+                        <View style={styles.itemHeaderRow}>
+                          <Text style={[styles.itemName, isSkipped && styles.textMuted]}>
+                            {item.wineName}
+                          </Text>
+                          <View style={styles.itemActions}>
+                            {isFulfilled ? (
+                              <CheckCircle2 size={20} color="#10b981" strokeWidth={2.5} />
+                            ) : isSkipped ? (
+                              <AlertCircle size={20} color="#ef4444" strokeWidth={2.5} />
+                            ) : (
+                              <View style={styles.actionButtons}>
+                                <TouchableOpacity
+                                  onPress={() => handleSearch(item.sku)}
+                                  style={styles.actionIcon}
+                                >
+                                  <Search size={18} color="#6366f1" strokeWidth={2} />
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                  onPress={() => handleSkipItem(index)}
+                                  style={styles.skipButton}
+                                >
+                                  <Text style={styles.skipButtonText}>Skip</Text>
+                                </TouchableOpacity>
+                              </View>
+                            )}
+                          </View>
                         </View>
-                      )}
+                        
+                        <View style={styles.itemMetaRow}>
+                          <Text style={styles.itemSku}>SKU: {item.sku}</Text>
+                          <Text style={[
+                            styles.itemProgress,
+                            isSkipped && { color: '#ef4444' },
+                            isFulfilled && { color: '#10b981' }
+                          ]}>
+                            {isSkipped ? "SKIPPED" : `${item.pulledQty} OF ${item.requestedQty} PULLED`}
+                          </Text>
+                        </View>
+
+                        {!isSkipped && (
+                          <View style={styles.progressContainer}>
+                            <View style={styles.progressBarBg}>
+                              <View 
+                                style={[
+                                  styles.progressBarFill, 
+                                  { width: `${progress * 100}%` },
+                                  isFulfilled && { backgroundColor: '#10b981' }
+                                ]} 
+                              />
+                            </View>
+                          </View>
+                        )}
+                      </TouchableOpacity>
                     </View>
                   </View>
                 );
@@ -427,8 +466,8 @@ export default function PulloutDetailScreen() {
                   style={[styles.completeButton]}
                   onPress={handleCompleteRequest}
                 >
-                  <IconSymbol name="checkmark.seal.fill" size={24} color="#fff" />
-                  <Text style={styles.completeButtonText}>Complete Request</Text>
+                  <CheckCircle2 size={24} color="#fff" strokeWidth={2.5} />
+                  <Text style={styles.completeButtonText}>Finalize Task</Text>
                 </TouchableOpacity>
               ) : (
                 <TouchableOpacity
@@ -438,15 +477,15 @@ export default function PulloutDetailScreen() {
                     setScanning(true);
                   }}
                 >
-                  <IconSymbol name="qrcode.viewfinder" size={24} color="#fff" />
-                  <Text style={styles.scanButtonText}>Scan to Pull Bottle</Text>
+                  <ScanQrCode size={24} color="#fff" strokeWidth={2.5} />
+                  <Text style={styles.scanButtonText}>Scan to Pull</Text>
                 </TouchableOpacity>
               )}
             </View>
           )}
         </>
       ) : (
-        <Text style={styles.errorText}>Request not found.</Text>
+        <Text style={styles.errorText}>Task not found.</Text>
       )}
     </SafeAreaView>
   );
@@ -455,74 +494,138 @@ export default function PulloutDetailScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#111827",
+    backgroundColor: "#0f172a",
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
     padding: 24,
+    paddingBottom: 20,
   },
   backButton: {
-    marginRight: 16,
+    marginRight: 12,
   },
   title: {
     fontSize: 24,
     fontWeight: "900",
     color: "#fff",
+    textTransform: 'uppercase',
+    letterSpacing: -0.5,
   },
   scrollContent: {
     padding: 24,
+    paddingTop: 8,
   },
   statusCard: {
-    backgroundColor: "#1f2937",
-    padding: 20,
-    borderRadius: 16,
+    backgroundColor: "#1e293b",
+    padding: 24,
+    borderRadius: 24,
     marginBottom: 32,
-    borderLeftWidth: 4,
-    borderLeftColor: "#f59e0b",
+    borderLeftWidth: 6,
+    borderLeftColor: "#4f46e5",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 4,
   },
   statusLabel: {
-    color: "#9ca3af",
-    fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: 1,
-    marginBottom: 4,
+    color: "#64748b",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 2,
+    marginBottom: 8,
   },
   statusValue: {
     color: "#fff",
-    fontSize: 18,
+    fontSize: 22,
     fontWeight: "900",
+    letterSpacing: -0.5,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 20,
   },
   sectionTitle: {
     color: "#fff",
-    fontSize: 18,
-    fontWeight: "800",
-    marginBottom: 16,
+    fontSize: 14,
+    fontWeight: "900",
+    textTransform: 'uppercase',
+    letterSpacing: 1.5,
   },
   itemsList: {
     gap: 12,
+    paddingBottom: 40,
   },
   itemCard: {
-    backgroundColor: "#1f2937",
-    padding: 16,
-    borderRadius: 12,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+    backgroundColor: "#1e293b",
+    borderRadius: 24,
     borderWidth: 1,
-    borderColor: "#374151",
+    borderColor: "#334155",
+    overflow: 'hidden',
   },
   itemCardFulfilled: {
-    borderColor: "#064e3b",
-    backgroundColor: "#064e3b33",
+    borderColor: "rgba(16, 185, 129, 0.3)",
+    backgroundColor: "rgba(16, 185, 129, 0.05)",
   },
   itemCardSkipped: {
-    borderColor: "#7f1d1d",
-    backgroundColor: "#7f1d1d33",
+    borderColor: "rgba(239, 68, 68, 0.3)",
+    backgroundColor: "rgba(239, 68, 68, 0.05)",
+  },
+  itemMain: {
+    padding: 20,
+  },
+  itemHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 12,
+    marginBottom: 12,
+  },
+  itemName: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "800",
+    flex: 1,
+    lineHeight: 22,
   },
   textMuted: {
     textDecorationLine: "line-through",
-    opacity: 0.5,
+    opacity: 0.3,
+  },
+  itemMetaRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  itemSku: {
+    color: "#6366f1",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1,
+  },
+  itemProgress: {
+    color: "#64748b",
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  progressContainer: {
+    width: '100%',
+  },
+  progressBarBg: {
+    height: 6,
+    backgroundColor: "#0f172a",
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: "#6366f1",
+    borderRadius: 3,
   },
   itemActions: {
     flexDirection: "row",
@@ -531,142 +634,152 @@ const styles = StyleSheet.create({
   actionButtons: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 10,
   },
   actionIcon: {
-    padding: 8,
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: "#0f172a",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: '#334155',
   },
   skipButton: {
-    backgroundColor: "#374151",
+    backgroundColor: "rgba(239, 68, 68, 0.1)",
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
+    paddingVertical: 8,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#4b5563",
+    borderColor: "rgba(239, 68, 68, 0.2)",
   },
   skipButtonText: {
     color: "#ef4444",
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "900",
+    textTransform: 'uppercase',
   },
   itemInfo: {
-    flex: 1,
-  },
-  itemName: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "700",
-    marginBottom: 2,
-  },
-  itemSku: {
-    color: "#10b981",
-    fontSize: 12,
-    fontWeight: "800",
-    marginBottom: 4,
-  },
-  itemProgress: {
-    color: "#9ca3af",
-    fontSize: 14,
-  },
-  pendingBadge: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: "#374151",
+    width: '100%',
   },
   footer: {
     padding: 24,
-    backgroundColor: "#111827",
-    borderTopWidth: 1,
-    borderTopColor: "#374151",
+    backgroundColor: "transparent",
   },
   scanButton: {
-    backgroundColor: "#f59e0b",
-    height: 64,
-    borderRadius: 16,
+    backgroundColor: "#4f46e5",
+    height: 72,
+    borderRadius: 24,
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
     gap: 12,
+    shadowColor: "#4f46e5",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 8,
   },
   scanButtonText: {
     color: "#fff",
-    fontSize: 18,
-    fontWeight: "800",
+    fontSize: 16,
+    fontWeight: "900",
+    textTransform: 'uppercase',
+    letterSpacing: 1.5,
   },
   completeButton: {
     backgroundColor: "#10b981",
-    height: 64,
-    borderRadius: 16,
+    height: 72,
+    borderRadius: 24,
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
     gap: 12,
+    shadowColor: "#10b981",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 8,
   },
   completeButtonText: {
     color: "#fff",
-    fontSize: 18,
-    fontWeight: "800",
+    fontSize: 16,
+    fontWeight: "900",
+    textTransform: 'uppercase',
+    letterSpacing: 1.5,
   },
   scannerOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
+    backgroundColor: "rgba(15, 23, 42, 0.7)",
     justifyContent: "center",
     alignItems: "center",
   },
   scanTarget: {
-    width: 250,
-    height: 250,
+    width: 260,
+    height: 260,
     borderWidth: 2,
-    borderColor: "#f59e0b",
-    borderRadius: 20,
-    marginBottom: 32,
+    borderColor: "#4f46e5",
+    borderRadius: 32,
+    marginBottom: 40,
+    backgroundColor: 'rgba(79, 70, 229, 0.05)',
   },
   scanText: {
     color: "#fff",
-    fontSize: 18,
-    fontWeight: "700",
+    fontSize: 14,
+    fontWeight: "900",
+    textTransform: 'uppercase',
+    letterSpacing: 2,
   },
   cancelScanButton: {
     position: "absolute",
     bottom: 60,
-    padding: 16,
+    backgroundColor: '#1e293b',
+    paddingHorizontal: 40,
+    paddingVertical: 18,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#334155',
   },
   cancelScanText: {
     color: "#fff",
-    fontSize: 16,
-    fontWeight: "700",
+    fontSize: 14,
+    fontWeight: "900",
+    textTransform: 'uppercase',
+    letterSpacing: 1,
   },
   permissionText: {
-    color: "#fff",
+    color: "#94a3b8",
     textAlign: "center",
     marginTop: 100,
     fontSize: 16,
+    fontWeight: '600',
   },
   permissionButton: {
-    backgroundColor: "#3b82f6",
-    margin: 24,
-    padding: 16,
-    borderRadius: 12,
+    backgroundColor: "#4f46e5",
+    margin: 32,
+    padding: 18,
+    borderRadius: 20,
     alignItems: "center",
   },
   permissionButtonText: {
     color: "#fff",
-    fontWeight: "800",
+    fontWeight: "900",
+    textTransform: 'uppercase',
   },
   errorText: {
     color: "#ef4444",
     textAlign: "center",
     marginTop: 40,
+    fontWeight: '700',
   },
   searchSection: {
     marginBottom: 32,
-    backgroundColor: "#1f2937",
-    padding: 16,
-    borderRadius: 16,
+    backgroundColor: "#1e293b",
+    padding: 24,
+    borderRadius: 24,
     borderWidth: 1,
-    borderColor: "#374151",
+    borderColor: "#334155",
   },
   searchBar: {
     flexDirection: "row",
@@ -674,34 +787,37 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    backgroundColor: "#111827",
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    height: 48,
+    backgroundColor: "#0f172a",
+    borderRadius: 16,
+    paddingHorizontal: 20,
+    height: 56,
     color: "#fff",
-    fontSize: 14,
+    fontSize: 15,
+    fontWeight: '600',
     borderWidth: 1,
-    borderColor: "#374151",
+    borderColor: "#334155",
   },
   searchButton: {
-    backgroundColor: "#3b82f6",
-    width: 48,
-    height: 48,
-    borderRadius: 12,
+    backgroundColor: "#4f46e5",
+    width: 56,
+    height: 56,
+    borderRadius: 16,
     justifyContent: "center",
     alignItems: "center",
   },
   searchResults: {
-    marginTop: 16,
-    gap: 8,
+    marginTop: 20,
+    gap: 10,
   },
   searchResultItem: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    backgroundColor: "#111827",
-    padding: 12,
-    borderRadius: 8,
+    backgroundColor: "#0f172a",
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#334155",
   },
   resultInfo: {
     flex: 1,
@@ -709,23 +825,25 @@ const styles = StyleSheet.create({
   resultWineName: {
     color: "#fff",
     fontSize: 14,
-    fontWeight: "700",
+    fontWeight: "800",
   },
   resultLocation: {
     color: "#10b981",
     fontSize: 12,
-    fontWeight: "600",
-    marginTop: 2,
+    fontWeight: "900",
+    marginTop: 4,
+    textTransform: 'uppercase',
   },
   resultBadge: {
-    backgroundColor: "#374151",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+    backgroundColor: "#1e293b",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
   },
   resultStatus: {
-    color: "#9ca3af",
-    fontSize: 10,
-    fontWeight: "800",
+    color: "#64748b",
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 1,
   },
 });

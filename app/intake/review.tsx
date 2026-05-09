@@ -1,6 +1,17 @@
-import { IconSymbol } from "@/components/ui/icon-symbol";
+import { 
+  ChevronLeft, 
+  Trash2, 
+  Minus, 
+  Plus, 
+  Printer, 
+  CheckSquare, 
+  Square,
+  Search,
+  ScanText,
+  FileText,
+  CheckCircle2
+} from 'lucide-react-native';
 import { printLabels } from "@/utils/printLabels";
-// 1. UPDATED: Import from 'expo-file-system/legacy'
 import { db } from "@/lib/firebase";
 import * as FileSystem from "expo-file-system/legacy";
 import { useLocalSearchParams, useRouter, Stack } from "expo-router";
@@ -46,7 +57,7 @@ export default function ReviewScreen() {
 
   const [wines, setWines] = useState<ExtractedWine[]>([]);
   const [isPrinting, setIsPrinting] = useState(false);
-  const [shouldPrintLabels, setShouldPrintLabels] = useState(true); // New state for checkbox
+  const [shouldPrintLabels, setShouldPrintLabels] = useState(true);
   const [isAnalyzing, setIsAnalyzing] = useState(true);
 
   useEffect(() => {
@@ -58,8 +69,6 @@ export default function ReviewScreen() {
   const analyzeReceipt = async (uri: string) => {
     try {
       setIsAnalyzing(true);
-
-      // 2. FIXED: This now works correctly using the legacy import
       const base64 = await FileSystem.readAsStringAsync(uri, {
         encoding: FileSystem.EncodingType.Base64,
       });
@@ -76,8 +85,6 @@ export default function ReviewScreen() {
       }
 
       const data = await response.json();
-      console.log(data, "Data");
-
       const mapItemToWine = (item: any, index: number): ExtractedWine => ({
         id: `${Date.now()}-${index}`,
         wineName: item.wineName || "Unknown Wine",
@@ -97,23 +104,18 @@ export default function ReviewScreen() {
       }
     } catch (error) {
       console.error("Analysis Error:", error);
-      Alert.alert(
-        "Extraction Failed",
-        "Could not read the receipt. Please enter manually.",
-      );
-      setWines([
-        {
-          id: "manual-0",
-          wineName: "Manual Entry Required",
-          quantity: 1,
-          vintage: "",
-          price: 0,
-          producer: "",
-          region: "",
-          type: "",
-          sku: "",
-        },
-      ]);
+      Alert.alert("Extraction Failed", "Could not read the receipt. Please enter manually.");
+      setWines([{
+        id: "manual-0",
+        wineName: "Manual Entry Required",
+        quantity: 1,
+        vintage: "",
+        price: 0,
+        producer: "",
+        region: "",
+        type: "",
+        sku: "",
+      }]);
     } finally {
       setIsAnalyzing(false);
     }
@@ -152,10 +154,9 @@ export default function ReviewScreen() {
       const dateStr = `${today.getMonth() + 1}${today.getDate()}${today.getFullYear().toString().slice(2)}`;
 
       const inventoryBottlesCollection = collection(db, "inventory_bottles");
-      const labelsToGenerate: IndividualLabelData[] = []; // Array to collect all labels
+      const labelsToGenerate: IndividualLabelData[] = [];
       const masterWinesCollection = collection(db, "master_wines");
 
-      // Fetch all existing master wines to efficiently check for duplicates
       const allMasterWinesSnap = await getDocs(masterWinesCollection);
       const existingMasterWines = new Map<string, MasterWine>(
         allMasterWinesSnap.docs.map((doc) => [
@@ -174,14 +175,10 @@ export default function ReviewScreen() {
         masterWineData = existingMasterWines.get(normalizedWineName);
 
         if (masterWineData) {
-          // Wine exists, get its reference
           masterWineRef = doc(db, "master_wines", masterWineData.id);
         } else {
-          // Wine does not exist, create a new master wine entry
-          // Attempt to extract vintage from wineName, e.g., "Chateau Margaux 2018"
           const vintageMatch = wine.wineName.match(/\b(19|20)\d{2}\b/);
-          const vintage =
-            wine.vintage || (vintageMatch ? vintageMatch[0] : "N/V");
+          const vintage = wine.vintage || (vintageMatch ? vintageMatch[0] : "N/V");
 
           const newMasterWine: Omit<MasterWine, "id"> = {
             name: wine.wineName,
@@ -192,23 +189,19 @@ export default function ReviewScreen() {
             type: wine.type || "",
             sku: wine.sku || "",
           };
-          const newMasterWineDocRef = await addDoc(
-            masterWinesCollection,
-            newMasterWine,
-          );
+          const newMasterWineDocRef = await addDoc(masterWinesCollection, newMasterWine);
           masterWineRef = newMasterWineDocRef;
           masterWineData = { id: newMasterWineDocRef.id, ...newMasterWine };
-          existingMasterWines.set(normalizedWineName, masterWineData); // Add to map for subsequent checks
+          existingMasterWines.set(normalizedWineName, masterWineData);
         }
 
-        // Add inventory bottles based on quantity
         for (let i = 0; i < wine.quantity; i++) {
           const newBottle: Omit<InventoryBottle, "id"> = {
             masterWineRef: masterWineRef,
-            locationRef: null, // No initial location
+            locationRef: null,
             sku: wine.sku || "",
             status: "received",
-            receiptId: "", // No receipt ID for now
+            receiptId: "",
             createdAt: new Date(),
             updatedAt: new Date(),
           };
@@ -228,23 +221,15 @@ export default function ReviewScreen() {
       }
 
       Alert.alert(
-        shouldPrintLabels ? "Success" : "Confirmed",
+        shouldPrintLabels ? "Labels Sent" : "Confirmed",
         shouldPrintLabels
-          ? `${totalBottlesProcessed} label(s) sent to printer successfully.`
-          : `${totalBottlesProcessed} bottle(s) confirmed without printing.`,
-        [
-          {
-            text: "Return to Dashboard",
-            onPress: () => router.replace("/(tabs)/home"),
-          },
-        ],
+          ? `${totalBottlesProcessed} label(s) are being generated.`
+          : `${totalBottlesProcessed} bottle(s) added to inventory.`,
+        [{ text: "Dashboard", onPress: () => router.replace("/(tabs)/home") }]
       );
     } catch (error) {
       console.error("Processing Error:", error);
-      Alert.alert(
-        "Processing Failed",
-        "There was an issue processing the wines and inventory. Please try again.",
-      );
+      Alert.alert("Processing Failed", "Failed to finalize inventory intake.");
     } finally {
       setIsPrinting(false);
     }
@@ -255,7 +240,7 @@ export default function ReviewScreen() {
       <Stack.Screen options={{ headerShown: false }} />
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <IconSymbol name="chevron.left" size={24} color="#fff" />
+          <ChevronLeft size={28} color="#fff" strokeWidth={2.5} />
         </TouchableOpacity>
         <Text style={styles.title}>Review Intake</Text>
       </View>
@@ -269,134 +254,106 @@ export default function ReviewScreen() {
               resizeMode="cover"
             />
             <View style={styles.imageOverlay}>
-              <Text style={styles.imageOverlayText}>RECEIPT CAPTURED</Text>
+              <ScanText size={14} color="#10b981" strokeWidth={2.5} />
+              <Text style={styles.imageOverlayText}>AI RECEIPT ANALYSIS</Text>
             </View>
           </View>
         )}
 
         <View style={styles.extractionCard}>
-          <Text style={styles.cardHeader}>Extraction Result</Text>
+          <View style={styles.cardHeaderRow}>
+            <FileText size={16} color="#6366f1" />
+            <Text style={styles.cardHeader}>Extraction Results</Text>
+          </View>
 
           {isAnalyzing ? (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#10b981" />
-              <Text style={styles.loadingText}>Reading receipt...</Text>
+              <ActivityIndicator size="large" color="#4f46e5" />
+              <Text style={styles.loadingText}>Analyzing document...</Text>
             </View>
           ) : (
             wines.map((wine, index) => (
               <View key={wine.id} style={styles.wineItem}>
                 <View style={styles.wineHeader}>
-                  <Text style={styles.label}>
-                    WINE {wines.length > 1 ? index + 1 : ""}
+                  <Text style={styles.wineIndex}>
+                    WINE #{index + 1}
                   </Text>
-                  {wines.length > 1 && (
-                    <TouchableOpacity onPress={() => handleRemoveWine(wine.id)}>
-                      <IconSymbol name="trash.fill" size={20} color="#ef4444" />
-                    </TouchableOpacity>
-                  )}
+                  <TouchableOpacity onPress={() => handleRemoveWine(wine.id)}>
+                    <Trash2 size={18} color="#ef4444" strokeWidth={2} />
+                  </TouchableOpacity>
                 </View>
 
-                <Text style={styles.label}>WINE NAME</Text>
-                <TextInput
-                  style={styles.input}
-                  value={wine.wineName}
-                  onChangeText={(text) =>
-                    handleUpdateWineDetails(wine.id, "wineName", text)
-                  }
-                />
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Product Name</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={wine.wineName}
+                    onChangeText={(text) =>
+                      handleUpdateWineDetails(wine.id, "wineName", text)
+                    }
+                  />
+                </View>
 
-                {/* --- Prioritized Fields --- */}
-                <View style={{ marginBottom: 16 }}>
-                  <Text style={styles.label}>QUANTITY</Text>
+                <View style={styles.quantitySection}>
+                  <Text style={styles.label}>Quantity to Tag</Text>
                   <View style={styles.stepperContainer}>
                     <TouchableOpacity
                       style={styles.stepperButton}
                       onPress={() => handleUpdateQuantity(wine.id, -1)}
                     >
-                      <IconSymbol name="minus" size={24} color="#fff" />
+                      <Minus size={20} color="#fff" strokeWidth={3} />
                     </TouchableOpacity>
                     <Text style={styles.quantityValue}>{wine.quantity}</Text>
                     <TouchableOpacity
                       style={styles.stepperButton}
                       onPress={() => handleUpdateQuantity(wine.id, 1)}
                     >
-                      <IconSymbol name="plus" size={24} color="#fff" />
+                      <Plus size={20} color="#fff" strokeWidth={3} />
                     </TouchableOpacity>
                   </View>
                 </View>
 
                 <View style={styles.row}>
                   <View style={styles.col}>
-                    <Text style={styles.label}>SKU</Text>
+                    <Text style={styles.label}>SKU / Code</Text>
                     <TextInput
                       style={styles.input}
                       value={wine.sku}
                       onChangeText={(text) =>
                         handleUpdateWineDetails(wine.id, "sku", text)
                       }
+                      autoCapitalize="characters"
                     />
                   </View>
                   <View style={styles.col}>
-                    <Text style={styles.label}>PRICE</Text>
+                    <Text style={styles.label}>Price (₱)</Text>
                     <TextInput
                       style={styles.input}
                       value={String(wine.price)}
                       onChangeText={(text) =>
-                        handleUpdateWineDetails(
-                          wine.id,
-                          "price",
-                          parseFloat(text) || 0,
-                        )
+                        handleUpdateWineDetails(wine.id, "price", parseFloat(text) || 0)
                       }
                       keyboardType="numeric"
                     />
                   </View>
                 </View>
 
-                {/* --- Secondary Details Section --- */}
-                <View style={styles.secondaryDetailsContainer}>
+                <View style={styles.secondaryDetails}>
                   <View style={styles.row}>
                     <View style={styles.col}>
-                      <Text style={styles.secondaryLabel}>PRODUCER</Text>
+                      <Text style={styles.secondaryLabel}>Producer</Text>
                       <TextInput
                         style={styles.secondaryInput}
                         value={wine.producer}
-                        onChangeText={(text) =>
-                          handleUpdateWineDetails(wine.id, "producer", text)
-                        }
+                        onChangeText={(text) => handleUpdateWineDetails(wine.id, "producer", text)}
                       />
                     </View>
                     <View style={styles.col}>
-                      <Text style={styles.secondaryLabel}>VINTAGE</Text>
+                      <Text style={styles.secondaryLabel}>Vintage</Text>
                       <TextInput
                         style={styles.secondaryInput}
                         value={wine.vintage}
-                        onChangeText={(text) =>
-                          handleUpdateWineDetails(wine.id, "vintage", text)
-                        }
-                      />
-                    </View>
-                  </View>
-
-                  <View style={styles.row}>
-                    <View style={styles.col}>
-                      <Text style={styles.secondaryLabel}>REGION</Text>
-                      <TextInput
-                        style={styles.secondaryInput}
-                        value={wine.region}
-                        onChangeText={(text) =>
-                          handleUpdateWineDetails(wine.id, "region", text)
-                        }
-                      />
-                    </View>
-                    <View style={styles.col}>
-                      <Text style={styles.secondaryLabel}>TYPE</Text>
-                      <TextInput
-                        style={styles.secondaryInput}
-                        value={wine.type}
-                        onChangeText={(text) =>
-                          handleUpdateWineDetails(wine.id, "type", text)
-                        }
+                        onChangeText={(text) => handleUpdateWineDetails(wine.id, "vintage", text)}
                       />
                     </View>
                   </View>
@@ -410,26 +367,19 @@ export default function ReviewScreen() {
       <View style={styles.footer}>
         <TouchableOpacity
           style={[
-            styles.footerButton,
             styles.primaryButton,
             (isPrinting || isAnalyzing) && styles.buttonDisabled,
           ]}
-          onPress={handleConfirm} // Call the consolidated handler
+          onPress={handleConfirm}
           disabled={isPrinting || isAnalyzing}
         >
-          {isPrinting && shouldPrintLabels ? ( // Show activity indicator only if printing
+          {isPrinting ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            shouldPrintLabels && ( // Show printer icon only if printing is enabled
-              <IconSymbol name="printer.fill" size={24} color="#fff" />
-            )
+            shouldPrintLabels ? <Printer size={24} color="#fff" strokeWidth={2.5} /> : <CheckCircle2 size={24} color="#fff" strokeWidth={2.5} />
           )}
-          <Text style={styles.footerButtonText}>
-            {isPrinting && shouldPrintLabels
-              ? "PRINTING..."
-              : shouldPrintLabels
-                ? "CONFIRM & PRINT"
-                : "CONFIRM"}
+          <Text style={styles.primaryButtonText}>
+            {isPrinting ? "PROCESSING..." : shouldPrintLabels ? "CONFIRM & PRINT" : "CONFIRM INTAKE"}
           </Text>
         </TouchableOpacity>
 
@@ -438,20 +388,264 @@ export default function ReviewScreen() {
             style={styles.checkbox}
             onPress={() => setShouldPrintLabels(!shouldPrintLabels)}
           >
-            <IconSymbol
-              name={shouldPrintLabels ? "checkmark.square.fill" : "square"}
-              size={20}
-              color="#10b981"
-            />
+            {shouldPrintLabels ? (
+              <CheckSquare size={20} color="#4f46e5" strokeWidth={2.5} />
+            ) : (
+              <Square size={20} color="#475569" strokeWidth={2.5} />
+            )}
           </TouchableOpacity>
           <Text style={styles.checkboxLabel}>
-            Print QR Codes after confirmation
+            Auto-generate QR labels for all items
           </Text>
         </View>
       </View>
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: { 
+    flex: 1, 
+    backgroundColor: "#0f172a" 
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 24,
+    paddingBottom: 20,
+  },
+  backButton: {
+    marginRight: 12,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: "900",
+    color: "#fff",
+    textTransform: 'uppercase',
+    letterSpacing: -0.5,
+  },
+  scrollContent: { 
+    padding: 24, 
+    paddingTop: 8, 
+    paddingBottom: 40 
+  },
+  imageContainer: {
+    width: "100%",
+    height: 180,
+    borderRadius: 24,
+    overflow: "hidden",
+    marginBottom: 32,
+    borderWidth: 1,
+    borderColor: "#334155",
+    position: "relative",
+    backgroundColor: '#1e293b',
+  },
+  receiptImage: { 
+    width: "100%", 
+    height: "100%",
+    opacity: 0.6,
+  },
+  imageOverlay: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: "rgba(15, 23, 42, 0.8)",
+    padding: 12,
+    flexDirection: 'row',
+    alignItems: "center",
+    justifyContent: 'center',
+    gap: 8,
+  },
+  imageOverlayText: {
+    color: "#10b981",
+    fontWeight: "900",
+    letterSpacing: 1.5,
+    fontSize: 10,
+  },
+  extractionCard: {
+    backgroundColor: "#1e293b",
+    borderRadius: 24,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: "#334155",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  cardHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 24,
+  },
+  cardHeader: {
+    color: "#64748b",
+    fontSize: 12,
+    fontWeight: "900",
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+  },
+  wineItem: {
+    backgroundColor: "#0f172a",
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: "#334155",
+  },
+  wineHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  wineIndex: {
+    color: "#6366f1",
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 1,
+  },
+  inputGroup: {
+    marginBottom: 16,
+  },
+  label: {
+    color: "#64748b",
+    fontSize: 10,
+    fontWeight: "900",
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  input: {
+    backgroundColor: "#1e293b",
+    color: "#fff",
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+    fontWeight: "700",
+    borderWidth: 1,
+    borderColor: "#334155",
+  },
+  row: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 16,
+  },
+  col: {
+    flex: 1,
+  },
+  secondaryDetails: {
+    borderTopWidth: 1,
+    borderTopColor: "#334155",
+    marginTop: 8,
+    paddingTop: 16,
+  },
+  secondaryLabel: {
+    color: "#475569",
+    fontSize: 10,
+    fontWeight: "800",
+    marginBottom: 6,
+    textTransform: 'uppercase',
+  },
+  secondaryInput: {
+    backgroundColor: "#1e293b",
+    color: "#cbd5e1",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 14,
+    fontWeight: "600",
+    borderWidth: 1,
+    borderColor: "#334155",
+  },
+  quantitySection: {
+    marginBottom: 20,
+  },
+  stepperContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#1e293b",
+    borderRadius: 16,
+    padding: 6,
+    borderWidth: 1,
+    borderColor: "#334155",
+  },
+  stepperButton: {
+    backgroundColor: "#4f46e5",
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  quantityValue: { 
+    color: "#fff", 
+    fontSize: 24, 
+    fontWeight: "900",
+    fontStyle: 'italic',
+  },
+  loadingContainer: { 
+    alignItems: "center", 
+    paddingVertical: 40 
+  },
+  loadingText: { 
+    color: "#64748b", 
+    marginTop: 16, 
+    fontSize: 14, 
+    fontWeight: '700' 
+  },
+  footer: {
+    padding: 24,
+    borderTopWidth: 1,
+    borderTopColor: "#334155",
+    backgroundColor: "#0f172a",
+  },
+  primaryButton: {
+    flexDirection: "row",
+    height: 64,
+    borderRadius: 20,
+    backgroundColor: "#10b981",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 12,
+    shadowColor: "#10b981",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 8,
+  },
+  buttonDisabled: {
+    opacity: 0.5,
+  },
+  primaryButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "900",
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  checkboxContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 20,
+    gap: 10,
+  },
+  checkbox: {
+    padding: 4,
+  },
+  checkboxLabel: {
+    color: "#94a3b8",
+    fontSize: 13,
+    fontWeight: '600',
+  },
+});
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#111827" },

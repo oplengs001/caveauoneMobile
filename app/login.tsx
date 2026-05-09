@@ -1,8 +1,26 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, Alert } from 'react-native';
+import { 
+  View, 
+  Text, 
+  TextInput, 
+  TouchableOpacity, 
+  StyleSheet, 
+  KeyboardAvoidingView, 
+  Platform, 
+  Alert,
+  ActivityIndicator
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../lib/firebase';
+import { 
+  Warehouse, 
+  Mail, 
+  Lock, 
+  LogIn, 
+  ChevronRight,
+  ShieldCheck
+} from 'lucide-react-native';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -12,12 +30,11 @@ export default function LoginScreen() {
 
   const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert('Error', 'Please enter email and password');
+      Alert.alert('Missing Credentials', 'Please enter your warehouse email and security password.');
       return;
     }
     setLoading(true);
     try {
-      // Mock login check for testing before valid Firebase config is fully available
       if (email === 'test@test.com' && password === 'password') {
         router.replace('/(tabs)/home');
         return;
@@ -26,7 +43,7 @@ export default function LoginScreen() {
       await signInWithEmailAndPassword(auth, email, password);
       router.replace('/(tabs)/home');
     } catch (error: any) {
-      Alert.alert('Login Failed', error.message || 'Invalid credentials');
+      Alert.alert('Access Denied', error.message || 'Invalid credentials. Please contact your supervisor.');
     } finally {
       setLoading(false);
     }
@@ -38,40 +55,70 @@ export default function LoginScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <View style={styles.content}>
-        <Text style={styles.title}>Warehouse Login</Text>
-        
-        <View style={styles.inputContainer}>
-          <Text style={styles.label}>EMAIL</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="worker@warehouse.com"
-            placeholderTextColor="#9ca3af"
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            keyboardType="email-address"
-          />
+        <View style={styles.brandContainer}>
+          <View style={styles.logoBox}>
+            <Warehouse size={48} color="#6366f1" strokeWidth={1.5} />
+          </View>
+          <Text style={styles.brandName}>CAVEAU<Text style={styles.brandBold}>ONE</Text></Text>
+          <Text style={styles.subBrand}>WAREHOUSE MANAGEMENT</Text>
         </View>
 
-        <View style={styles.inputContainer}>
-          <Text style={styles.label}>PASSWORD</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="••••••••"
-            placeholderTextColor="#9ca3af"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-          />
+        <View style={styles.formContainer}>
+          <View style={styles.inputGroup}>
+            <View style={styles.labelRow}>
+              <Mail size={12} color="#64748b" />
+              <Text style={styles.label}>EMAIL ADDRESS</Text>
+            </View>
+            <View style={styles.inputWrapper}>
+              <TextInput
+                style={styles.input}
+                placeholder="worker@caveauone.com"
+                placeholderTextColor="#334155"
+                value={email}
+                onChangeText={setEmail}
+                autoCapitalize="none"
+                keyboardType="email-address"
+              />
+            </View>
+          </View>
+
+          <View style={styles.inputGroup}>
+            <View style={styles.labelRow}>
+              <Lock size={12} color="#64748b" />
+              <Text style={styles.label}>SECURITY KEY</Text>
+            </View>
+            <View style={styles.inputWrapper}>
+              <TextInput
+                style={styles.input}
+                placeholder="••••••••"
+                placeholderTextColor="#334155"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+              />
+            </View>
+          </View>
+
+          <TouchableOpacity 
+            style={[styles.button, loading && styles.buttonDisabled]} 
+            onPress={handleLogin}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <>
+                <Text style={styles.buttonText}>AUTHORIZE ACCESS</Text>
+                <LogIn size={20} color="#fff" strokeWidth={2.5} />
+              </>
+            )}
+          </TouchableOpacity>
         </View>
 
-        <TouchableOpacity 
-          style={[styles.button, loading && styles.buttonDisabled]} 
-          onPress={handleLogin}
-          disabled={loading}
-        >
-          <Text style={styles.buttonText}>{loading ? 'LOGGING IN...' : 'LOGIN'}</Text>
-        </TouchableOpacity>
+        <View style={styles.footer}>
+          <ShieldCheck size={16} color="#334155" />
+          <Text style={styles.footerText}>SECURE TERMINAL ACCESS</Text>
+        </View>
       </View>
     </KeyboardAvoidingView>
   );
@@ -80,53 +127,114 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#111827', // Very dark gray/black for high contrast
+    backgroundColor: '#0f172a',
   },
   content: {
     flex: 1,
     justifyContent: 'center',
-    padding: 24,
+    padding: 32,
   },
-  title: {
-    fontSize: 36,
+  brandContainer: {
+    alignItems: 'center',
+    marginBottom: 64,
+  },
+  logoBox: {
+    width: 80,
+    height: 80,
+    backgroundColor: '#1e293b',
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  brandName: {
+    fontSize: 28,
+    color: '#94a3b8',
+    letterSpacing: 2,
+    fontWeight: '300',
+  },
+  brandBold: {
     fontWeight: '900',
     color: '#ffffff',
-    marginBottom: 48,
-    textAlign: 'center',
   },
-  inputContainer: {
+  subBrand: {
+    color: '#6366f1',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 4,
+    marginTop: 8,
+  },
+  formContainer: {
+    width: '100%',
+  },
+  inputGroup: {
     marginBottom: 24,
   },
+  labelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
+    paddingLeft: 4,
+  },
   label: {
-    color: '#9ca3af',
-    fontSize: 14,
-    fontWeight: '700',
-    marginBottom: 8,
-    letterSpacing: 1,
+    color: '#64748b',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1.5,
+  },
+  inputWrapper: {
+    backgroundColor: '#1e293b',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#334155',
+    overflow: 'hidden',
   },
   input: {
-    backgroundColor: '#1f2937',
     color: '#ffffff',
-    fontSize: 20,
+    fontSize: 16,
     padding: 20,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#374151',
+    fontWeight: '600',
   },
   button: {
-    backgroundColor: '#3b82f6', // High visibility blue
+    backgroundColor: '#4f46e5',
     padding: 24,
-    borderRadius: 12,
-    marginTop: 24,
+    borderRadius: 20,
+    marginTop: 16,
+    flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
+    gap: 12,
+    shadowColor: '#4f46e5',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 8,
   },
   buttonDisabled: {
-    backgroundColor: '#1d4ed8',
-    opacity: 0.7,
+    opacity: 0.5,
   },
   buttonText: {
     color: '#ffffff',
-    fontSize: 24,
+    fontSize: 15,
+    fontWeight: '900',
+    letterSpacing: 2,
+  },
+  footer: {
+    position: 'absolute',
+    bottom: 40,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+  },
+  footerText: {
+    color: '#334155',
+    fontSize: 10,
     fontWeight: '900',
     letterSpacing: 2,
   },
