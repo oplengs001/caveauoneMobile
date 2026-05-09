@@ -103,7 +103,7 @@ export default function HomeScreen() {
           {isStore && (
             <TouchableOpacity
               style={[styles.actionButton, { backgroundColor: theme.primary, borderRadius: 24, padding: 32 }]}
-              onPress={() => router.push('/wine-requests/create')}
+              onPress={() => router.push('/wine-requests')}
             >
               <View style={styles.buttonContent}>
                 <ClipboardList size={42} color="#ffffff" strokeWidth={1.5} />

@@ -62,3 +62,24 @@ export interface IndividualLabelData {
   dateAdded: string;
   bottleId: string;
 }
+
+export interface WineRequestItem {
+  masterWineId: string;
+  wineName: string;
+  vintage: string;
+  sku: string;
+  qty: number;
+  pulledQty?: number;
+  price?: number;
+}
+
+export interface WineRequest {
+  id: string;
+  storeId: string;
+  storeEmail: string;
+  status: "pending" | "converted" | "rejected";
+  items: WineRequestItem[];
+  totalAmount: number;
+  createdAt: any;
+  updatedAt: any;
+}
