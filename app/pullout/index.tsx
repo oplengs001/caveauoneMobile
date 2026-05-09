@@ -1,11 +1,21 @@
-import { IconSymbol } from "@/components/ui/icon-symbol";
+import { IconSymbol } from '@/components/ui/icon-symbol';
 import { db } from "@/lib/firebase";
 import { useRouter } from "expo-router";
-import { collection, getDocs, orderBy, query, where } from "firebase/firestore";
-import React, { useEffect, useState } from "react";
+import {
+  collection,
+  getDocs,
+  limit,
+  orderBy,
+  query,
+  QueryDocumentSnapshot,
+  startAfter,
+  where
+} from "firebase/firestore";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  RefreshControl,
   SafeAreaView,
   StyleSheet,
   Text,
@@ -14,37 +24,80 @@ import {
 } from "react-native";
 import { PulloutRequest } from "../../types";
 
+const PAGE_SIZE = 10;
+
 export default function PulloutRequestsScreen() {
   const [requests, setRequests] = useState<PulloutRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [lastDoc, setLastDoc] = useState<QueryDocumentSnapshot | null>(null);
+  const [hasMore, setHasMore] = useState(true);
+  const [selectedTab, setSelectedTab] = useState<"pending" | "in_progress" | "completed">("pending");
+  const [refreshing, setRefreshing] = useState(false);
   const router = useRouter();
 
-  const fetchRequests = async () => {
-    setLoading(true);
+  const fetchRequests = async (status: string = selectedTab, isRefresh = false) => {
+    if (loadingMore || (!hasMore && !isRefresh)) return;
+
+    if (isRefresh) {
+      setRefreshing(true);
+      setHasMore(true);
+    } else {
+      if (requests.length > 0) setLoadingMore(true);
+      else setLoading(true);
+    }
+
     try {
-      // Fetch only pending or in_progress requests for the warehouse
-      const q = query(
+      let q = query(
         collection(db, "pullout_requests"),
-        where("status", "in", ["pending", "in_progress"]),
-        orderBy("createdAt", "desc")
+        where("status", "==", status),
+        orderBy("createdAt", "desc"),
+        limit(PAGE_SIZE)
       );
+
+      if (!isRefresh && lastDoc) {
+        q = query(
+          collection(db, "pullout_requests"),
+          where("status", "==", status),
+          orderBy("createdAt", "desc"),
+          startAfter(lastDoc),
+          limit(PAGE_SIZE)
+        );
+      }
+
       const snap = await getDocs(q);
       const data = snap.docs.map((doc) => ({
         id: doc.id,
-        ...doc.data(),
+        ...(doc.data() as object),
       })) as PulloutRequest[];
 
-      setRequests(data);
+      if (isRefresh) {
+        setRequests(data);
+        setLastDoc(snap.docs[snap.docs.length - 1]);
+        setHasMore(snap.docs.length === PAGE_SIZE);
+      } else {
+        setRequests(prev => [...prev, ...data]);
+        if (snap.docs.length > 0) {
+          setLastDoc(snap.docs[snap.docs.length - 1]);
+        }
+        setHasMore(snap.docs.length === PAGE_SIZE);
+      }
     } catch (error) {
       console.error("Error fetching pullout requests:", error);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
+      setRefreshing(false);
     }
   };
 
   useEffect(() => {
-    fetchRequests();
-  }, []);
+    fetchRequests(selectedTab, true);
+  }, [selectedTab]);
+
+  const onRefresh = useCallback(() => {
+    fetchRequests(selectedTab, true);
+  }, [selectedTab]);
 
   const renderItem = ({ item }: { item: PulloutRequest }) => {
     const totalRequested = item.items.reduce((sum, i) => sum + i.requestedQty, 0);
@@ -95,6 +148,22 @@ export default function PulloutRequestsScreen() {
     );
   };
 
+  const filteredRequests = requests;
+
+  const renderTab = (tab: typeof selectedTab, label: string) => {
+    const isActive = selectedTab === tab;
+    return (
+      <TouchableOpacity
+        style={[styles.tab, isActive && styles.activeTab]}
+        onPress={() => setSelectedTab(tab)}
+      >
+        <Text style={[styles.tabText, isActive && styles.activeTabText]}>
+          {label}
+        </Text>
+      </TouchableOpacity>
+    );
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -104,6 +173,12 @@ export default function PulloutRequestsScreen() {
         <Text style={styles.title}>Pullout Tasks</Text>
       </View>
 
+      <View style={styles.tabBar}>
+        {renderTab("pending", "Pending")}
+        {renderTab("in_progress", "In Progress")}
+        {renderTab("completed", "Completed")}
+      </View>
+
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#f59e0b" />
@@ -111,18 +186,30 @@ export default function PulloutRequestsScreen() {
         </View>
       ) : (
         <FlatList
-          data={requests}
+          data={filteredRequests}
           renderItem={renderItem}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
+          onEndReached={() => fetchRequests(selectedTab, false)}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={() => (
+            loadingMore ? (
+              <ActivityIndicator size="small" color="#f59e0b" style={{ marginVertical: 20 }} />
+            ) : null
+          )}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor="#f59e0b"
+            />
+          }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <IconSymbol name="tray.and.arrow.up.fill" size={64} color="#374151" />
-              <Text style={styles.emptyText}>No pending pullout requests.</Text>
+              <Text style={styles.emptyText}>No {selectedTab.replace('_', ' ')} requests.</Text>
             </View>
           }
-          onRefresh={fetchRequests}
-          refreshing={loading}
         />
       )}
     </SafeAreaView>
@@ -158,7 +245,35 @@ const styles = StyleSheet.create({
   },
   listContent: {
     padding: 24,
+    paddingTop: 12,
     gap: 20,
+  },
+  tabBar: {
+    flexDirection: "row",
+    paddingHorizontal: 24,
+    marginBottom: 12,
+    gap: 12,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: "center",
+    borderRadius: 8,
+    backgroundColor: "#1f2937",
+    borderWidth: 1,
+    borderColor: "#374151",
+  },
+  activeTab: {
+    backgroundColor: "#f59e0b",
+    borderColor: "#f59e0b",
+  },
+  tabText: {
+    color: "#9ca3af",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  activeTabText: {
+    color: "#fff",
   },
   card: {
     backgroundColor: "#1f2937",

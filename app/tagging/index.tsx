@@ -11,7 +11,7 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -35,6 +35,7 @@ export default function TaggingScreen() {
   const [locations, setLocations] = useState<Location[]>([]);
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const isProcessing = useRef(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -55,8 +56,9 @@ export default function TaggingScreen() {
   };
 
   const handleBarcodeScanned = async ({ data }: { data: string }) => {
-    if (state !== "scanning" || loading) return;
+    if (state !== "scanning" || loading || isProcessing.current) return;
     
+    isProcessing.current = true;
     setLoading(true);
     setScannedSku(data);
     
@@ -90,6 +92,7 @@ export default function TaggingScreen() {
     } catch (error) {
       console.error("Error fetching bottle details:", error);
       Alert.alert("Error", "Failed to fetch bottle details.");
+      isProcessing.current = false;
     } finally {
       setLoading(false);
     }
@@ -113,6 +116,7 @@ export default function TaggingScreen() {
         {
           text: "Scan Next",
           onPress: () => {
+            isProcessing.current = false;
             setState("scanning");
             setBottle(null);
             setWine(null);

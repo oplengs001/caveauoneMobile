@@ -12,7 +12,7 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -20,16 +20,21 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
-import { InventoryBottle, PulloutRequest } from "../../types";
+import { InventoryBottle, Location, MasterWine, PulloutRequest } from "../../types";
 
 export default function PulloutDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [request, setRequest] = useState<PulloutRequest | null>(null);
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<(InventoryBottle & { wineName: string, locationName: string })[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const isProcessing = useRef(false);
   const [permission, requestPermission] = useCameraPermissions();
   const router = useRouter();
 
@@ -52,7 +57,8 @@ export default function PulloutDetailScreen() {
   }, [id]);
 
   const handleBarcodeScanned = async ({ data }: { data: string }) => {
-    if (!scanning || !request) return;
+    if (!scanning || !request || isProcessing.current) return;
+    isProcessing.current = true;
     setScanning(false);
     setLoading(true);
 
@@ -61,7 +67,12 @@ export default function PulloutDetailScreen() {
       const bottleSnap = await getDoc(doc(db, "inventory_bottles", data));
 
       if (!bottleSnap.exists()) {
-        Alert.alert("Not Found", `No bottle found with ID: ${data}`, [{ text: "OK", onPress: () => setScanning(true) }]);
+        Alert.alert("Not Found", `No bottle found with ID: ${data}`, [{
+          text: "OK", onPress: () => {
+            isProcessing.current = false;
+            setScanning(true);
+          }
+        }]);
         setLoading(false);
         return;
       }
@@ -69,7 +80,12 @@ export default function PulloutDetailScreen() {
       const bottleData = { id: bottleSnap.id, ...bottleSnap.data() } as InventoryBottle;
 
       if (bottleData.status !== "received" && bottleData.status !== "shelved") {
-        Alert.alert("Invalid Status", `Bottle is already ${bottleData.status}.`, [{ text: "OK", onPress: () => setScanning(true) }]);
+        Alert.alert("Invalid Status", `Bottle is already ${bottleData.status}.`, [{
+          text: "OK", onPress: () => {
+            isProcessing.current = false;
+            setScanning(true);
+          }
+        }]);
         setLoading(false);
         return;
       }
@@ -81,7 +97,12 @@ export default function PulloutDetailScreen() {
       );
 
       if (itemIndex === -1) {
-        Alert.alert("Not Requested", "This wine is not needed for this request or already fulfilled.", [{ text: "OK", onPress: () => setScanning(true) }]);
+        Alert.alert("Not Requested", "This wine is not needed for this request or already fulfilled.", [{
+          text: "OK", onPress: () => {
+            isProcessing.current = false;
+            setScanning(true);
+          }
+        }]);
         setLoading(false);
         return;
       }
@@ -109,15 +130,76 @@ export default function PulloutDetailScreen() {
       });
 
       Alert.alert("Success", `Pulled ${updatedItems[itemIndex].wineName}`, [
-        { text: allFulfilled ? "Finish" : "Scan Next", onPress: () => allFulfilled ? fetchRequest() : setScanning(true) }
+        {
+          text: allFulfilled ? "Finish" : "Scan Next", onPress: () => {
+            isProcessing.current = false;
+            if (allFulfilled) {
+              fetchRequest();
+            } else {
+              setScanning(true);
+            }
+          }
+        }
       ]);
 
       await fetchRequest();
     } catch (error) {
       console.error("Error processing pullout:", error);
       Alert.alert("Error", "Failed to process pullout.");
+      isProcessing.current = false;
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSearch = async (specificSku?: string) => {
+    const term = specificSku || searchQuery.trim();
+    if (!term) {
+      setSearchResults([]);
+      return;
+    }
+
+    if (specificSku) setSearchQuery(specificSku);
+
+    setSearchLoading(true);
+    try {
+      // 1. Search bottles by SKU (Omni search primarily uses SKU for now)
+      const bottlesRef = collection(db, "inventory_bottles");
+      const q = query(
+        bottlesRef,
+        where("sku", "==", term),
+        where("status", "in", ["received", "shelved"])
+      );
+      const snap = await getDocs(q);
+
+      const results = await Promise.all(snap.docs.map(async (doc) => {
+        const data = doc.data();
+        let wineName = "Unknown Wine";
+        let locationName = "No Location";
+
+        if (data.masterWineRef) {
+          const wineSnap = await getDoc(data.masterWineRef);
+          if (wineSnap.exists()) wineName = (wineSnap.data() as MasterWine).name;
+        }
+
+        if (data.locationRef) {
+          const locSnap = await getDoc(data.locationRef);
+          if (locSnap.exists()) locationName = (locSnap.data() as Location).name;
+        }
+
+        return {
+          id: doc.id,
+          ...data,
+          wineName,
+          locationName,
+        } as any;
+      }));
+
+      setSearchResults(results);
+    } catch (error) {
+      console.error("Search error:", error);
+    } finally {
+      setSearchLoading(false);
     }
   };
 
@@ -172,14 +254,60 @@ export default function PulloutDetailScreen() {
               <Text style={styles.statusValue}>{request.status.replace('_', ' ').toUpperCase()}</Text>
             </View>
 
+            <View style={styles.searchSection}>
+              <Text style={styles.sectionTitle}>Check Inventory Location</Text>
+              <View style={styles.searchBar}>
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Enter SKU to locate bottle..."
+                  placeholderTextColor="#9ca3af"
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  autoCapitalize="characters"
+                />
+                <TouchableOpacity
+                  style={styles.searchButton}
+                  onPress={() => handleSearch()}
+                  disabled={searchLoading}
+                >
+                  {searchLoading ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <IconSymbol name="magnifyingglass" size={20} color="#fff" />
+                  )}
+                </TouchableOpacity>
+              </View>
+
+              {searchResults.length > 0 && (
+                <View style={styles.searchResults}>
+                  {searchResults.map((res) => (
+                    <View key={res.id} style={styles.searchResultItem}>
+                      <View style={styles.resultInfo}>
+                        <Text style={styles.resultWineName}>{res.wineName}</Text>
+                        <Text style={styles.resultLocation}>Location: {res.locationName}</Text>
+                      </View>
+                      <View style={styles.resultBadge}>
+                        <Text style={styles.resultStatus}>{res.status.toUpperCase()}</Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+
             <Text style={styles.sectionTitle}>Items to Pull</Text>
             <View style={styles.itemsList}>
               {request.items.map((item, index) => {
                 const isFulfilled = item.pulledQty >= item.requestedQty;
                 return (
-                  <View key={index} style={[styles.itemCard, isFulfilled && styles.itemCardFulfilled]}>
+                  <TouchableOpacity
+                    key={index}
+                    style={[styles.itemCard, isFulfilled && styles.itemCardFulfilled]}
+                    onPress={() => !isFulfilled && handleSearch(item.sku)}
+                  >
                     <View style={styles.itemInfo}>
                       <Text style={styles.itemName}>{item.wineName}</Text>
+                      <Text style={styles.itemSku}>SKU: {item.sku}</Text>
                       <Text style={styles.itemProgress}>
                         {item.pulledQty} of {item.requestedQty} pulled
                       </Text>
@@ -187,9 +315,9 @@ export default function PulloutDetailScreen() {
                     {isFulfilled ? (
                       <IconSymbol name="checkmark.circle.fill" size={24} color="#10b981" />
                     ) : (
-                      <View style={styles.pendingBadge} />
+                      <IconSymbol name="magnifyingglass" size={20} color="#3b82f6" />
                     )}
-                  </View>
+                  </TouchableOpacity>
                 );
               })}
             </View>
@@ -199,7 +327,10 @@ export default function PulloutDetailScreen() {
             <View style={styles.footer}>
               <TouchableOpacity
                 style={styles.scanButton}
-                onPress={() => setScanning(true)}
+                onPress={() => {
+                  isProcessing.current = false;
+                  setScanning(true);
+                }}
               >
                 <IconSymbol name="qrcode.viewfinder" size={24} color="#fff" />
                 <Text style={styles.scanButtonText}>Scan to Pull Bottle</Text>
@@ -285,6 +416,12 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontWeight: "700",
+    marginBottom: 2,
+  },
+  itemSku: {
+    color: "#10b981",
+    fontSize: 12,
+    fontWeight: "800",
     marginBottom: 4,
   },
   itemProgress: {
@@ -368,5 +505,73 @@ const styles = StyleSheet.create({
     color: "#ef4444",
     textAlign: "center",
     marginTop: 40,
+  },
+  searchSection: {
+    marginBottom: 32,
+    backgroundColor: "#1f2937",
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#374151",
+  },
+  searchBar: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  searchInput: {
+    flex: 1,
+    backgroundColor: "#111827",
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    height: 48,
+    color: "#fff",
+    fontSize: 14,
+    borderWidth: 1,
+    borderColor: "#374151",
+  },
+  searchButton: {
+    backgroundColor: "#3b82f6",
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  searchResults: {
+    marginTop: 16,
+    gap: 8,
+  },
+  searchResultItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: "#111827",
+    padding: 12,
+    borderRadius: 8,
+  },
+  resultInfo: {
+    flex: 1,
+  },
+  resultWineName: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  resultLocation: {
+    color: "#10b981",
+    fontSize: 12,
+    fontWeight: "600",
+    marginTop: 2,
+  },
+  resultBadge: {
+    backgroundColor: "#374151",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  resultStatus: {
+    color: "#9ca3af",
+    fontSize: 10,
+    fontWeight: "800",
   },
 });

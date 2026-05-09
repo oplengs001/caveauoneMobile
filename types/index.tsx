@@ -39,6 +39,7 @@ export interface Location {
 export interface PulloutRequestItem {
   masterWineId: string;
   wineName: string;
+  sku: string;
   requestedQty: number;
   pulledQty: number;
   pulledBottleIds: string[];

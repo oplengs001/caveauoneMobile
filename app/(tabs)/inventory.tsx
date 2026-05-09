@@ -1,10 +1,21 @@
 import { db } from "@/lib/firebase";
 import { Stack } from "expo-router";
-import { collection, getDocs } from "firebase/firestore";
-import { useEffect, useState } from "react";
+import {
+  QueryDocumentSnapshot,
+  collection,
+  getDoc,
+  getDocs,
+  limit,
+  orderBy,
+  query,
+  startAfter,
+  where
+} from "firebase/firestore";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  RefreshControl,
   SafeAreaView,
   StyleSheet,
   Text,
@@ -19,70 +30,123 @@ type BottleView = InventoryBottle & {
   locationData?: Location;
 };
 
+const PAGE_SIZE = 10;
+
 export default function InventoryScreen() {
   const [bottles, setBottles] = useState<BottleView[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [lastDoc, setLastDoc] = useState<QueryDocumentSnapshot | null>(null);
+  const [hasMore, setHasMore] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
 
-  const fetchInventory = async () => {
-    setLoading(true);
+  // Caches to avoid redundant lookups
+  const [wineCache] = useState(new Map<string, MasterWine>());
+  const [locationCache] = useState(new Map<string, Location>());
+
+  const fetchInventory = async (isRefresh = false) => {
+    if (loadingMore || (!hasMore && !isRefresh)) return;
+
+    if (isRefresh) {
+      setRefreshing(true);
+      setHasMore(true);
+    } else {
+      if (bottles.length > 0) setLoadingMore(true);
+      else setLoading(true);
+    }
+
     try {
-      // Fetch all physical bottles
-      const bottlesSnap = await getDocs(collection(db, "inventory_bottles"));
+      const bottlesRef = collection(db, "inventory_bottles");
+      let q;
 
-      // Fetch the catalogs to map the DocumentReferences into readable names
-      const [winesSnap, locationsSnap] = await Promise.all([
-        getDocs(collection(db, "master_wines")),
-        getDocs(collection(db, "locations")),
-      ]);
+      if (searchQuery.trim()) {
+        // Simple SKU search if searching
+        q = query(
+          bottlesRef,
+          where("sku", "==", searchQuery.trim()),
+          limit(PAGE_SIZE)
+        );
+      } else {
+        q = query(
+          bottlesRef,
+          orderBy("createdAt", "desc"),
+          limit(PAGE_SIZE)
+        );
 
-      const winesMap = new Map(
-        winesSnap.docs.map((doc) => [
-          doc.id,
-          { id: doc.id, ...doc.data() } as MasterWine,
-        ]),
-      );
-      const locationsMap = new Map(
-        locationsSnap.docs.map((doc) => [
-          doc.id,
-          { id: doc.id, ...doc.data() } as Location,
-        ]),
-      );
+        if (!isRefresh && lastDoc) {
+          q = query(
+            bottlesRef,
+            orderBy("createdAt", "desc"),
+            startAfter(lastDoc),
+            limit(PAGE_SIZE)
+          );
+        }
+      }
 
-      const resolvedBottles: BottleView[] = bottlesSnap.docs.map((doc) => {
-        const data = doc.data();
+      const snap = await getDocs(q);
+
+      const resolved = await Promise.all(snap.docs.map(async (docSnap) => {
+        const data = docSnap.data();
+        let masterWineData = wineCache.get(data.masterWineRef?.id);
+        let locationData = locationCache.get(data.locationRef?.id);
+
+        if (!masterWineData && data.masterWineRef) {
+          const wSnap = await getDoc(data.masterWineRef);
+          if (wSnap.exists()) {
+            masterWineData = { id: wSnap.id, ...(wSnap.data() as object) } as MasterWine;
+            wineCache.set(wSnap.id, masterWineData);
+          }
+        }
+
+        if (!locationData && data.locationRef) {
+          const lSnap = await getDoc(data.locationRef);
+          if (lSnap.exists()) {
+            locationData = { id: lSnap.id, ...(lSnap.data() as object) } as Location;
+            locationCache.set(lSnap.id, locationData);
+          }
+        }
+
         return {
-          id: doc.id,
-          ...data,
-          // Handle Firestore timestamps
+          id: docSnap.id,
+          ...(data as object),
           createdAt: data.createdAt?.toDate() || new Date(),
           updatedAt: data.updatedAt?.toDate() || new Date(),
-          // Resolve references
-          masterWineData: data.masterWineRef
-            ? winesMap.get(data.masterWineRef.id)
-            : undefined,
-          locationData: data.locationRef
-            ? locationsMap.get(data.locationRef.id)
-            : undefined,
+          masterWineData,
+          locationData,
         } as BottleView;
-      });
+      }));
 
-      // Sort by newest first
-      resolvedBottles.sort(
-        (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
-      );
-
-      setBottles(resolvedBottles);
+      if (isRefresh) {
+        setBottles(resolved);
+        setLastDoc(snap.docs[snap.docs.length - 1]);
+        setHasMore(snap.docs.length === PAGE_SIZE);
+      } else {
+        setBottles(prev => [...prev, ...resolved]);
+        if (snap.docs.length > 0) {
+          setLastDoc(snap.docs[snap.docs.length - 1]);
+        }
+        setHasMore(snap.docs.length === PAGE_SIZE);
+      }
     } catch (error) {
       console.error("Error fetching inventory: ", error);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
+      setRefreshing(false);
     }
   };
 
   useEffect(() => {
-    fetchInventory();
-  }, []);
+    const delayDebounce = setTimeout(() => {
+      fetchInventory(true);
+    }, 500);
+    return () => clearTimeout(delayDebounce);
+  }, [searchQuery]);
+
+  const onRefresh = useCallback(() => {
+    fetchInventory(true);
+  }, [searchQuery]);
 
   const getStatusBadgeStyle = (status: string) => {
     switch (status) {
@@ -129,21 +193,7 @@ export default function InventoryScreen() {
     );
   };
 
-  const filteredBottles = bottles.filter((bottle) => {
-    if (!searchQuery) {
-      return true;
-    }
-    const lowercasedQuery = searchQuery.toLowerCase();
-    const wineName = bottle.masterWineData?.name?.toLowerCase() || "";
-    const vintage = bottle.masterWineData?.vintage?.toLowerCase() || "";
-    const sku = bottle.sku?.toLowerCase() || "";
-
-    return (
-      wineName.includes(lowercasedQuery) ||
-      vintage.includes(lowercasedQuery) ||
-      sku.includes(lowercasedQuery)
-    );
-  });
+  const filteredBottles = bottles;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -166,6 +216,20 @@ export default function InventoryScreen() {
           renderItem={renderItem}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
+          onEndReached={() => fetchInventory(false)}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={() => (
+            loadingMore ? (
+              <ActivityIndicator size="small" color="#ffffff" style={{ marginVertical: 20 }} />
+            ) : null
+          )}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor="#ffffff"
+            />
+          }
           ListEmptyComponent={
             <Text style={styles.emptyText}>
               {searchQuery ? "No results found." : "No bottles found."}
