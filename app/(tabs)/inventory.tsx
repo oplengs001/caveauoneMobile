@@ -282,20 +282,52 @@ export default function InventoryScreen() {
         >
           <IconSymbol name="chevron.left" size={24} color="#fff" />
         </TouchableOpacity>
-        <Text style={styles.title}>
+        
+        <Text style={styles.title} numberOfLines={1}>
           {isSelectionMode ? `${selectedIds.size} Selected` : "Inventory"}
         </Text>
-        {isSelectionMode && (
-          <TouchableOpacity 
-            onPress={() => {
-              setIsSelectionMode(false);
-              setSelectedIds(new Set());
-            }} 
-            style={styles.cancelButton}
-          >
-            <Text style={styles.cancelText}>Cancel</Text>
-          </TouchableOpacity>
-        )}
+
+        <View style={styles.headerActions}>
+          {isSelectionMode ? (
+            <TouchableOpacity 
+              onPress={() => {
+                setIsSelectionMode(false);
+                setSelectedIds(new Set());
+              }} 
+              style={styles.cancelButton}
+            >
+              <Text style={styles.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.actionRow}>
+              <TouchableOpacity
+                style={[styles.headerActionChip, showUnshelvedOnly && styles.headerActionChipActive]}
+                onPress={() => setShowUnshelvedOnly(!showUnshelvedOnly)}
+                activeOpacity={0.7}
+              >
+                <IconSymbol
+                  name="tray.and.arrow.down.fill"
+                  size={16}
+                  color={showUnshelvedOnly ? "#000" : "#fff"}
+                />
+                <Text style={[styles.headerActionText, showUnshelvedOnly && styles.headerActionTextActive]}>
+                  Unshelved
+                </Text>
+              </TouchableOpacity>
+
+              {!isSelectionMode && (
+                <TouchableOpacity
+                  style={styles.headerActionChip}
+                  onPress={() => setIsSelectionMode(true)}
+                  activeOpacity={0.7}
+                >
+                  <IconSymbol name="printer.fill" size={16} color="#3b82f6" />
+                  <Text style={styles.headerActionText}>Print</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+        </View>
       </View>
       
       <View style={styles.topControls}>
@@ -308,31 +340,6 @@ export default function InventoryScreen() {
             onChangeText={setSearchQuery}
             clearButtonMode="while-editing"
           />
-        </View>
-
-        <View style={styles.filterBar}>
-          <TouchableOpacity
-            style={[styles.filterChip, showUnshelvedOnly && styles.filterChipActive]}
-            onPress={() => setShowUnshelvedOnly(!showUnshelvedOnly)}
-          >
-            <IconSymbol
-              name="tray.and.arrow.down"
-              size={14}
-              color={showUnshelvedOnly ? "#fff" : "#9ca3af"}
-            />
-            <Text style={[styles.filterText, showUnshelvedOnly && styles.filterTextActive]}>
-              Unshelved Only
-            </Text>
-          </TouchableOpacity>
-
-          {!isSelectionMode && bottles.length > 0 && (
-            <TouchableOpacity
-              style={styles.batchTrigger}
-              onPress={() => setIsSelectionMode(true)}
-            >
-              <Text style={styles.batchTriggerText}>Select for Printing</Text>
-            </TouchableOpacity>
-          )}
         </View>
       </View>
       {loading ? (
@@ -399,25 +406,60 @@ const styles = StyleSheet.create({
     marginRight: 16,
   },
   title: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: "900",
     color: "#fff",
     flex: 1,
+    marginRight: 12,
+  },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  actionRow: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  headerActionChip: {
+    flexDirection: "row",
+    height: 44,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: "#1f2937",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#374151",
+    gap: 6,
+  },
+  headerActionText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  headerActionTextActive: {
+    color: "#000",
+  },
+  headerActionChipActive: {
+    backgroundColor: "#f59e0b",
+    borderColor: "#f59e0b",
   },
   cancelButton: {
-    paddingVertical: 6,
+    backgroundColor: "#374151",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 10,
   },
   cancelText: {
-    color: "#f59e0b",
+    color: "#fff",
     fontSize: 14,
     fontWeight: "700",
   },
   topControls: {
     paddingHorizontal: 16,
-    gap: 12,
+    paddingBottom: 12,
   },
   searchContainer: {
-    flex: 1,
     marginBottom: 8,
   },
   filterBar: {
@@ -430,10 +472,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#1f2937",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    gap: 8,
     borderWidth: 1,
     borderColor: "#374151",
   },
@@ -443,26 +485,38 @@ const styles = StyleSheet.create({
   },
   filterText: {
     color: "#9ca3af",
-    fontSize: 13,
-    fontWeight: "600",
+    fontSize: 14,
+    fontWeight: "700",
   },
   filterTextActive: {
-    color: "#fff",
+    color: "#000",
   },
-  batchTrigger: {
-    paddingVertical: 6,
+  batchButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#1f2937",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: "#374151",
   },
-  batchTriggerText: {
+  batchButtonText: {
     color: "#3b82f6",
-    fontSize: 13,
-    fontWeight: "700",
+    fontSize: 14,
+    fontWeight: "800",
   },
   searchInput: {
     backgroundColor: "#1f2937",
     color: "#ffffff",
-    fontSize: 16,
-    padding: 12,
-    borderRadius: 8,
+    fontSize: 18,
+    height: 60,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    fontWeight: "600",
+    borderWidth: 1,
+    borderColor: "#374151",
   },
   listContent: {
     paddingHorizontal: 16,

@@ -141,8 +141,15 @@ export default function PulloutRequestsScreen() {
         </View>
 
         <View style={styles.cardFooter}>
-          <Text style={styles.footerAction}>Open to start pulling</Text>
-          <IconSymbol name="chevron.right" size={16} color="#9ca3af" />
+          <View style={[
+            styles.actionButton,
+            { backgroundColor: item.status === 'in_progress' ? '#3b82f6' : item.status === 'completed' ? '#10b981' : '#f59e0b' }
+          ]}>
+            <Text style={styles.actionButtonText}>
+              {item.status === 'in_progress' ? 'Continue Pulling' : item.status === 'completed' ? 'View Summary' : 'Start Pulling'}
+            </Text>
+            <IconSymbol name="chevron.right" size={16} color="#fff" />
+          </View>
         </View>
       </TouchableOpacity>
     );
@@ -351,17 +358,26 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   cardFooter: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
     borderTopWidth: 1,
     borderTopColor: "#374151",
-    paddingTop: 12,
+    paddingTop: 16,
+    alignItems: "center",
   },
-  footerAction: {
-    color: "#3b82f6",
+  actionButton: {
+    backgroundColor: "#3b82f6",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    width: "100%",
+    gap: 8,
+  },
+  actionButtonText: {
+    color: "#fff",
     fontSize: 14,
-    fontWeight: "700",
+    fontWeight: "800",
   },
   emptyContainer: {
     alignItems: "center",
