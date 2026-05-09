@@ -1,3 +1,5 @@
+import { Colors } from '@/constants/theme';
+import { useAuth } from '@/context/AuthContext';
 import { db } from "@/lib/firebase";
 import { Stack, useRouter } from "expo-router";
 import {
@@ -43,6 +45,10 @@ type BottleView = InventoryBottle & {
 const PAGE_SIZE = 10;
 
 export default function InventoryScreen() {
+  const { profile } = useAuth();
+  const theme = profile?.role === 'store' ? Colors.store : Colors.warehouse;
+  const isStore = profile?.role === 'store';
+
   const [bottles, setBottles] = useState<BottleView[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -214,64 +220,47 @@ export default function InventoryScreen() {
     }
   };
 
-  const renderItem = ({ item }: { item: BottleView }) => {
-    const badgeStyle = getStatusBadgeStyle(item.status);
-    const isSelected = selectedIds.has(item.id);
-
-    return (
-      <TouchableOpacity
-        style={[
-          styles.itemContainer,
-          isSelected && styles.itemSelected
-        ]}
-        onLongPress={() => {
-          setIsSelectionMode(true);
-          toggleSelection(item.id);
-        }}
-        onPress={() => {
-          if (isSelectionMode) {
-            toggleSelection(item.id);
-          }
-        }}
-        activeOpacity={0.7}
-      >
-        <View style={styles.itemHeader}>
-          <View style={styles.titleContainer}>
-            {isSelectionMode && (
-              <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
-                {isSelected && <Check size={12} color="#fff" strokeWidth={3} />}
-              </View>
-            )}
-            <Text style={styles.itemTitle} numberOfLines={1}>
-              {item.masterWineData?.name || "Unknown Wine"}
-            </Text>
-          </View>
-          <View
-            style={[
-              styles.statusBadge,
-              { backgroundColor: badgeStyle.backgroundColor },
-            ]}
-          >
-            <Text style={[styles.statusText, { color: badgeStyle.color }]}>
-              {item.status.charAt(0).toUpperCase() + item.status.slice(1)}
-            </Text>
-          </View>
+  const renderItem = ({ item }: { item: BottleView }) => (
+    <TouchableOpacity
+      style={[
+        styles.itemContainer,
+        { backgroundColor: theme.card, borderColor: theme.border },
+        selectedIds.has(item.id) && [styles.itemSelected, { borderColor: theme.accent }]
+      ]}
+      onPress={() => toggleSelection(item.id)}
+      onLongPress={() => {
+        setIsSelectionMode(true);
+        toggleSelection(item.id);
+      }}
+    >
+      <View style={styles.itemHeader}>
+        <View style={styles.titleContainer}>
+          {isSelectionMode && (
+            <View style={[styles.checkbox, selectedIds.has(item.id) && [styles.checkboxSelected, { backgroundColor: theme.accent, borderColor: theme.accent }]]}>
+              {selectedIds.has(item.id) && <Check size={14} color="#fff" strokeWidth={3} />}
+            </View>
+          )}
+          <Text style={[styles.itemTitle, { color: theme.text }]}>{item.masterWineData?.name || "Loading..."}</Text>
         </View>
-        <Text style={styles.itemSubtitle}>
-          {item.masterWineData?.vintage || "N/V"} - {item.sku}
-        </Text>
-        <Text style={styles.itemLocation}>
-          Location: {item.locationData?.name || "Not Shelved"}
-        </Text>
-      </TouchableOpacity>
-    );
-  };
+        <View style={[styles.statusBadge, { backgroundColor: item.status === 'received' ? theme.accent + '20' : theme.secondary + '20' }]}>
+          <Text style={[styles.statusText, { color: item.status === 'received' ? theme.accent : theme.secondary }]}>{item.status}</Text>
+        </View>
+      </View>
+
+      <Text style={[styles.itemSubtitle, { color: theme.textSecondary }]}>
+        SKU: {item.sku} • {item.masterWineData?.vintage}
+      </Text>
+      <Text style={[styles.itemLocation, { color: theme.textSecondary }]}>
+        {item.locationData?.name || "UNSHELVED"}
+      </Text>
+    </TouchableOpacity>
+  );
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
       <Stack.Screen options={{ headerShown: false }} />
 
-      <View style={styles.header}>
+      <View style={[styles.header, { borderBottomWidth: isStore ? 1 : 0, borderBottomColor: theme.border }]}>
         <TouchableOpacity
           onPress={() => {
             if (isSelectionMode) {
@@ -286,7 +275,7 @@ export default function InventoryScreen() {
           <ChevronLeft size={28} color="#fff" strokeWidth={2.5} />
         </TouchableOpacity>
 
-        <Text style={styles.title} numberOfLines={1}>
+        <Text style={[styles.title, { color: theme.text }]} numberOfLines={1}>
           {isSelectionMode ? `${selectedIds.size} Selected` : "Inventory"}
         </Text>
 
@@ -332,11 +321,11 @@ export default function InventoryScreen() {
       </View>
 
       <View style={styles.topControls}>
-        <View style={styles.searchContainer}>
-          <View style={styles.searchWrapper}>
-            <SearchIcon size={20} color="#9ca3af" style={styles.searchIcon} />
+        <View style={[styles.searchContainer, { marginBottom: isStore ? 16 : 4 }]}>
+          <View style={[styles.searchWrapper, { backgroundColor: theme.card, borderColor: theme.border, borderRadius: isStore ? 16 : 16 }]}>
+            <SearchIcon size={20} color={theme.textSecondary} style={styles.searchIcon} />
             <TextInput
-              style={styles.searchInput}
+              style={[styles.searchInput, { color: theme.text }]}
               placeholder="Search SKU..."
               placeholderTextColor="#9ca3af"
               value={searchQuery}
@@ -371,8 +360,8 @@ export default function InventoryScreen() {
           }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Box size={64} color="#334155" strokeWidth={1} />
-              <Text style={styles.emptyText}>
+              <Box size={64} color={theme.border} strokeWidth={1} />
+              <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
                 {searchQuery ? "No results found." : "No bottles found."}
               </Text>
             </View>

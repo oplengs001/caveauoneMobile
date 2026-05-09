@@ -4,24 +4,30 @@ import { TouchableOpacity } from "react-native";
 
 import { ThemedText } from "@/components/themed-text";
 import { Colors } from "@/constants/theme";
-import { useColorScheme } from "@/hooks/use-color-scheme";
+import { useAuth } from "@/context/AuthContext";
 
 export default function StackLayout() {
-  const colorScheme = useColorScheme();
+  const { profile } = useAuth();
+  const role = profile?.role === 'store' ? 'store' : 'warehouse';
+  const theme = Colors[role];
 
   return (
     <Stack
       screenOptions={{
-        // The root Stack in app/_layout.tsx has headerShown: false for (tabs),
-        // so individual screens within this Stack will manage their own headers.
-        headerShown: true, // Ensure headers are shown for screens within this stack
+        headerShown: true,
+        headerStyle: {
+          backgroundColor: theme.background,
+        },
+        headerTintColor: theme.text,
+        headerTitleStyle: {
+          fontWeight: '800',
+        },
       }}
     >
       <Stack.Screen
         name="home"
         options={{
           title: "Dashboard",
-          // Removed tabBarIcon as it's not applicable for Stack navigation
           headerRight: () => (
             <TouchableOpacity
               onPress={async () => {
@@ -39,12 +45,12 @@ export default function StackLayout() {
             >
               <ThemedText
                 style={{
-                  color: Colors[colorScheme ?? "light"].tint,
-                  fontWeight: "600",
-                  fontSize: 16,
+                  color: theme.primary,
+                  fontWeight: "800",
+                  fontSize: 14,
                 }}
               >
-                Logout
+                LOGOUT
               </ThemedText>
             </TouchableOpacity>
           ),

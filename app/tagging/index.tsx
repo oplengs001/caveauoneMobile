@@ -1,3 +1,5 @@
+import { Colors } from '@/constants/theme';
+import { useAuth } from '@/context/AuthContext';
 import { db } from "@/lib/firebase";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { Stack, useRouter } from "expo-router";
@@ -28,13 +30,17 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 import { InventoryBottle, Location, MasterWine } from "../../types";
 
 type TaggingState = "scanning" | "displaying" | "updating";
 
 export default function TaggingScreen() {
+  const { profile } = useAuth();
+  const theme = profile?.role === 'store' ? Colors.store : Colors.warehouse;
+  const isStore = profile?.role === 'store';
+
   const [permission, requestPermission] = useCameraPermissions();
   const [state, setState] = useState<TaggingState>("scanning");
   const [scannedSku, setScannedSku] = useState<string | null>(null);
@@ -160,7 +166,7 @@ export default function TaggingScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
       <Stack.Screen options={{ headerShown: false }} />
       {state === "scanning" ? (
         <View style={styles.scannerContainer}>
@@ -189,25 +195,25 @@ export default function TaggingScreen() {
           </CameraView>
         </View>
       ) : (
-        <View style={styles.detailsContainer}>
-          <View style={styles.header}>
-            <TouchableOpacity onPress={() => { isProcessing.current = false; setState("scanning"); }} style={styles.backButton}>
-              <RefreshCw size={20} color="#fff" strokeWidth={2.5} />
-              <Text style={styles.backText}>RESCAN</Text>
+        <View style={[styles.detailsContainer, { backgroundColor: theme.background }]}>
+          <View style={[styles.header, { borderBottomColor: theme.border, borderBottomWidth: isStore ? 1 : 0 }]}>
+            <TouchableOpacity onPress={() => { isProcessing.current = false; setState("scanning"); }} style={[styles.backButton, { backgroundColor: isStore ? theme.card : 'transparent', padding: isStore ? 10 : 0, borderRadius: 12, borderWidth: isStore ? 1 : 0, borderColor: theme.border }]}>
+              <RefreshCw size={20} color={isStore ? theme.primary : "#fff"} strokeWidth={2.5} />
+              <Text style={[styles.backText, { color: isStore ? theme.primary : "#fff" }]}>RESCAN</Text>
             </TouchableOpacity>
-            <Text style={styles.title}>Tag Location</Text>
+            <Text style={[styles.title, { color: theme.text }]}>Tag Location</Text>
           </View>
 
-          <View style={styles.card}>
-            <View className="flex-row items-center gap-2 mb-2">
-              <Box size={14} color="#10b981" />
-              <Text style={styles.skuLabel}>BOTTLE ID: {bottle?.id.slice(0, 12).toUpperCase()}</Text>
+          <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <Box size={14} color={theme.secondary} />
+              <Text style={[styles.skuLabel, { color: theme.textSecondary }]}>BOTTLE ID: {bottle?.id.slice(0, 12).toUpperCase()}</Text>
             </View>
-            <Text style={styles.wineName}>{wine?.name || "Processing..."}</Text>
+            <Text style={[styles.wineName, { color: theme.text }]}>{wine?.name || "Processing..."}</Text>
             <View style={styles.wineMetaRow}>
-              <Text style={styles.wineVintage}>{wine?.vintage}</Text>
-              <View style={styles.metaDot} />
-              <Text style={styles.wineProducer}>{wine?.producer || "Independent Producer"}</Text>
+              <Text style={[styles.wineVintage, { color: theme.textSecondary }]}>{wine?.vintage}</Text>
+              <View style={[styles.metaDot, { backgroundColor: theme.border }]} />
+              <Text style={[styles.wineProducer, { color: theme.textSecondary }]}>{wine?.producer || "Independent Producer"}</Text>
             </View>
           </View>
 
@@ -225,24 +231,28 @@ export default function TaggingScreen() {
               <TouchableOpacity
                 style={[
                   styles.locationItem,
-                  selectedLocationId === item.id && styles.locationItemSelected,
+                  { backgroundColor: theme.card, borderColor: theme.border },
+                  selectedLocationId === item.id && [styles.locationItemSelected, { backgroundColor: theme.accent, borderColor: theme.accent }],
                 ]}
                 onPress={() => setSelectedLocationId(item.id)}
               >
                 <MapPin
                   size={28}
-                  color={selectedLocationId === item.id ? "#fff" : "#475569"}
+                  color={selectedLocationId === item.id ? "#fff" : theme.textSecondary}
                   strokeWidth={selectedLocationId === item.id ? 2.5 : 2}
                 />
                 <Text
                   style={[
                     styles.locationName,
+                    { color: theme.text },
                     selectedLocationId === item.id && styles.locationNameSelected,
                   ]}
                 >
                   {item.name}
                 </Text>
-                <Text style={styles.locationType}>{item.type.toUpperCase()}</Text>
+                <Text style={[styles.locationType, { color: selectedLocationId === item.id ? "rgba(255,255,255,0.7)" : theme.textSecondary }]}>
+                  {item.type.toUpperCase()}
+                </Text>
               </TouchableOpacity>
             )}
             ListEmptyComponent={
