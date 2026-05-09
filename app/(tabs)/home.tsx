@@ -4,25 +4,58 @@ import {
   Truck, 
   Search,
   PackageOpen,
-  Wine
+  Wine,
+  LogOut
 } from 'lucide-react-native';
 import { Stack, useRouter } from 'expo-router';
 import React from 'react';
-import { SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View, Alert } from 'react-native';
+import { auth } from '@/lib/firebase';
+import { signOut } from 'firebase/auth';
 
 export default function HomeScreen() {
   const router = useRouter();
+
+  const handleSignOut = () => {
+    Alert.alert(
+      "Sign Out",
+      "Are you sure you want to exit the warehouse system?",
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Exit System", 
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await signOut(auth);
+              router.replace('/login');
+            } catch (error) {
+              console.error("Sign out error:", error);
+            }
+          }
+        }
+      ]
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
-          <View style={styles.logoContainer}>
-            <View style={styles.logoBadge}>
-              <Wine size={24} color="#ffffff" strokeWidth={2.5} />
+          <View style={styles.headerTop}>
+            <View style={styles.logoContainer}>
+              <View style={styles.logoBadge}>
+                <Wine size={24} color="#ffffff" strokeWidth={2.5} />
+              </View>
+              <Text style={styles.title}>CaveauOne</Text>
             </View>
-            <Text style={styles.title}>CaveauOne</Text>
+            <TouchableOpacity 
+              style={styles.signOutButton}
+              onPress={handleSignOut}
+            >
+              <LogOut size={20} color="#64748b" />
+            </TouchableOpacity>
           </View>
           <Text style={styles.subtitle}>Warehouse Management System</Text>
         </View>
@@ -97,11 +130,26 @@ const styles = StyleSheet.create({
     marginTop: 40,
     marginBottom: 48,
   },
+  headerTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
   logoContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    marginBottom: 4,
+  },
+  signOutButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#1e293b',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#334155',
   },
   logoBadge: {
     width: 40,
