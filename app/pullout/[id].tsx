@@ -166,17 +166,17 @@ export default function PulloutDetailScreen() {
           onPress: async () => {
             try {
               const newItems = [...request.items];
-              newItems[index] = { 
-                ...newItems[index], 
-                skipped: true, 
-                skippedAt: new Date() 
+              newItems[index] = {
+                ...newItems[index],
+                skipped: true,
+                skippedAt: new Date()
               };
 
               await updateDoc(doc(db, "pullout_requests", id as string), {
                 items: newItems,
                 updatedAt: new Date(),
               });
-              
+
               setRequest(prev => prev ? { ...prev, items: newItems } : null);
             } catch (error) {
               console.error("Error skipping item:", error);
@@ -192,11 +192,11 @@ export default function PulloutDetailScreen() {
     if (!request) return;
 
     const hasSkipped = request.items.some(i => i.skipped);
-    
+
     Alert.alert(
       "Complete Request?",
-      hasSkipped 
-        ? "Warning: Some items were skipped. Are you sure you want to finalize this request?" 
+      hasSkipped
+        ? "Warning: Some items were skipped. Are you sure you want to finalize this request?"
         : "All items have been pulled. Ready to complete?",
       [
         { text: "Cancel", style: "cancel" },
@@ -369,17 +369,17 @@ export default function PulloutDetailScreen() {
               {request.items.map((item, index) => {
                 const isFulfilled = item.pulledQty >= item.requestedQty;
                 const isSkipped = item.skipped;
-                
+
                 return (
                   <View
                     key={index}
                     style={[
-                      styles.itemCard, 
+                      styles.itemCard,
                       isFulfilled && styles.itemCardFulfilled,
                       isSkipped && styles.itemCardSkipped
                     ]}
                   >
-                    <TouchableOpacity 
+                    <TouchableOpacity
                       style={styles.itemInfo}
                       onPress={() => !isFulfilled && !isSkipped && handleSearch(item.sku)}
                     >
@@ -399,13 +399,13 @@ export default function PulloutDetailScreen() {
                         <IconSymbol name="exclamationmark.triangle.fill" size={24} color="#ef4444" />
                       ) : (
                         <View style={styles.actionButtons}>
-                          <TouchableOpacity 
+                          <TouchableOpacity
                             onPress={() => handleSearch(item.sku)}
                             style={styles.actionIcon}
                           >
                             <IconSymbol name="magnifyingglass" size={20} color="#3b82f6" />
                           </TouchableOpacity>
-                          <TouchableOpacity 
+                          <TouchableOpacity
                             onPress={() => handleSkipItem(index)}
                             style={styles.skipButton}
                           >

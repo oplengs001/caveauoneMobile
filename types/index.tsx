@@ -43,6 +43,8 @@ export interface PulloutRequestItem {
   requestedQty: number;
   pulledQty: number;
   pulledBottleIds: string[];
+  skipped?: boolean;
+  skippedAt?: any;
 }
 
 export interface PulloutRequest {
