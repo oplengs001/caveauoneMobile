@@ -1,20 +1,7 @@
-import { 
-  ChevronLeft, 
-  Trash2, 
-  Minus, 
-  Plus, 
-  Printer, 
-  CheckSquare, 
-  Square,
-  Search,
-  ScanText,
-  FileText,
-  CheckCircle2
-} from 'lucide-react-native';
-import { printLabels } from "@/utils/printLabels";
 import { db } from "@/lib/firebase";
+import { printLabels } from "@/utils/printLabels";
 import * as FileSystem from "expo-file-system/legacy";
-import { useLocalSearchParams, useRouter, Stack } from "expo-router";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import {
   addDoc,
   collection,
@@ -22,6 +9,18 @@ import {
   DocumentReference,
   getDocs,
 } from "firebase/firestore";
+import {
+  CheckCircle2,
+  CheckSquare,
+  ChevronLeft,
+  FileText,
+  Minus,
+  Plus,
+  Printer,
+  ScanText,
+  Square,
+  Trash2
+} from 'lucide-react-native';
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -404,9 +403,9 @@ export default function ReviewScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    backgroundColor: "#0f172a" 
+  container: {
+    flex: 1,
+    backgroundColor: "#0f172a"
   },
   header: {
     flexDirection: "row",
@@ -424,10 +423,10 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: -0.5,
   },
-  scrollContent: { 
-    padding: 24, 
-    paddingTop: 8, 
-    paddingBottom: 40 
+  scrollContent: {
+    padding: 24,
+    paddingTop: 8,
+    paddingBottom: 40
   },
   imageContainer: {
     width: "100%",
@@ -440,8 +439,8 @@ const styles = StyleSheet.create({
     position: "relative",
     backgroundColor: '#1e293b',
   },
-  receiptImage: { 
-    width: "100%", 
+  receiptImage: {
+    width: "100%",
     height: "100%",
     opacity: 0.6,
   },
@@ -584,21 +583,21 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  quantityValue: { 
-    color: "#fff", 
-    fontSize: 24, 
+  quantityValue: {
+    color: "#fff",
+    fontSize: 24,
     fontWeight: "900",
     fontStyle: 'italic',
   },
-  loadingContainer: { 
-    alignItems: "center", 
-    paddingVertical: 40 
+  loadingContainer: {
+    alignItems: "center",
+    paddingVertical: 40
   },
-  loadingText: { 
-    color: "#64748b", 
-    marginTop: 16, 
-    fontSize: 14, 
-    fontWeight: '700' 
+  loadingText: {
+    color: "#64748b",
+    marginTop: 16,
+    fontSize: 14,
+    fontWeight: '700'
   },
   footer: {
     padding: 24,
@@ -647,191 +646,3 @@ const styles = StyleSheet.create({
   },
 });
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#111827" },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 24,
-    paddingBottom: 12,
-  },
-  backButton: {
-    marginRight: 16,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: "900",
-    color: "#fff",
-    flex: 1,
-  },
-  scrollContent: { padding: 24, paddingTop: 12, paddingBottom: 40 },
-  imageContainer: {
-    width: "100%",
-    height: 200,
-    borderRadius: 16,
-    overflow: "hidden",
-    marginBottom: 32,
-    borderWidth: 2,
-    borderColor: "#374151",
-    position: "relative",
-  },
-  receiptImage: { width: "100%", height: "100%" },
-  imageOverlay: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: "rgba(0,0,0,0.7)",
-    padding: 8,
-    alignItems: "center",
-  },
-  imageOverlayText: {
-    color: "#10b981",
-    fontWeight: "800",
-    letterSpacing: 1,
-    fontSize: 12,
-  },
-  extractionCard: {
-    backgroundColor: "#1f2937",
-    borderRadius: 16,
-    padding: 24,
-    borderWidth: 1,
-    borderColor: "#374151",
-  },
-  cardHeader: {
-    color: "#9ca3af",
-    fontSize: 14,
-    fontWeight: "800",
-    letterSpacing: 1,
-    marginBottom: 24,
-    textAlign: "center",
-  },
-  wineItem: {
-    backgroundColor: "#111827",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-  },
-  wineHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  label: {
-    color: "#9ca3af",
-    fontSize: 14,
-    fontWeight: "700",
-    marginBottom: 8,
-    letterSpacing: 1,
-  },
-  input: {
-    backgroundColor: "#374151",
-    color: "#fff",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-    marginBottom: 16,
-    fontWeight: "600",
-  },
-  row: {
-    flexDirection: "row",
-    gap: 16,
-  },
-  col: {
-    flex: 1,
-  },
-  secondaryDetailsContainer: {
-    borderTopWidth: 1,
-    borderTopColor: "#374151",
-    marginTop: 16,
-    paddingTop: 16,
-  },
-  secondaryLabel: {
-    color: "#9ca3af",
-    fontSize: 12,
-    fontWeight: "600",
-    marginBottom: 6,
-    letterSpacing: 0.8,
-  },
-  secondaryInput: {
-    backgroundColor: "#374151",
-    color: "#fff",
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    fontSize: 14,
-    marginBottom: 12,
-    fontWeight: "500",
-  },
-  stepperContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: "#111827",
-    borderRadius: 12,
-    padding: 8,
-  },
-  stepperButton: {
-    backgroundColor: "#374151",
-    width: 44,
-    height: 44,
-    borderRadius: 10,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  quantityValue: { color: "#fff", fontSize: 22, fontWeight: "800" },
-  loadingContainer: { alignItems: "center", paddingVertical: 40 },
-  loadingText: { color: "#9ca3af", marginTop: 12, fontSize: 16 },
-  footer: {
-    padding: 24,
-    borderTopWidth: 1,
-    borderTopColor: "#374151",
-    backgroundColor: "#111827",
-  },
-  footerButtonContainer: {
-    flexDirection: "row",
-    gap: 16,
-  },
-  footerButton: {
-    flexDirection: "row",
-    height: 64,
-    borderRadius: 16,
-    justifyContent: "center",
-    alignItems: "center",
-    gap: 12,
-  },
-  primaryButton: {
-    backgroundColor: "#10b981",
-  },
-  secondaryButton: {
-    backgroundColor: "#374151",
-  },
-  buttonDisabled: {
-    opacity: 0.5,
-  },
-  footerButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "800",
-
-    letterSpacing: 1,
-    // marginLeft: shouldPrintLabels ? 12 : 0, // Adjust margin if printer icon is present
-  },
-  checkboxContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 16,
-    gap: 8,
-  },
-  checkbox: {
-    padding: 4,
-  },
-  checkboxLabel: {
-    color: "#e5e7eb",
-    fontSize: 14,
-  },
-  emptyText: { color: "#9ca3af", textAlign: "center", marginTop: 20 },
-});

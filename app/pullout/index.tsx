@@ -1,15 +1,5 @@
-import { 
-  ChevronLeft, 
-  ChevronRight, 
-  Truck, 
-  ClipboardList, 
-  ArrowRight,
-  Clock,
-  Loader2,
-  CheckCircle2
-} from 'lucide-react-native';
 import { db } from "@/lib/firebase";
-import { useRouter, Stack, useFocusEffect } from "expo-router";
+import { Stack, useFocusEffect, useRouter } from "expo-router";
 import {
   collection,
   getDocs,
@@ -20,7 +10,13 @@ import {
   startAfter,
   where
 } from "firebase/firestore";
-import React, { useCallback, useEffect, useState } from "react";
+import {
+  ArrowRight,
+  ChevronLeft,
+  ClipboardList,
+  Truck
+} from 'lucide-react-native';
+import React, { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -449,170 +445,4 @@ const styles = StyleSheet.create({
   },
 });
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#111827",
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 24,
-  },
-  backButton: {
-    marginRight: 16,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: "900",
-    color: "#fff",
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  loadingText: {
-    color: "#9ca3af",
-    marginTop: 12,
-  },
-  listContent: {
-    padding: 24,
-    paddingTop: 12,
-    gap: 20,
-  },
-  tabBar: {
-    flexDirection: "row",
-    paddingHorizontal: 24,
-    marginBottom: 12,
-    gap: 12,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 10,
-    alignItems: "center",
-    borderRadius: 8,
-    backgroundColor: "#1f2937",
-    borderWidth: 1,
-    borderColor: "#374151",
-  },
-  activeTab: {
-    backgroundColor: "#f59e0b",
-    borderColor: "#f59e0b",
-  },
-  tabText: {
-    color: "#9ca3af",
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  activeTabText: {
-    color: "#fff",
-  },
-  card: {
-    backgroundColor: "#1f2937",
-    borderRadius: 16,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: "#374151",
-  },
-  cardHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  requestId: {
-    color: "#9ca3af",
-    fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: 1,
-  },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  statusText: {
-    color: "#fff",
-    fontSize: 10,
-    fontWeight: "900",
-  },
-  progressSection: {
-    marginBottom: 20,
-  },
-  progressHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 8,
-  },
-  progressLabel: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  progressValue: {
-    color: "#f59e0b",
-    fontSize: 14,
-    fontWeight: "800",
-  },
-  progressBarBg: {
-    height: 8,
-    backgroundColor: "#374151",
-    borderRadius: 4,
-    overflow: "hidden",
-  },
-  progressBarFill: {
-    height: "100%",
-    backgroundColor: "#f59e0b",
-  },
-  itemsSummary: {
-    backgroundColor: "#111827",
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 16,
-  },
-  summaryTitle: {
-    color: "#9ca3af",
-    fontSize: 12,
-    fontWeight: "700",
-    marginBottom: 4,
-  },
-  summaryItem: {
-    color: "#e5e7eb",
-    fontSize: 14,
-    marginBottom: 2,
-  },
-  cardFooter: {
-    borderTopWidth: 1,
-    borderTopColor: "#374151",
-    paddingTop: 16,
-    alignItems: "center",
-  },
-  actionButton: {
-    backgroundColor: "#3b82f6",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 12,
-    width: "100%",
-    gap: 8,
-  },
-  actionButtonText: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "800",
-  },
-  emptyContainer: {
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 100,
-  },
-  emptyText: {
-    color: "#4b5563",
-    fontSize: 18,
-    fontWeight: "600",
-    marginTop: 20,
-  },
-});
+

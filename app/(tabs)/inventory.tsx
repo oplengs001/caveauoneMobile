@@ -1,28 +1,25 @@
-import { 
-  ChevronLeft, 
-  Printer, 
-  Check, 
-  PackageOpen, 
-  Search as SearchIcon,
-  Filter,
-  Box,
-  LayoutGrid
-} from 'lucide-react-native';
 import { db } from "@/lib/firebase";
-import { Stack } from "expo-router";
-import { 
-  collection, 
-  getDocs, 
-  query, 
-  orderBy, 
-  limit, 
-  startAfter, 
-  where,
+import { Stack, useRouter } from "expo-router";
+import {
   QueryDocumentSnapshot,
-  getDoc
+  collection,
+  getDoc,
+  getDocs,
+  limit,
+  orderBy,
+  query,
+  startAfter,
+  where
 } from "firebase/firestore";
-import { useEffect, useState, useCallback } from "react";
-import { useRouter } from "expo-router";
+import {
+  Box,
+  Check,
+  ChevronLeft,
+  PackageOpen,
+  Printer,
+  Search as SearchIcon
+} from 'lucide-react-native';
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -273,9 +270,9 @@ export default function InventoryScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
-      
+
       <View style={styles.header}>
-        <TouchableOpacity 
+        <TouchableOpacity
           onPress={() => {
             if (isSelectionMode) {
               setIsSelectionMode(false);
@@ -283,23 +280,23 @@ export default function InventoryScreen() {
             } else {
               router.back();
             }
-          }} 
+          }}
           style={styles.backButton}
         >
           <ChevronLeft size={28} color="#fff" strokeWidth={2.5} />
         </TouchableOpacity>
-        
+
         <Text style={styles.title} numberOfLines={1}>
           {isSelectionMode ? `${selectedIds.size} Selected` : "Inventory"}
         </Text>
 
         <View style={styles.headerActions}>
           {isSelectionMode ? (
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => {
                 setIsSelectionMode(false);
                 setSelectedIds(new Set());
-              }} 
+              }}
               style={styles.cancelButton}
             >
               <Text style={styles.cancelText}>Cancel</Text>
@@ -333,7 +330,7 @@ export default function InventoryScreen() {
           )}
         </View>
       </View>
-      
+
       <View style={styles.topControls}>
         <View style={styles.searchContainer}>
           <View style={styles.searchWrapper}>
@@ -627,249 +624,4 @@ const styles = StyleSheet.create({
   },
 });
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#111827",
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 24,
-    paddingBottom: 12,
-  },
-  backButton: {
-    marginRight: 16,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "900",
-    color: "#fff",
-    flex: 1,
-    marginRight: 12,
-  },
-  headerActions: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  actionRow: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  headerActionChip: {
-    flexDirection: "row",
-    height: 44,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    backgroundColor: "#1f2937",
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#374151",
-    gap: 6,
-  },
-  headerActionText: {
-    color: "#fff",
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  headerActionTextActive: {
-    color: "#000",
-  },
-  headerActionChipActive: {
-    backgroundColor: "#f59e0b",
-    borderColor: "#f59e0b",
-  },
-  cancelButton: {
-    backgroundColor: "#374151",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 10,
-  },
-  cancelText: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  topControls: {
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-  },
-  searchContainer: {
-    marginBottom: 8,
-  },
-  filterBar: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  filterChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#1f2937",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 12,
-    gap: 8,
-    borderWidth: 1,
-    borderColor: "#374151",
-  },
-  filterChipActive: {
-    backgroundColor: "#f59e0b",
-    borderColor: "#f59e0b",
-  },
-  filterText: {
-    color: "#9ca3af",
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  filterTextActive: {
-    color: "#000",
-  },
-  batchButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#1f2937",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 12,
-    gap: 8,
-    borderWidth: 1,
-    borderColor: "#374151",
-  },
-  batchButtonText: {
-    color: "#3b82f6",
-    fontSize: 14,
-    fontWeight: "800",
-  },
-  searchInput: {
-    backgroundColor: "#1f2937",
-    color: "#ffffff",
-    fontSize: 18,
-    height: 60,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    fontWeight: "600",
-    borderWidth: 1,
-    borderColor: "#374151",
-  },
-  listContent: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 16,
-  },
-  itemContainer: {
-    backgroundColor: "#1f2937",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: "#374151",
-  },
-  itemSelected: {
-    borderColor: "#f59e0b",
-    backgroundColor: "#f59e0b10",
-  },
-  titleContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-    gap: 10,
-  },
-  checkbox: {
-    width: 20,
-    height: 20,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: "#374151",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  checkboxSelected: {
-    backgroundColor: "#f59e0b",
-    borderColor: "#f59e0b",
-  },
-  itemHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  itemTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#ffffff",
-    flex: 1,
-    marginRight: 8,
-  },
-  itemSubtitle: {
-    fontSize: 14,
-    color: "#9ca3af",
-    marginBottom: 4,
-  },
-  itemLocation: {
-    fontSize: 14,
-    color: "#9ca3af",
-  },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: "500",
-  },
-  emptyText: {
-    color: "#9ca3af",
-    textAlign: "center",
-    marginTop: 40,
-    fontSize: 16,
-  },
-  batchActionBar: {
-    position: "absolute",
-    bottom: 24,
-    left: 24,
-    right: 24,
-    backgroundColor: "#1f2937",
-    padding: 16,
-    borderRadius: 16,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.5,
-    shadowRadius: 10,
-    elevation: 10,
-    borderWidth: 1,
-    borderColor: "#374151",
-  },
-  batchInfo: {
-    flex: 1,
-  },
-  batchCount: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  printButton: {
-    backgroundColor: "#f59e0b",
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  printButtonDisabled: {
-    backgroundColor: "#374151",
-    opacity: 0.5,
-  },
-  printButtonText: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "800",
-  },
-});
+

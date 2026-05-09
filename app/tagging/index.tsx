@@ -1,29 +1,24 @@
-import { 
-  Camera, 
-  ChevronLeft, 
-  MapPin, 
-  CheckCircle2, 
-  RefreshCw, 
-  X, 
-  ScanQrCode,
-  Check,
-  AlertTriangle,
-  Loader2,
-  Box,
-  Map
-} from 'lucide-react-native';
 import { db } from "@/lib/firebase";
 import { CameraView, useCameraPermissions } from "expo-camera";
-import { useRouter, Stack } from "expo-router";
+import { Stack, useRouter } from "expo-router";
 import {
   collection,
   doc,
   getDoc,
   getDocs,
-  query,
-  updateDoc,
-  where,
+  updateDoc
 } from "firebase/firestore";
+import {
+  AlertTriangle,
+  Box,
+  Camera,
+  CheckCircle2,
+  Map,
+  MapPin,
+  RefreshCw,
+  ScanQrCode,
+  X
+} from 'lucide-react-native';
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -33,7 +28,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 import { InventoryBottle, Location, MasterWine } from "../../types";
 
@@ -70,22 +65,24 @@ export default function TaggingScreen() {
 
   const handleBarcodeScanned = async ({ data }: { data: string }) => {
     if (state !== "scanning" || loading || isProcessing.current) return;
-    
+
     isProcessing.current = true;
     setLoading(true);
     setScannedSku(data);
-    
+
     try {
       const bottleRef = doc(db, "inventory_bottles", data);
       const bottleSnap = await getDoc(bottleRef);
 
       if (!bottleSnap.exists()) {
         Alert.alert("Invalid QR", "This QR code does not belong to any bottle in the system.", [
-          { text: "Try Again", onPress: () => {
-            setScannedSku(null);
-            setLoading(false);
-            isProcessing.current = false;
-          }}
+          {
+            text: "Try Again", onPress: () => {
+              setScannedSku(null);
+              setLoading(false);
+              isProcessing.current = false;
+            }
+          }
         ]);
         return;
       }
@@ -218,7 +215,7 @@ export default function TaggingScreen() {
             <Map size={18} color="#64748b" />
             <Text style={styles.sectionTitle}>Select Storage Location</Text>
           </View>
-          
+
           <FlatList
             data={locations}
             keyExtractor={(item) => item.id}
@@ -267,7 +264,7 @@ export default function TaggingScreen() {
               disabled={!selectedLocationId || state === "updating"}
             >
               {state === "updating" ? (
-                <Loader2 size={24} color="#fff" style={{ animate: 'spin' }} />
+                <ActivityIndicator color="#fff" size="small" />
               ) : (
                 <>
                   <CheckCircle2 size={24} color="#fff" strokeWidth={2.5} />
@@ -283,9 +280,9 @@ export default function TaggingScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    backgroundColor: "#0f172a" 
+  container: {
+    flex: 1,
+    backgroundColor: "#0f172a"
   },
   permissionContainer: {
     flex: 1,
@@ -518,193 +515,4 @@ const styles = StyleSheet.create({
   buttonDisabled: { opacity: 0.3 },
 });
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#111827",
-  },
-  permissionContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 24,
-  },
-  permissionText: {
-    color: "#fff",
-    fontSize: 18,
-    textAlign: "center",
-    marginTop: 20,
-    marginBottom: 40,
-  },
-  permissionButton: {
-    backgroundColor: "#3b82f6",
-    paddingVertical: 16,
-    paddingHorizontal: 32,
-    borderRadius: 12,
-  },
-  permissionButtonText: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "bold",
-  },
-  scannerContainer: {
-    flex: 1,
-  },
-  camera: {
-    flex: 1,
-  },
-  overlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  scanTarget: {
-    width: 250,
-    height: 250,
-    borderWidth: 2,
-    borderColor: "#10b981",
-    backgroundColor: "transparent",
-    borderRadius: 20,
-  },
-  instructionText: {
-    color: "#fff",
-    marginTop: 24,
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  closeButton: {
-    position: "absolute",
-    top: 60,
-    left: 24,
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  detailsContainer: {
-    flex: 1,
-    padding: 24,
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 24,
-  },
-  backButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#374151",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    marginRight: 16,
-  },
-  backText: {
-    color: "#fff",
-    marginLeft: 4,
-    fontWeight: "600",
-  },
-  title: {
-    color: "#fff",
-    fontSize: 24,
-    fontWeight: "900",
-  },
-  card: {
-    backgroundColor: "#1f2937",
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: "#374151",
-  },
-  skuLabel: {
-    color: "#10b981",
-    fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: 1,
-    marginBottom: 8,
-  },
-  wineName: {
-    color: "#fff",
-    fontSize: 20,
-    fontWeight: "800",
-    marginBottom: 4,
-  },
-  wineDetails: {
-    color: "#9ca3af",
-    fontSize: 16,
-  },
-  sectionTitle: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "700",
-    marginBottom: 16,
-  },
-  locationList: {
-    paddingBottom: 100,
-  },
-  locationRow: {
-    justifyContent: "space-between",
-    gap: 12,
-  },
-  locationItem: {
-    backgroundColor: "#1f2937",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    flex: 1,
-    alignItems: "center",
-    borderWidth: 2,
-    borderColor: "transparent",
-  },
-  locationItemSelected: {
-    borderColor: "#10b981",
-    backgroundColor: "#064e3b",
-  },
-  locationName: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "700",
-    marginTop: 8,
-    textAlign: "center",
-  },
-  locationNameSelected: {
-    color: "#fff",
-  },
-  locationType: {
-    color: "#9ca3af",
-    fontSize: 12,
-    marginTop: 2,
-  },
-  emptyText: {
-    color: "#9ca3af",
-    textAlign: "center",
-    marginTop: 40,
-  },
-  footer: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: 24,
-    backgroundColor: "#111827",
-  },
-  confirmButton: {
-    backgroundColor: "#10b981",
-    height: 64,
-    borderRadius: 16,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  confirmButtonText: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "800",
-  },
-  buttonDisabled: {
-    opacity: 0.5,
-  },
-});
+
