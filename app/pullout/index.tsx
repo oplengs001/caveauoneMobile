@@ -1,6 +1,6 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { db } from "@/lib/firebase";
-import { useRouter } from "expo-router";
+import { useRouter, Stack } from "expo-router";
 import {
   collection,
   getDocs,
@@ -166,6 +166,7 @@ export default function PulloutRequestsScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <Stack.Screen options={{ headerShown: false }} />
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <IconSymbol name="chevron.left" size={24} color="#fff" />

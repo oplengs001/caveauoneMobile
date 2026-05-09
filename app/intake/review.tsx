@@ -3,7 +3,7 @@ import { printLabels } from "@/utils/printLabels";
 // 1. UPDATED: Import from 'expo-file-system/legacy'
 import { db } from "@/lib/firebase";
 import * as FileSystem from "expo-file-system/legacy";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter, Stack } from "expo-router";
 import {
   addDoc,
   collection,
@@ -252,6 +252,14 @@ export default function ReviewScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <Stack.Screen options={{ headerShown: false }} />
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <IconSymbol name="chevron.left" size={24} color="#fff" />
+        </TouchableOpacity>
+        <Text style={styles.title}>Review Intake</Text>
+      </View>
+
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {imageUri && (
           <View style={styles.imageContainer}>
@@ -447,7 +455,22 @@ export default function ReviewScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#111827" },
-  scrollContent: { padding: 24, paddingBottom: 40 },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 24,
+    paddingBottom: 12,
+  },
+  backButton: {
+    marginRight: 16,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: "900",
+    color: "#fff",
+    flex: 1,
+  },
+  scrollContent: { padding: 24, paddingTop: 12, paddingBottom: 40 },
   imageContainer: {
     width: "100%",
     height: 200,

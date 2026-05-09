@@ -1,7 +1,7 @@
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { db } from "@/lib/firebase";
 import { CameraView, useCameraPermissions } from "expo-camera";
-import { useRouter } from "expo-router";
+import { useRouter, Stack } from "expo-router";
 import {
   collection,
   doc,
@@ -154,6 +154,7 @@ export default function TaggingScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <Stack.Screen options={{ headerShown: false }} />
       {state === "scanning" ? (
         <View style={styles.scannerContainer}>
           <CameraView
@@ -168,7 +169,7 @@ export default function TaggingScreen() {
               <View style={styles.scanTarget} />
               <Text style={styles.instructionText}>Align QR code within the frame</Text>
               <TouchableOpacity onPress={() => router.back()} style={styles.closeButton}>
-                <IconSymbol name="xmark" size={24} color="#fff" />
+                <IconSymbol name="chevron.left" size={24} color="#fff" />
               </TouchableOpacity>
             </View>
           </CameraView>

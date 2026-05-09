@@ -1,6 +1,6 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { useRouter } from 'expo-router';
+import { useRouter, Stack } from 'expo-router';
 import React, { useRef, useState } from 'react';
 import { ActivityIndicator, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
@@ -54,12 +54,13 @@ export default function ScanScreen() {
 
   return (
     <View style={styles.container}>
+      <Stack.Screen options={{ headerShown: false }} />
       <CameraView style={styles.camera} facing="back" ref={cameraRef}>
         <SafeAreaView style={styles.overlay}>
           <View style={styles.topSection}>
             <View style={styles.topControls}>
               <TouchableOpacity onPress={() => router.back()} style={styles.closeButton}>
-                <IconSymbol name="xmark" size={28} color="#fff" />
+                <IconSymbol name="chevron.left" size={28} color="#fff" />
               </TouchableOpacity>
             </View>
 

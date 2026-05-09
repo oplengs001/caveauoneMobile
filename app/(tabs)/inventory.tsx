@@ -1,17 +1,19 @@
+import { IconSymbol } from "@/components/ui/icon-symbol";
 import { db } from "@/lib/firebase";
 import { Stack } from "expo-router";
-import {
+import { 
+  collection, 
+  getDocs, 
+  query, 
+  orderBy, 
+  limit, 
+  startAfter, 
+  where,
   QueryDocumentSnapshot,
-  collection,
-  getDoc,
-  getDocs,
-  limit,
-  orderBy,
-  query,
-  startAfter,
-  where
+  getDoc
 } from "firebase/firestore";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import { useRouter } from "expo-router";
 import {
   ActivityIndicator,
   FlatList,
@@ -25,7 +27,6 @@ import {
 } from "react-native";
 import { InventoryBottle, Location, MasterWine } from "../../types";
 import { printLabels } from "../../utils/printLabels";
-import { IconSymbol } from "@/components/ui/icon-symbol";
 
 // A mapped type that includes the resolved master wine and location data
 type BottleView = InventoryBottle & {
@@ -46,6 +47,7 @@ export default function InventoryScreen() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [showUnshelvedOnly, setShowUnshelvedOnly] = useState(false);
+  const router = useRouter();
 
   // Caches to avoid redundant lookups
   const [wineCache] = useState(new Map<string, MasterWine>());
@@ -174,7 +176,8 @@ export default function InventoryScreen() {
       bottleId: b.id,
       sku: b.sku,
       wineName: b.masterWineData?.name || "Unknown",
-      vintage: b.masterWineData?.vintage || "N/V"
+      vintage: b.masterWineData?.vintage || "N/V",
+      dateAdded: b.createdAt.toLocaleDateString()
     }));
 
     try {
@@ -263,17 +266,37 @@ export default function InventoryScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Stack.Screen options={{ 
-        title: isSelectionMode ? `${selectedIds.size} Selected` : "Inventory",
-        headerRight: () => isSelectionMode ? (
-          <TouchableOpacity onPress={() => {
-            setIsSelectionMode(false);
-            setSelectedIds(new Set());
-          }}>
-            <Text style={{ color: "#f59e0b", fontWeight: "700", marginRight: 16 }}>Cancel</Text>
+      <Stack.Screen options={{ headerShown: false }} />
+      
+      <View style={styles.header}>
+        <TouchableOpacity 
+          onPress={() => {
+            if (isSelectionMode) {
+              setIsSelectionMode(false);
+              setSelectedIds(new Set());
+            } else {
+              router.back();
+            }
+          }} 
+          style={styles.backButton}
+        >
+          <IconSymbol name="chevron.left" size={24} color="#fff" />
+        </TouchableOpacity>
+        <Text style={styles.title}>
+          {isSelectionMode ? `${selectedIds.size} Selected` : "Inventory"}
+        </Text>
+        {isSelectionMode && (
+          <TouchableOpacity 
+            onPress={() => {
+              setIsSelectionMode(false);
+              setSelectedIds(new Set());
+            }} 
+            style={styles.cancelButton}
+          >
+            <Text style={styles.cancelText}>Cancel</Text>
           </TouchableOpacity>
-        ) : null
-      }} />
+        )}
+      </View>
       
       <View style={styles.topControls}>
         <View style={styles.searchContainer}>
@@ -286,16 +309,16 @@ export default function InventoryScreen() {
             clearButtonMode="while-editing"
           />
         </View>
-        
+
         <View style={styles.filterBar}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.filterChip, showUnshelvedOnly && styles.filterChipActive]}
             onPress={() => setShowUnshelvedOnly(!showUnshelvedOnly)}
           >
-            <IconSymbol 
-              name="tray.and.arrow.down" 
-              size={14} 
-              color={showUnshelvedOnly ? "#fff" : "#9ca3af"} 
+            <IconSymbol
+              name="tray.and.arrow.down"
+              size={14}
+              color={showUnshelvedOnly ? "#fff" : "#9ca3af"}
             />
             <Text style={[styles.filterText, showUnshelvedOnly && styles.filterTextActive]}>
               Unshelved Only
@@ -303,7 +326,7 @@ export default function InventoryScreen() {
           </TouchableOpacity>
 
           {!isSelectionMode && bottles.length > 0 && (
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.batchTrigger}
               onPress={() => setIsSelectionMode(true)}
             >
@@ -347,7 +370,7 @@ export default function InventoryScreen() {
           <View style={styles.batchInfo}>
             <Text style={styles.batchCount}>{selectedIds.size} labels to print</Text>
           </View>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.printButton, selectedIds.size === 0 && styles.printButtonDisabled]}
             disabled={selectedIds.size === 0}
             onPress={handleBatchPrint}
@@ -364,16 +387,38 @@ export default function InventoryScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-
     backgroundColor: "#111827",
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 24,
+    paddingBottom: 12,
+  },
+  backButton: {
+    marginRight: 16,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: "900",
+    color: "#fff",
+    flex: 1,
+  },
+  cancelButton: {
+    paddingVertical: 6,
+  },
+  cancelText: {
+    color: "#f59e0b",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  topControls: {
+    paddingHorizontal: 16,
+    gap: 12,
   },
   searchContainer: {
     flex: 1,
-  },
-  topControls: {
-    paddingTop: 12,
-    paddingHorizontal: 16,
-    gap: 12,
+    marginBottom: 8,
   },
   filterBar: {
     flexDirection: "row",
