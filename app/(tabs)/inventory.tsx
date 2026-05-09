@@ -20,9 +20,12 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  TouchableOpacity,
   View,
 } from "react-native";
 import { InventoryBottle, Location, MasterWine } from "../../types";
+import { printLabels } from "../../utils/printLabels";
+import { IconSymbol } from "@/components/ui/icon-symbol";
 
 // A mapped type that includes the resolved master wine and location data
 type BottleView = InventoryBottle & {
@@ -40,6 +43,9 @@ export default function InventoryScreen() {
   const [hasMore, setHasMore] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [showUnshelvedOnly, setShowUnshelvedOnly] = useState(false);
 
   // Caches to avoid redundant lookups
   const [wineCache] = useState(new Map<string, MasterWine>());
@@ -60,16 +66,22 @@ export default function InventoryScreen() {
       const bottlesRef = collection(db, "inventory_bottles");
       let q;
 
+      const baseQueries = [];
+      if (showUnshelvedOnly) {
+        baseQueries.push(where("status", "==", "received"));
+      }
+
       if (searchQuery.trim()) {
-        // Simple SKU search if searching
         q = query(
           bottlesRef,
+          ...baseQueries,
           where("sku", "==", searchQuery.trim()),
           limit(PAGE_SIZE)
         );
       } else {
         q = query(
           bottlesRef,
+          ...baseQueries,
           orderBy("createdAt", "desc"),
           limit(PAGE_SIZE)
         );
@@ -77,6 +89,7 @@ export default function InventoryScreen() {
         if (!isRefresh && lastDoc) {
           q = query(
             bottlesRef,
+            ...baseQueries,
             orderBy("createdAt", "desc"),
             startAfter(lastDoc),
             limit(PAGE_SIZE)
@@ -142,7 +155,36 @@ export default function InventoryScreen() {
       fetchInventory(true);
     }, 500);
     return () => clearTimeout(delayDebounce);
-  }, [searchQuery]);
+  }, [searchQuery, showUnshelvedOnly]);
+
+  const toggleSelection = (id: string) => {
+    const next = new Set(selectedIds);
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
+    setSelectedIds(next);
+    if (next.size === 0) setIsSelectionMode(false);
+  };
+
+  const handleBatchPrint = async () => {
+    const selectedBottles = bottles.filter(b => selectedIds.has(b.id));
+    const labelsData = selectedBottles.map(b => ({
+      bottleId: b.id,
+      sku: b.sku,
+      wineName: b.masterWineData?.name || "Unknown",
+      vintage: b.masterWineData?.vintage || "N/V"
+    }));
+
+    try {
+      await printLabels(labelsData);
+      setSelectedIds(new Set());
+      setIsSelectionMode(false);
+    } catch (error) {
+      console.error("Batch print error:", error);
+    }
+  };
 
   const onRefresh = useCallback(() => {
     fetchInventory(true);
@@ -166,12 +208,36 @@ export default function InventoryScreen() {
 
   const renderItem = ({ item }: { item: BottleView }) => {
     const badgeStyle = getStatusBadgeStyle(item.status);
+    const isSelected = selectedIds.has(item.id);
+
     return (
-      <View style={styles.itemContainer}>
+      <TouchableOpacity
+        style={[
+          styles.itemContainer,
+          isSelected && styles.itemSelected
+        ]}
+        onLongPress={() => {
+          setIsSelectionMode(true);
+          toggleSelection(item.id);
+        }}
+        onPress={() => {
+          if (isSelectionMode) {
+            toggleSelection(item.id);
+          }
+        }}
+        activeOpacity={0.7}
+      >
         <View style={styles.itemHeader}>
-          <Text style={styles.itemTitle} numberOfLines={1}>
-            {item.masterWineData?.name || "Unknown Wine"}
-          </Text>
+          <View style={styles.titleContainer}>
+            {isSelectionMode && (
+              <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
+                {isSelected && <IconSymbol name="checkmark" size={12} color="#fff" />}
+              </View>
+            )}
+            <Text style={styles.itemTitle} numberOfLines={1}>
+              {item.masterWineData?.name || "Unknown Wine"}
+            </Text>
+          </View>
           <View
             style={[
               styles.statusBadge,
@@ -189,7 +255,7 @@ export default function InventoryScreen() {
         <Text style={styles.itemLocation}>
           Location: {item.locationData?.name || "Not Shelved"}
         </Text>
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -197,16 +263,54 @@ export default function InventoryScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Stack.Screen options={{ title: "Inventory" }} />
-      <View style={styles.searchContainer}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search by wine, vintage, or code..."
-          placeholderTextColor="#9ca3af"
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          clearButtonMode="while-editing"
-        />
+      <Stack.Screen options={{ 
+        title: isSelectionMode ? `${selectedIds.size} Selected` : "Inventory",
+        headerRight: () => isSelectionMode ? (
+          <TouchableOpacity onPress={() => {
+            setIsSelectionMode(false);
+            setSelectedIds(new Set());
+          }}>
+            <Text style={{ color: "#f59e0b", fontWeight: "700", marginRight: 16 }}>Cancel</Text>
+          </TouchableOpacity>
+        ) : null
+      }} />
+      
+      <View style={styles.topControls}>
+        <View style={styles.searchContainer}>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search SKU..."
+            placeholderTextColor="#9ca3af"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            clearButtonMode="while-editing"
+          />
+        </View>
+        
+        <View style={styles.filterBar}>
+          <TouchableOpacity 
+            style={[styles.filterChip, showUnshelvedOnly && styles.filterChipActive]}
+            onPress={() => setShowUnshelvedOnly(!showUnshelvedOnly)}
+          >
+            <IconSymbol 
+              name="tray.and.arrow.down" 
+              size={14} 
+              color={showUnshelvedOnly ? "#fff" : "#9ca3af"} 
+            />
+            <Text style={[styles.filterText, showUnshelvedOnly && styles.filterTextActive]}>
+              Unshelved Only
+            </Text>
+          </TouchableOpacity>
+
+          {!isSelectionMode && bottles.length > 0 && (
+            <TouchableOpacity 
+              style={styles.batchTrigger}
+              onPress={() => setIsSelectionMode(true)}
+            >
+              <Text style={styles.batchTriggerText}>Select for Printing</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
       {loading ? (
         <ActivityIndicator size="large" color="#ffffff" style={{ flex: 1 }} />
@@ -237,6 +341,22 @@ export default function InventoryScreen() {
           }
         />
       )}
+
+      {isSelectionMode && (
+        <View style={styles.batchActionBar}>
+          <View style={styles.batchInfo}>
+            <Text style={styles.batchCount}>{selectedIds.size} labels to print</Text>
+          </View>
+          <TouchableOpacity 
+            style={[styles.printButton, selectedIds.size === 0 && styles.printButtonDisabled]}
+            disabled={selectedIds.size === 0}
+            onPress={handleBatchPrint}
+          >
+            <IconSymbol name="printer.fill" size={20} color="#fff" />
+            <Text style={styles.printButtonText}>Print Batch</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -248,9 +368,49 @@ const styles = StyleSheet.create({
     backgroundColor: "#111827",
   },
   searchContainer: {
-    marginTop: 12,
+    flex: 1,
+  },
+  topControls: {
+    paddingTop: 12,
     paddingHorizontal: 16,
-    paddingBottom: 8,
+    gap: 12,
+  },
+  filterBar: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  filterChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#1f2937",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: "#374151",
+  },
+  filterChipActive: {
+    backgroundColor: "#f59e0b",
+    borderColor: "#f59e0b",
+  },
+  filterText: {
+    color: "#9ca3af",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  filterTextActive: {
+    color: "#fff",
+  },
+  batchTrigger: {
+    paddingVertical: 6,
+  },
+  batchTriggerText: {
+    color: "#3b82f6",
+    fontSize: 13,
+    fontWeight: "700",
   },
   searchInput: {
     backgroundColor: "#1f2937",
@@ -266,9 +426,34 @@ const styles = StyleSheet.create({
   },
   itemContainer: {
     backgroundColor: "#1f2937",
-    borderRadius: 8,
+    borderRadius: 12,
     padding: 16,
     marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#374151",
+  },
+  itemSelected: {
+    borderColor: "#f59e0b",
+    backgroundColor: "#f59e0b10",
+  },
+  titleContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    gap: 10,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: "#374151",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  checkboxSelected: {
+    backgroundColor: "#f59e0b",
+    borderColor: "#f59e0b",
   },
   itemHeader: {
     flexDirection: "row",
@@ -306,5 +491,50 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 40,
     fontSize: 16,
+  },
+  batchActionBar: {
+    position: "absolute",
+    bottom: 24,
+    left: 24,
+    right: 24,
+    backgroundColor: "#1f2937",
+    padding: 16,
+    borderRadius: 16,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.5,
+    shadowRadius: 10,
+    elevation: 10,
+    borderWidth: 1,
+    borderColor: "#374151",
+  },
+  batchInfo: {
+    flex: 1,
+  },
+  batchCount: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  printButton: {
+    backgroundColor: "#f59e0b",
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  printButtonDisabled: {
+    backgroundColor: "#374151",
+    opacity: 0.5,
+  },
+  printButtonText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "800",
   },
 });
