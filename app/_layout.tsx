@@ -5,6 +5,9 @@ import 'react-native-reanimated';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { AuthProvider } from '@/context/AuthContext';
+import * as Updates from 'expo-updates';
+import { useEffect } from 'react';
+import { Alert } from 'react-native';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -12,6 +15,25 @@ export const unstable_settings = {
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
+  const { isUpdatePending } = Updates.useUpdates();
+
+  useEffect(() => {
+    if (isUpdatePending) {
+      Alert.alert(
+        "Update Available",
+        "A new version of CaveauOne is ready. Restart now to apply the latest changes?",
+        [
+          { text: "Later", style: "cancel" },
+          { 
+            text: "Restart Now", 
+            onPress: async () => {
+              await Updates.reloadAsync();
+            } 
+          }
+        ]
+      );
+    }
+  }, [isUpdatePending]);
 
   return (
     <AuthProvider>

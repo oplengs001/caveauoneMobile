@@ -36,7 +36,7 @@ import {
 } from "react-native";
 import { IndividualLabelData, InventoryBottle, MasterWine } from "../../types";
 
-const NEXT_JS_API_URL = "http://192.168.1.16:3000";
+const NEXT_JS_API_URL = "https://caveauone.vercel.app";
 
 interface ExtractedWine {
   id: string;

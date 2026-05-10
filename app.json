@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "warehouse-app",
-    "slug": "warehouse-app",
+    "slug": "caveauone-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -10,7 +10,10 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.warehouse-app"
+      "bundleIdentifier": "com.anonymous.warehouse-app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -20,7 +23,8 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.prosource.caveauone"
     },
     "web": {
       "output": "static",
@@ -44,6 +48,19 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "62a7375c-2de5-4399-a260-3ac77e147d24"
+      }
+    },
+    "owner": "jofriorg",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/62a7375c-2de5-4399-a260-3ac77e147d24"
     }
   }
 }
