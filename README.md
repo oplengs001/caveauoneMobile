@@ -1,50 +1,79 @@
-# Welcome to your Expo app 👋
+# CaveauOne Mobile (Warehouse & Store)
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+The universal mobile companion for the CaveauOne Wine Inventory Management System. This cross-platform application (iOS/Android) provides specialized workflows for both warehouse logistics and boutique sommelier operations.
 
-## Get started
+## 🌟 Dual-Role Experience
 
-1. Install dependencies
+CaveauOne Mobile dynamically adapts its entire UI/UX based on the user's role:
 
+### 🏭 Warehouse Mode (Industrial Aesthetic)
+High-contrast, utility-focused interface designed for rapid warehouse operations.
+- **Intake Scanning:** Camera-powered delivery reception with real-time data extraction.
+- **Pullout Fulfillment:** Digital task lists for picking and preparing outbound orders.
+- **Location Tagging:** Assign physical bottles to bin locations via QR scanning.
+- **QR Label Printing:** On-the-spot thermal label generation for newly received stock.
+
+### 🍷 Store Mode (Boutique Aesthetic)
+Elegant, premium "Sommelier" interface tailored for boutique storefronts.
+- **Wine Requisitions:** Browseable warehouse catalog with real-time stock availability.
+- **Request Portal:** Create and track sophisticated wine requisitions for the storefront.
+- **Bottle Management:** Mark bottles as "Sold" or update their physical boutique location.
+- **Inventory Search:** High-fidelity search for vintages, producers, and SKUs.
+
+## 🚀 Technical Stack
+
+- **Framework:** [Expo 54](https://expo.dev/) & [React Native 0.81](https://reactnative.dev/)
+- **Routing:** [Expo Router (File-based)](https://docs.expo.dev/router/introduction/)
+- **Scanning:** [Expo Camera](https://docs.expo.dev/versions/latest/sdk/camera/)
+- **Printing:** [Expo Print](https://docs.expo.dev/versions/latest/sdk/print/) (AirPrint/Thermal compatible)
+- **Backend:** [Firebase 12](https://firebase.google.com/) (Auth & Firestore)
+- **Animations:** [React Native Reanimated](https://docs.swmansion.com/react-native-reanimated/)
+- **Icons:** [Lucide React Native](https://lucide.dev/)
+
+## 🛠️ Getting Started
+
+### Prerequisites
+- Node.js 18.x or later
+- Expo Go (for quick testing) or Development Build
+- Firebase Project configured for iOS/Android
+
+### Installation
+
+1. **Clone the repository:**
+   ```bash
+   cd warehouse-app
+   ```
+
+2. **Install dependencies:**
    ```bash
    npm install
    ```
 
-2. Start the app
+3. **Configure Environment Variables:**
+   Create a `.env` file in the root directory with your Firebase configuration.
 
+4. **Start the development server:**
    ```bash
    npx expo start
    ```
 
-In the output, you'll find options to open the app in a
+5. **Run on a device:**
+   - Press `i` for iOS Simulator or `a` for Android Emulator.
+   - Scan the QR code with the Expo Go app for physical device testing.
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+## 📁 Project Structure
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+- `app/`: Expo Router application structure.
+  - `(tabs)/`: Primary navigation (Home, Inventory, Scan).
+  - `wine-requests/`: Store requisition management logic.
+  - `intake/`: Delivery reception and scanning workflows.
+  - `tagging/`: Location assignment and status management.
+- `components/`: Specialized UI components for Warehouse and Store themes.
+- `constants/`: Theme definitions, colors, and global configurations.
+- `context/`: Global state management (Auth, Theme).
+- `hooks/`: Custom React hooks for Firebase and device sensors.
+- `types/`: Shared TypeScript definitions.
 
-## Get a fresh project
+## 📄 License
 
-When you're ready, run:
-
-```bash
-npm run reset-project
-```
-
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
-
-## Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+Internal Project - All Rights Reserved © 2026 CaveauOne Logistics.
