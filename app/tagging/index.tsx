@@ -19,6 +19,7 @@ import {
   MapPin,
   RefreshCw,
   ScanQrCode,
+  Wine,
   X
 } from 'lucide-react-native';
 import React, { useEffect, useRef, useState } from "react";
@@ -151,6 +152,42 @@ export default function TaggingScreen() {
     }
   };
 
+  const handleMarkAsSold = async () => {
+    if (!bottle) return;
+
+    setState("updating");
+    try {
+      const bottleRef = doc(db, "inventory_bottles", bottle.id);
+
+      await updateDoc(bottleRef, {
+        status: "consumed",
+        updatedAt: new Date(),
+      });
+
+      Alert.alert("Sold!", "The bottle has been marked as sold and removed from active inventory.", [
+        {
+          text: "Scan Next",
+          onPress: () => {
+            isProcessing.current = false;
+            setState("scanning");
+            setBottle(null);
+            setWine(null);
+            setScannedSku(null);
+            setSelectedLocationId(null);
+          },
+        },
+        {
+          text: "Finish",
+          onPress: () => router.back(),
+        },
+      ]);
+    } catch (error) {
+      console.error("Error marking as sold:", error);
+      Alert.alert("Error", "Failed to update status.");
+      setState("displaying");
+    }
+  };
+
   if (!permission) return <View style={styles.container} />;
 
   if (!permission.granted) {
@@ -265,9 +302,31 @@ export default function TaggingScreen() {
           />
 
           <View style={styles.footer}>
+            {isStore && (
+              <TouchableOpacity
+                style={[
+                  styles.soldButton,
+                  { backgroundColor: theme.primary, marginBottom: 12 },
+                  state === "updating" && styles.buttonDisabled,
+                ]}
+                onPress={handleMarkAsSold}
+                disabled={state === "updating"}
+              >
+                {state === "updating" ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <>
+                    <Wine size={24} color="#fff" strokeWidth={2.5} />
+                    <Text style={styles.confirmButtonText}>MARK AS SOLD</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
+
             <TouchableOpacity
               style={[
                 styles.confirmButton,
+                { backgroundColor: isStore ? theme.secondary : '#10b981' },
                 (!selectedLocationId || state === "updating") && styles.buttonDisabled,
               ]}
               onPress={handleConfirmTagging}
@@ -278,7 +337,9 @@ export default function TaggingScreen() {
               ) : (
                 <>
                   <CheckCircle2 size={24} color="#fff" strokeWidth={2.5} />
-                  <Text style={styles.confirmButtonText}>FINALIZE SHELVING</Text>
+                  <Text style={styles.confirmButtonText}>
+                    {isStore ? "UPDATE LOCATION" : "FINALIZE SHELVING"}
+                  </Text>
                 </>
               )}
             </TouchableOpacity>
@@ -521,6 +582,19 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     textTransform: 'uppercase',
     letterSpacing: 1.5,
+  },
+  soldButton: {
+    height: 72,
+    borderRadius: 24,
+    justifyContent: "center",
+    alignItems: "center",
+    flexDirection: 'row',
+    gap: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 4,
   },
   buttonDisabled: { opacity: 0.3 },
 });

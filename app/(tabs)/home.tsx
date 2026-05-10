@@ -122,8 +122,10 @@ export default function HomeScreen() {
             <View style={styles.buttonContent}>
               <MapPin size={42} color="#ffffff" strokeWidth={1.5} />
               <View style={styles.buttonTextContainer}>
-                <Text style={styles.buttonTitle}>Location Tagging</Text>
-                <Text style={styles.buttonDesc}>Assign bottles to bin locations</Text>
+                <Text style={styles.buttonTitle}>{isStore ? "Bottle Management" : "Bottle Tagging"}</Text>
+                <Text style={styles.buttonDesc}>
+                  {isStore ? "Update location or fulfill sales" : "Assign bottles to bin locations"}
+                </Text>
               </View>
             </View>
           </TouchableOpacity>
@@ -160,7 +162,7 @@ export default function HomeScreen() {
         {isStore && (
           <View style={{ marginTop: 40, padding: 24, backgroundColor: theme.primary + '10', borderRadius: 24, borderStyle: 'dashed', borderWidth: 1, borderColor: theme.primary + '30' }}>
             <Text style={{ color: theme.primary, fontWeight: '900', fontSize: 12, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 }}>Store Front Mode</Text>
-            <Text style={{ color: theme.textSecondary, fontSize: 14, fontStyle: 'italic' }}>Authorized for inventory lookup and stock requisition only.</Text>
+            <Text style={{ color: theme.textSecondary, fontSize: 14, fontStyle: 'italic' }}>Authorized for inventory lookup, stock requisition, and sale fulfillment.</Text>
           </View>
         )}
       </ScrollView>
