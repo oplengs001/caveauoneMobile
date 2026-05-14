@@ -131,46 +131,16 @@ export default function OnboardingDetailScreen() {
     setIsProcessing(true);
 
     try {
-      // 1. Get or Create Master Wine entry
-      let masterWineRef;
-      const masterWinesRef = collection(db, "master_wines");
-      const q = query(masterWinesRef, where("sku", "==", activeItem.sku));
-      const querySnapshot = await getDocs(q);
-
-      if (!querySnapshot.empty) {
-        masterWineRef = querySnapshot.docs[0].ref;
-      } else {
-        // Create new master wine if not found by SKU
-        const newMasterWine = {
-          name: activeItem.wineName,
-          vintage: activeItem.vintage,
-          producer: activeItem.producerName,
-          region: activeItem.region,
-          sku: activeItem.sku,
-          price: activeItem.price,
-          type: activeItem.wineType,
-          format: activeItem.format,
-          country: activeItem.country,
-          grapeVariety: activeItem.grapeVariety,
-          createdAt: serverTimestamp(),
-        };
-        const docRef = await addDoc(masterWinesRef, newMasterWine);
-        masterWineRef = docRef;
-      }
-
-      // 2. Create the Inventory Bottle
+      // 1. Update the existing Inventory Bottle
+      // These bottles were already created as "incoming" in the admin dashboard
       const bottleRef = doc(db, "inventory_bottles", scannedData);
-      await setDoc(bottleRef, {
-        masterWineRef,
-        locationRef: null,
-        sku: activeItem.sku,
+      
+      await updateDoc(bottleRef, {
         status: "received",
-        receiptId: task.id,
-        createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
 
-      // 3. Update Task Progress
+      // 2. Update Task Progress
       const updatedItems = task.items.map(i => {
         if (i.id === activeItem.id) {
           return { ...i, onboardedQty: i.onboardedQty + 1 };
@@ -189,7 +159,7 @@ export default function OnboardingDetailScreen() {
       setCurrentStep('success');
     } catch (err: any) {
       console.error(err);
-      alert("Error finalizing bottle: " + err.message);
+      alert("Error updating bottle: " + err.message);
     } finally {
       setIsProcessing(false);
     }
