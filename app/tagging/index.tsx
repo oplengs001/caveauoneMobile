@@ -2,7 +2,7 @@ import { Colors } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { db } from "@/lib/firebase";
 import { CameraView, useCameraPermissions } from "expo-camera";
-import { Stack, useRouter } from "expo-router";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import {
   collection,
   doc,
@@ -52,10 +52,15 @@ export default function TaggingScreen() {
   const [loading, setLoading] = useState(false);
   const isProcessing = useRef(false);
   const router = useRouter();
+  const { bottleId: initialBottleId } = useLocalSearchParams();
 
   useEffect(() => {
     fetchLocations();
-  }, []);
+    
+    if (initialBottleId) {
+      loadBottleData(initialBottleId as string);
+    }
+  }, [initialBottleId]);
 
   const fetchLocations = async () => {
     try {
@@ -70,15 +75,15 @@ export default function TaggingScreen() {
     }
   };
 
-  const handleBarcodeScanned = async ({ data }: { data: string }) => {
-    if (state !== "scanning" || loading || isProcessing.current) return;
+  const loadBottleData = async (bottleId: string) => {
+    if (loading || isProcessing.current) return;
 
     isProcessing.current = true;
     setLoading(true);
-    setScannedSku(data);
+    setScannedSku(bottleId);
 
     try {
-      const bottleRef = doc(db, "inventory_bottles", data);
+      const bottleRef = doc(db, "inventory_bottles", bottleId);
       const bottleSnap = await getDoc(bottleRef);
 
       if (!bottleSnap.exists()) {
@@ -88,6 +93,7 @@ export default function TaggingScreen() {
               setScannedSku(null);
               setLoading(false);
               isProcessing.current = false;
+              setState("scanning");
             }
           }
         ]);
@@ -112,6 +118,11 @@ export default function TaggingScreen() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleBarcodeScanned = async ({ data }: { data: string }) => {
+    if (state !== "scanning") return;
+    loadBottleData(data);
   };
 
   const handleConfirmTagging = async () => {

@@ -2,10 +2,16 @@ import { db } from "@/lib/firebase";
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import {
+  addDoc,
+  collection,
   doc,
+  getDocs,
   onSnapshot,
+  query,
   serverTimestamp,
-  updateDoc
+  setDoc,
+  updateDoc,
+  where
 } from "firebase/firestore";
 import {
   Camera,
@@ -19,6 +25,7 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Dimensions,
+  Image,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -41,6 +48,7 @@ export default function OnboardingDetailScreen() {
   const [activeItem, setActiveItem] = useState<OnboardingItem | null>(null);
   const [permission, requestPermission] = useCameraPermissions();
   const [isProcessing, setIsProcessing] = useState(false);
+  const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const cameraRef = useRef<CameraView>(null);
 
   useEffect(() => {
@@ -59,59 +67,132 @@ export default function OnboardingDetailScreen() {
     setIsProcessing(true);
 
     try {
-      const photo = await cameraRef.current.takePictureAsync({ quality: 0.5 });
+      const photo = await cameraRef.current.takePictureAsync({
+        base64: true,
+        quality: 0.5
+      });
 
-      // MOCK: Simulate AI recognition of the bottle label
-      // In a real app, you'd send this to a Vision API (Gemini/Google Vision)
-      setTimeout(() => {
-        const nextPendingItem = task?.items.find(i => i.onboardedQty < i.qty);
-        if (nextPendingItem) {
-          setActiveItem(nextPendingItem);
-          setCurrentStep('verify_qr');
-        } else {
-          alert("All items processed!");
-          setCurrentStep('overview');
-        }
-        setIsProcessing(false);
-      }, 1500);
+      if (!photo?.uri || !photo?.base64) {
+        throw new Error("Failed to capture photo");
+      }
+
+      setCapturedImage(photo.uri);
+
+      // 1. Send to AI Analysis
+      const response = await fetch('http://192.168.1.10:3000/api/analyze-label', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ base64Image: photo.base64 }),
+      });
+
+      if (!response.ok) throw new Error("AI Analysis failed");
+
+      const aiResult = await response.json();
+      console.log("AI Scanned Label:", aiResult);
+
+      // 2. Match with Task Items
+      // We look for the best match based on wine name and vintage
+      const matchedItem = task?.items.find(item => {
+        const wineNameMatch = item.wineName.toLowerCase().includes(aiResult.wineName.toLowerCase()) ||
+          aiResult.wineName.toLowerCase().includes(item.wineName.toLowerCase());
+        const vintageMatch = item.vintage === aiResult.vintage;
+
+        return (wineNameMatch && vintageMatch) && item.onboardedQty < item.qty;
+      });
+
+      if (matchedItem) {
+        setActiveItem(matchedItem);
+        setCurrentStep('verify_qr');
+        setCapturedImage(null);
+      } else {
+        alert(`Could not find a matching item: ${aiResult.producerName} ${aiResult.vintage}`);
+        setCapturedImage(null);
+      }
+
     } catch (err) {
-      console.error(err);
+      console.error("Scanner Error:", err);
+      alert("Error scanning label. Please check your connection.");
+      setCapturedImage(null);
+    } finally {
       setIsProcessing(false);
     }
   };
 
   const handleVerifyQR = async (scannedData: string) => {
     if (!activeItem || !task || isProcessing) return;
+
+    // Check if the scanned QR belongs to the active item's current pending bottle
+    const expectedBottleId = activeItem.bottleIds[activeItem.onboardedQty];
+    if (scannedData !== expectedBottleId) {
+      alert(`QR Code mismatch! Expected: ${expectedBottleId}`);
+      return;
+    }
+
     setIsProcessing(true);
 
-    // Verify if the scanned QR belongs to the active item
-    const nextBottleId = activeItem.bottleIds[activeItem.onboardedQty];
+    try {
+      // 1. Get or Create Master Wine entry
+      let masterWineRef;
+      const masterWinesRef = collection(db, "master_wines");
+      const q = query(masterWinesRef, where("sku", "==", activeItem.sku));
+      const querySnapshot = await getDocs(q);
 
-    // For the demo, we assume any scan is a match or we check the data
-    if (scannedData === nextBottleId || true) {
-      try {
-        const updatedItems = task.items.map(i => {
-          if (i.id === activeItem.id) {
-            return { ...i, onboardedQty: i.onboardedQty + 1 };
-          }
-          return i;
-        });
-
-        const isFullyDone = updatedItems.every(i => i.onboardedQty === i.qty);
-
-        await updateDoc(doc(db, "onboarding_tasks", task.id), {
-          items: updatedItems,
-          status: isFullyDone ? 'completed' : 'warehouse',
-          updatedAt: serverTimestamp()
-        });
-
-        setCurrentStep('success');
-      } catch (err) {
-        console.error(err);
+      if (!querySnapshot.empty) {
+        masterWineRef = querySnapshot.docs[0].ref;
+      } else {
+        // Create new master wine if not found by SKU
+        const newMasterWine = {
+          name: activeItem.wineName,
+          vintage: activeItem.vintage,
+          producer: activeItem.producerName,
+          region: activeItem.region,
+          sku: activeItem.sku,
+          price: activeItem.price,
+          type: activeItem.wineType,
+          format: activeItem.format,
+          country: activeItem.country,
+          grapeVariety: activeItem.grapeVariety,
+          createdAt: serverTimestamp(),
+        };
+        const docRef = await addDoc(masterWinesRef, newMasterWine);
+        masterWineRef = docRef;
       }
-    } else {
+
+      // 2. Create the Inventory Bottle
+      const bottleRef = doc(db, "inventory_bottles", scannedData);
+      await setDoc(bottleRef, {
+        masterWineRef,
+        locationRef: null,
+        sku: activeItem.sku,
+        status: "received",
+        receiptId: task.id,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+
+      // 3. Update Task Progress
+      const updatedItems = task.items.map(i => {
+        if (i.id === activeItem.id) {
+          return { ...i, onboardedQty: i.onboardedQty + 1 };
+        }
+        return i;
+      });
+
+      const isFullyDone = updatedItems.every(i => i.onboardedQty === i.qty);
+
+      await updateDoc(doc(db, "onboarding_tasks", task.id), {
+        items: updatedItems,
+        status: isFullyDone ? 'completed' : 'warehouse',
+        updatedAt: serverTimestamp()
+      });
+
+      setCurrentStep('success');
+    } catch (err: any) {
+      console.error(err);
+      alert("Error finalizing bottle: " + err.message);
+    } finally {
+      setIsProcessing(false);
     }
-    setIsProcessing(false);
   };
 
   if (loading) {
@@ -196,19 +277,31 @@ export default function OnboardingDetailScreen() {
               </TouchableOpacity>
             </View>
           ) : (
-            <CameraView style={styles.camera} ref={cameraRef}>
-              <View style={styles.cameraOverlay}>
-                <View style={styles.scannerFrame} />
-                <Text style={styles.scannerInstruction}>Scan bottle label to identify wine</Text>
-                <TouchableOpacity
-                  style={styles.captureButton}
-                  onPress={handleScanLabel}
-                  disabled={isProcessing}
-                >
-                  {isProcessing ? <ActivityIndicator color="#fff" /> : <View style={styles.captureInner} />}
-                </TouchableOpacity>
-              </View>
-            </CameraView>
+            <View style={styles.camera}>
+              {capturedImage ? (
+                <View style={styles.capturedContainer}>
+                  <Image source={{ uri: capturedImage }} style={styles.capturedImage} />
+                  <View style={styles.analyzingOverlay}>
+                    <ActivityIndicator size="large" color="#fff" />
+                    <Text style={styles.analyzingText}>Analyzing wine label...</Text>
+                  </View>
+                </View>
+              ) : (
+                <CameraView style={styles.camera} ref={cameraRef}>
+                  <View style={styles.cameraOverlay}>
+                    <View style={styles.scannerFrame} />
+                    <Text style={styles.scannerInstruction}>Scan bottle label to identify wine</Text>
+                    <TouchableOpacity
+                      style={styles.captureButton}
+                      onPress={handleScanLabel}
+                      disabled={isProcessing}
+                    >
+                      <View style={styles.captureInner} />
+                    </TouchableOpacity>
+                  </View>
+                </CameraView>
+              )}
+            </View>
           )}
         </View>
       )}
@@ -219,9 +312,17 @@ export default function OnboardingDetailScreen() {
             <Text style={styles.matchLabel}>Bottle Recognized</Text>
             <Text style={styles.matchProducer}>{activeItem.producerName}</Text>
             <Text style={styles.matchName}>{activeItem.wineName}</Text>
+
+            <View style={styles.matchMeta}>
+              <Text style={styles.matchMetaText}>{activeItem.vintage}</Text>
+              <View style={styles.metaDot} />
+              <Text style={styles.matchMetaText}>{activeItem.format}</Text>
+            </View>
+
             <View style={styles.qrInstructionCard}>
               <QrCode size={48} color="#4f46e5" />
               <Text style={styles.qrIdText}>Apply Label: {activeItem.bottleIds[activeItem.onboardedQty]}</Text>
+              <Text style={styles.skuLabel}>SKU: {activeItem.sku}</Text>
               <Text style={styles.qrDesc}>Stick this QR code on the bottle and scan it to confirm.</Text>
             </View>
           </View>
@@ -239,7 +340,7 @@ export default function OnboardingDetailScreen() {
         </View>
       )}
 
-      {currentStep === 'success' && (
+      {currentStep === 'success' && activeItem && (
         <View style={styles.successContainer}>
           <View style={styles.successCircle}>
             <CheckCircle2 size={80} color="#10b981" strokeWidth={3} />
@@ -249,7 +350,10 @@ export default function OnboardingDetailScreen() {
 
           <TouchableOpacity
             style={[styles.mainButton, { backgroundColor: '#10b981', marginTop: 40 }]}
-            onPress={() => router.push('/tagging')}
+            onPress={() => router.push({
+              pathname: '/tagging',
+              params: { bottleId: activeItem.bottleIds[activeItem.onboardedQty - 1] }
+            })}
           >
             <MapPin size={24} color="#fff" />
             <Text style={styles.mainButtonText}>Add Location Tag Now</Text>
@@ -486,7 +590,24 @@ const styles = StyleSheet.create({
     color: '#0f172a',
     fontSize: 24,
     fontWeight: '900',
+    marginBottom: 8,
+  },
+  matchMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     marginBottom: 24,
+  },
+  matchMetaText: {
+    color: '#64748b',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  metaDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#cbd5e1',
   },
   qrInstructionCard: {
     backgroundColor: '#f8fafc',
@@ -501,6 +622,13 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: '#0f172a',
     marginTop: 12,
+    fontFamily: 'System',
+  },
+  skuLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#64748b',
+    marginTop: 4,
     fontFamily: 'System',
   },
   qrDesc: {
@@ -580,5 +708,27 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginBottom: 20,
     textAlign: 'center',
+  },
+  capturedContainer: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
+  capturedImage: {
+    flex: 1,
+    resizeMode: 'cover',
+    opacity: 0.6,
+  },
+  analyzingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 20,
+  },
+  analyzingText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+    letterSpacing: 2,
   }
 });
