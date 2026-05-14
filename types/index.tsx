@@ -83,3 +83,38 @@ export interface WineRequest {
   createdAt: any;
   updatedAt: any;
 }
+
+export type WineFormat = "37.5cl" | "50cl" | "70cl" | "75cl" | "150cl" | "300cl" | "600cl";
+export type WineType = "Red Wine" | "White wine" | "Sweet Wine" | "Sparkling wine" | "Rose wine";
+
+export interface OnboardingItem {
+  id: string;
+  sku: string;
+  price: number;
+  qty: number;
+  producerName: string;
+  wineName: string;
+  vintage: string;
+  format: WineFormat;
+  country: string;
+  region: string;
+  subregion?: string;
+  classification?: string;
+  grapeVariety: string;
+  wineType: WineType;
+  
+  // Progress tracking
+  onboardedQty: number; 
+  bottleIds: string[]; 
+}
+
+export interface OnboardingTask {
+  id: string;
+  invoiceUrl?: string;
+  status: "pending_review" | "warehouse" | "completed";
+  items: OnboardingItem[];
+  uploadedBy: string;
+  uploadedEmail: string;
+  createdAt: any;
+  updatedAt: any;
+}

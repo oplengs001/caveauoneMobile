@@ -5,6 +5,7 @@ import { Stack, useRouter } from 'expo-router';
 import { signOut } from 'firebase/auth';
 import {
   ClipboardList,
+  FileDown,
   LogOut,
   MapPin,
   PackageSearch,
@@ -95,6 +96,21 @@ export default function HomeScreen() {
                 <View style={styles.buttonTextContainer}>
                   <Text style={styles.buttonTitle}>Receive Delivery</Text>
                   <Text style={styles.buttonDesc}>Scan and intake new arrivals</Text>
+                </View>
+              </View>
+            </TouchableOpacity>
+          )}
+
+          {!isStore && (
+            <TouchableOpacity
+              style={[styles.actionButton, { backgroundColor: '#4f46e5' }]}
+              onPress={() => router.push('/onboarding')}
+            >
+              <View style={styles.buttonContent}>
+                <FileDown size={42} color="#ffffff" strokeWidth={1.5} />
+                <View style={styles.buttonTextContainer}>
+                  <Text style={styles.buttonTitle}>Onboarding Tasks</Text>
+                  <Text style={styles.buttonDesc}>Process new wine deliveries</Text>
                 </View>
               </View>
             </TouchableOpacity>
