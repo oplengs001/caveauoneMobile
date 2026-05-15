@@ -4,11 +4,16 @@ import { db } from "@/lib/firebase";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import {
+  addDoc,
   collection,
   doc,
   getDoc,
   getDocs,
-  updateDoc
+  orderBy,
+  query,
+  serverTimestamp,
+  updateDoc,
+  where
 } from "firebase/firestore";
 import {
   AlertTriangle,
@@ -16,8 +21,9 @@ import {
   Camera,
   CheckCircle2,
   Map,
-  MapPin,
+  Plus,
   RefreshCw,
+  Save,
   ScanQrCode,
   Wine,
   X
@@ -27,15 +33,26 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Modal,
   SafeAreaView,
+  ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 import { InventoryBottle, Location, MasterWine } from "../../types";
 
 type TaggingState = "scanning" | "displaying" | "updating";
+
+const STORAGE_CATEGORIES = [
+  { label: "Locker", prefix: "L", icon: "🔒", major: "Locker", minor: "Box" },
+  { label: "Room", prefix: "R", icon: "🚪", major: "Room", minor: "Shelf" },
+  { label: "Fridge", prefix: "F", icon: "❄️", major: "Fridge", minor: "Slot" },
+  { label: "Shelf", prefix: "S", icon: "📚", major: "Shelf", minor: "Pos" },
+  { label: "Custom", prefix: "X", icon: "➕", major: "ID", minor: "Sub" },
+];
 
 export default function TaggingScreen() {
   const { profile } = useAuth();
@@ -51,21 +68,37 @@ export default function TaggingScreen() {
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [isIncoming, setIsIncoming] = useState(false);
+
+  // Add Location Modal State
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [newCat, setNewCat] = useState(STORAGE_CATEGORIES[0]);
+  const [newMajor, setNewMajor] = useState("");
+  const [newMinor, setNewMinor] = useState("");
+  const [newCapacity, setNewCapacity] = useState("");
+  const [savingLocation, setSavingLocation] = useState(false);
+
   const isProcessing = useRef(false);
   const router = useRouter();
   const { bottleId: initialBottleId } = useLocalSearchParams();
 
   useEffect(() => {
     fetchLocations();
-    
+
     if (initialBottleId) {
       loadBottleData(initialBottleId as string);
     }
-  }, [initialBottleId]);
+  }, [initialBottleId, profile?.locationId]);
 
   const fetchLocations = async () => {
+    if (!profile?.locationId) return;
+
     try {
-      const locationsSnap = await getDocs(collection(db, "locations"));
+      const q = query(
+        collection(db, "locations"),
+        where("storeId", "==", profile.locationId),
+        orderBy("name", "asc")
+      );
+      const locationsSnap = await getDocs(q);
       const locData = locationsSnap.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
@@ -125,6 +158,41 @@ export default function TaggingScreen() {
       isProcessing.current = false;
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCreateLocation = async () => {
+    if (!profile?.locationId || !newMajor) return;
+
+    setSavingLocation(true);
+    const generatedCode = `${newCat.prefix}${newMajor.toUpperCase()}${newMinor}`;
+
+    try {
+      const docRef = await addDoc(collection(db, "locations"), {
+        name: generatedCode,
+        type: newCat.label,
+        storeId: profile.locationId,
+        majorId: newMajor.toUpperCase(),
+        minorId: newMinor,
+        prefix: newCat.prefix,
+        capacity: newCapacity ? parseInt(newCapacity, 10) : null,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+
+      Alert.alert("Success", "New storage location created.");
+      await fetchLocations();
+      setSelectedLocationId(docRef.id);
+      setIsAddModalOpen(false);
+      // Reset form
+      setNewMajor("");
+      setNewMinor("");
+      setNewCapacity("");
+    } catch (error) {
+      console.error("Error creating location:", error);
+      Alert.alert("Error", "Failed to create storage location.");
+    } finally {
+      setSavingLocation(false);
     }
   };
 
@@ -315,8 +383,17 @@ export default function TaggingScreen() {
           </View>
 
           <View style={styles.sectionHeader}>
-            <Map size={18} color="#64748b" />
-            <Text style={styles.sectionTitle}>Select Storage Location</Text>
+            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <Map size={18} color="#64748b" />
+              <Text style={styles.sectionTitle}>Select Storage Location</Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => setIsAddModalOpen(true)}
+              style={[styles.addLocationButton, { borderColor: theme.border }]}
+            >
+              <Plus size={14} color={theme.primary} strokeWidth={3} />
+              <Text style={[styles.addLocationText, { color: theme.primary }]}>NEW</Text>
+            </TouchableOpacity>
           </View>
 
           <FlatList
@@ -333,11 +410,17 @@ export default function TaggingScreen() {
                 ]}
                 onPress={() => setSelectedLocationId(item.id)}
               >
-                <MapPin
-                  size={28}
-                  color={selectedLocationId === item.id ? "#fff" : theme.textSecondary}
-                  strokeWidth={selectedLocationId === item.id ? 2.5 : 2}
-                />
+                <View style={[
+                  styles.locationIconContainer,
+                  { backgroundColor: selectedLocationId === item.id ? 'rgba(255,255,255,0.2)' : theme.background }
+                ]}>
+                  <Text style={[
+                    styles.locationPrefix,
+                    { color: selectedLocationId === item.id ? '#fff' : theme.primary }
+                  ]}>
+                    {(item as any).prefix || (item.type === 'Locker' ? 'L' : item.type.charAt(0))}
+                  </Text>
+                </View>
                 <Text
                   style={[
                     styles.locationName,
@@ -427,6 +510,105 @@ export default function TaggingScreen() {
           </View>
         </View>
       )}
+
+      {/* Add Location Modal */}
+      <Modal
+        visible={isAddModalOpen}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setIsAddModalOpen(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={[styles.modalTitle, { color: theme.text }]}>Add Storage Unit</Text>
+                <Text style={styles.modalSubtitle}>Create a new bin for this store</Text>
+              </View>
+              <TouchableOpacity onPress={() => setIsAddModalOpen(false)} style={styles.modalClose}>
+                <X size={24} color={theme.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalForm} showsVerticalScrollIndicator={false}>
+              <Text style={styles.modalLabel}>CATEGORY</Text>
+              <View style={styles.catGrid}>
+                {STORAGE_CATEGORIES.map(c => (
+                  <TouchableOpacity
+                    key={c.label}
+                    onPress={() => setNewCat(c)}
+                    style={[
+                      styles.catItem,
+                      { borderColor: theme.border },
+                      newCat.label === c.label && { borderColor: theme.primary, backgroundColor: theme.background }
+                    ]}
+                  >
+                    <Text style={styles.catIcon}>{c.icon}</Text>
+                    <Text style={[styles.catLabel, newCat.label === c.label && { color: theme.primary }]}>{c.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <View style={styles.inputRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.modalLabel}>{newCat.major.toUpperCase()}</Text>
+                  <TextInput
+                    style={[styles.modalInput, { color: theme.text, borderColor: theme.border }]}
+                    placeholder="e.g. D18"
+                    placeholderTextColor="#475569"
+                    value={newMajor}
+                    onChangeText={setNewMajor}
+                    autoCapitalize="characters"
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.modalLabel}>{newCat.minor.toUpperCase()}</Text>
+                  <TextInput
+                    style={[styles.modalInput, { color: theme.text, borderColor: theme.border }]}
+                    placeholder="e.g. 20"
+                    placeholderTextColor="#475569"
+                    value={newMinor}
+                    onChangeText={setNewMinor}
+                  />
+                </View>
+              </View>
+
+              <Text style={styles.modalLabel}>UNIT CAPACITY</Text>
+              <TextInput
+                style={[styles.modalInput, { color: theme.text, borderColor: theme.border }]}
+                placeholder="Bottles..."
+                placeholderTextColor="#475569"
+                keyboardType="numeric"
+                value={newCapacity}
+                onChangeText={setNewCapacity}
+              />
+
+              <View style={styles.previewContainer}>
+                <Text style={styles.previewLabel}>GENERATED CODE</Text>
+                <Text style={[styles.previewCode, { color: theme.primary }]}>
+                  {newCat.prefix}{newMajor.toUpperCase()}{newMinor || '--'}
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                onPress={handleCreateLocation}
+                disabled={savingLocation || !newMajor}
+                style={[styles.saveButton, { backgroundColor: theme.primary }, (!newMajor || savingLocation) && styles.buttonDisabled]}
+              >
+                {savingLocation ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <>
+                    <Save size={20} color="#fff" strokeWidth={2.5} />
+                    <Text style={styles.saveButtonText}>SAVE LOCATION</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+              <View style={{ height: 40 }} />
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -589,7 +771,7 @@ const styles = StyleSheet.create({
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    justifyContent: 'space-between',
     marginBottom: 20,
   },
   sectionTitle: {
@@ -598,6 +780,20 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     textTransform: 'uppercase',
     letterSpacing: 1.5,
+  },
+  addLocationButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1.5,
+  },
+  addLocationText: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1,
   },
   locationList: { paddingBottom: 120 },
   locationRow: { justifyContent: "space-between", gap: 12 },
@@ -622,11 +818,24 @@ const styles = StyleSheet.create({
   },
   locationName: {
     color: "#94a3b8",
-    fontSize: 16,
-    fontWeight: "800",
+    fontSize: 18,
+    fontWeight: "900",
     textAlign: "center",
+    letterSpacing: -1,
   },
   locationNameSelected: { color: "#fff" },
+  locationIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  locationPrefix: {
+    fontSize: 20,
+    fontWeight: '900',
+  },
   locationType: {
     color: "#475569",
     fontSize: 9,
@@ -678,6 +887,118 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   buttonDisabled: { opacity: 0.3 },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    padding: 32,
+    minHeight: '60%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 32,
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: '900',
+    letterSpacing: -0.5,
+  },
+  modalSubtitle: {
+    color: '#64748b',
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 4,
+  },
+  modalClose: {
+    padding: 8,
+  },
+  modalForm: {
+    flex: 1,
+  },
+  modalLabel: {
+    color: '#64748b',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1.5,
+    marginBottom: 12,
+  },
+  catGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 24,
+  },
+  catItem: {
+    flex: 1,
+    minWidth: '30%',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    gap: 6,
+  },
+  catIcon: {
+    fontSize: 20,
+  },
+  catLabel: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#64748b',
+    textTransform: 'uppercase',
+  },
+  inputRow: {
+    flexDirection: 'row',
+    gap: 16,
+    marginBottom: 24,
+  },
+  modalInput: {
+    height: 60,
+    borderWidth: 1.5,
+    borderRadius: 16,
+    paddingHorizontal: 20,
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 24,
+  },
+  previewContainer: {
+    backgroundColor: '#0f172a',
+    padding: 24,
+    borderRadius: 24,
+    alignItems: 'center',
+    marginBottom: 32,
+  },
+  previewLabel: {
+    color: 'rgba(255,255,255,0.4)',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1,
+    marginBottom: 8,
+  },
+  previewCode: {
+    fontSize: 32,
+    fontWeight: '900',
+    letterSpacing: -1,
+  },
+  saveButton: {
+    height: 64,
+    borderRadius: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  saveButtonText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '900',
+    letterSpacing: 1,
+  },
 });
 
 
