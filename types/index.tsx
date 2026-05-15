@@ -17,6 +17,7 @@ export interface MasterWine {
   region?: string;
   type?: string;
   sku?: string;
+  format?: string;
 }
 
 export interface InventoryBottle {

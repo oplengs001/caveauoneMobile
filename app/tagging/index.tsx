@@ -372,140 +372,168 @@ export default function TaggingScreen() {
           <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
               <Box size={14} color={theme.secondary} />
-              <Text style={[styles.skuLabel, { color: theme.textSecondary }]}>BOTTLE ID: {bottle?.id.slice(0, 12).toUpperCase()}</Text>
+              <Text style={[styles.skuLabel, { color: theme.textSecondary }]}>BOTTLE ID: {bottle?.id.toUpperCase()}</Text>
             </View>
             <Text style={[styles.wineName, { color: theme.text }]}>{wine?.name || "Processing..."}</Text>
             <View style={styles.wineMetaRow}>
               <Text style={[styles.wineVintage, { color: theme.textSecondary }]}>{wine?.vintage}</Text>
               <View style={[styles.metaDot, { backgroundColor: theme.border }]} />
               <Text style={[styles.wineProducer, { color: theme.textSecondary }]}>{wine?.producer || "Independent Producer"}</Text>
+              {wine?.format && (
+                <>
+                  <View style={[styles.metaDot, { backgroundColor: theme.border }]} />
+                  <Text style={[styles.wineFormat, { color: theme.textSecondary }]}>{wine.format}</Text>
+                </>
+              )}
             </View>
           </View>
 
-          <View style={styles.sectionHeader}>
-            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-              <Map size={18} color="#64748b" />
-              <Text style={styles.sectionTitle}>Select Storage Location</Text>
-            </View>
-            <TouchableOpacity
-              onPress={() => setIsAddModalOpen(true)}
-              style={[styles.addLocationButton, { borderColor: theme.border }]}
-            >
-              <Plus size={14} color={theme.primary} strokeWidth={3} />
-              <Text style={[styles.addLocationText, { color: theme.primary }]}>NEW</Text>
-            </TouchableOpacity>
-          </View>
-
-          <FlatList
-            data={locations}
-            keyExtractor={(item) => item.id}
-            numColumns={2}
-            columnWrapperStyle={styles.locationRow}
-            renderItem={({ item }) => (
+          {bottle?.status === 'incoming' ? (
+            <View style={styles.incomingWarningContainer}>
+              <AlertTriangle size={48} color="#f59e0b" strokeWidth={1.5} />
+              <Text style={styles.incomingWarningTitle}>Verification Required</Text>
+              <Text style={styles.incomingWarningText}>
+                This bottle is currently marked as incoming. You need to verify the sticker first before it can be tagged to a location.
+              </Text>
               <TouchableOpacity
-                style={[
-                  styles.locationItem,
-                  { backgroundColor: theme.card, borderColor: theme.border },
-                  selectedLocationId === item.id && [styles.locationItemSelected, { backgroundColor: theme.accent, borderColor: theme.accent }],
-                ]}
-                onPress={() => setSelectedLocationId(item.id)}
+                style={[styles.onboardingButton, { backgroundColor: theme.primary }]}
+                onPress={() => router.push('/onboarding')}
               >
-                <View style={[
-                  styles.locationIconContainer,
-                  { backgroundColor: selectedLocationId === item.id ? 'rgba(255,255,255,0.2)' : theme.background }
-                ]}>
-                  <Text style={[
-                    styles.locationPrefix,
-                    { color: selectedLocationId === item.id ? '#fff' : theme.primary }
-                  ]}>
-                    {(item as any).prefix || (item.type === 'Locker' ? 'L' : item.type.charAt(0))}
-                  </Text>
-                </View>
-                <Text
-                  style={[
-                    styles.locationName,
-                    { color: theme.text },
-                    selectedLocationId === item.id && styles.locationNameSelected,
-                  ]}
-                >
-                  {item.name}
-                </Text>
-                <Text style={[styles.locationType, { color: selectedLocationId === item.id ? "rgba(255,255,255,0.7)" : theme.textSecondary }]}>
-                  {item.type.toUpperCase()}
-                </Text>
+                <Text style={styles.onboardingButtonText}>VIEW ONBOARDING TASKS</Text>
               </TouchableOpacity>
-            )}
-            ListEmptyComponent={
-              <View style={styles.emptyContainer}>
-                <AlertTriangle size={48} color="#334155" />
-                <Text style={styles.emptyText}>No storage locations configured.</Text>
+            </View>
+          ) : (
+            <>
+              <View style={styles.sectionHeader}>
+                <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                  <Map size={18} color="#64748b" />
+                  <Text style={styles.sectionTitle}>Select Storage Location</Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => setIsAddModalOpen(true)}
+                  style={[styles.addLocationButton, { borderColor: theme.border }]}
+                >
+                  <Plus size={14} color={theme.primary} strokeWidth={3} />
+                  <Text style={[styles.addLocationText, { color: theme.primary }]}>NEW</Text>
+                </TouchableOpacity>
               </View>
-            }
-            contentContainerStyle={styles.locationList}
-          />
+
+              <FlatList
+                data={locations}
+                keyExtractor={(item) => item.id}
+                numColumns={2}
+                columnWrapperStyle={styles.locationRow}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={[
+                      styles.locationItem,
+                      { backgroundColor: theme.card, borderColor: theme.border },
+                      selectedLocationId === item.id && [styles.locationItemSelected, { backgroundColor: theme.accent, borderColor: theme.accent }],
+                    ]}
+                    onPress={() => setSelectedLocationId(item.id)}
+                  >
+                    <View style={[
+                      styles.locationIconContainer,
+                      { backgroundColor: selectedLocationId === item.id ? 'rgba(255,255,255,0.2)' : theme.background }
+                    ]}>
+                      <Text style={[
+                        styles.locationPrefix,
+                        { color: selectedLocationId === item.id ? '#fff' : theme.primary }
+                      ]}>
+                        {(item as any).prefix || (item.type === 'Locker' ? 'L' : item.type.charAt(0))}
+                      </Text>
+                    </View>
+                    <Text
+                      style={[
+                        styles.locationName,
+                        { color: theme.text },
+                        selectedLocationId === item.id && styles.locationNameSelected,
+                      ]}
+                    >
+                      {item.name}
+                    </Text>
+                    <Text style={[styles.locationType, { color: selectedLocationId === item.id ? "rgba(255,255,255,0.7)" : theme.textSecondary }]}>
+                      {item.type.toUpperCase()}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+                ListEmptyComponent={
+                  <View style={styles.emptyContainer}>
+                    <AlertTriangle size={48} color="#334155" />
+                    <Text style={styles.emptyText}>No storage locations configured.</Text>
+                  </View>
+                }
+                contentContainerStyle={styles.locationList}
+              />
+            </>
+          )}
 
           <View style={styles.footer}>
-            {isStore && (
-              <TouchableOpacity
-                style={[
-                  styles.soldButton,
-                  { backgroundColor: theme.primary, marginBottom: 12 },
-                  state === "updating" && styles.buttonDisabled,
-                ]}
-                onPress={handleMarkAsSold}
-                disabled={state === "updating"}
-              >
-                {state === "updating" ? (
-                  <ActivityIndicator color="#fff" size="small" />
-                ) : (
-                  <>
-                    <Wine size={24} color="#fff" strokeWidth={2.5} />
-                    <Text style={styles.confirmButtonText}>MARK AS SOLD</Text>
-                  </>
+            {bottle?.status !== 'incoming' && (
+              <>
+                {isStore && (
+                  <TouchableOpacity
+                    style={[
+                      styles.soldButton,
+                      { backgroundColor: theme.primary, marginBottom: 12 },
+                      state === "updating" && styles.buttonDisabled,
+                    ]}
+                    onPress={handleMarkAsSold}
+                    disabled={state === "updating"}
+                  >
+                    {state === "updating" ? (
+                      <ActivityIndicator color="#fff" size="small" />
+                    ) : (
+                      <>
+                        <Wine size={24} color="#fff" strokeWidth={2.5} />
+                        <Text style={styles.confirmButtonText}>MARK AS SOLD</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
                 )}
-              </TouchableOpacity>
-            )}
 
-            {isIncoming ? (
-              <TouchableOpacity
-                style={[
-                  styles.confirmButton,
-                  { backgroundColor: '#059669' }, // Emerald-600
-                  state === "updating" && styles.buttonDisabled,
-                ]}
-                onPress={handleReceiveStock}
-                disabled={state === "updating"}
-              >
-                {state === "updating" ? (
-                  <ActivityIndicator color="#fff" size="small" />
+                {isIncoming ? (
+                  <TouchableOpacity
+                    style={[
+                      styles.confirmButton,
+                      { backgroundColor: '#059669' }, // Emerald-600
+                      state === "updating" && styles.buttonDisabled,
+                    ]}
+                    onPress={handleReceiveStock}
+                    disabled={state === "updating"}
+                  >
+                    {state === "updating" ? (
+                      <ActivityIndicator color="#fff" size="small" />
+                    ) : (
+                      <>
+                        <CheckCircle2 size={24} color="#fff" strokeWidth={2.5} />
+                        <Text style={styles.confirmButtonText}>RECEIVE INTO STORE</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
                 ) : (
-                  <>
-                    <CheckCircle2 size={24} color="#fff" strokeWidth={2.5} />
-                    <Text style={styles.confirmButtonText}>RECEIVE INTO STORE</Text>
-                  </>
+                  <TouchableOpacity
+                    style={[
+                      styles.confirmButton,
+                      { backgroundColor: isStore ? theme.secondary : '#10b981' },
+                      (!selectedLocationId || state === "updating") && styles.buttonDisabled,
+                    ]}
+                    onPress={handleConfirmTagging}
+                    disabled={!selectedLocationId || state === "updating"}
+                  >
+                    {state === "updating" ? (
+                      <ActivityIndicator color="#fff" size="small" />
+                    ) : (
+                      <>
+                        <CheckCircle2 size={24} color="#fff" strokeWidth={2.5} />
+                        <Text style={styles.confirmButtonText}>
+                          {isStore ? "UPDATE LOCATION" : "FINALIZE SHELVING"}
+                        </Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
                 )}
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                style={[
-                  styles.confirmButton,
-                  { backgroundColor: isStore ? theme.secondary : '#10b981' },
-                  (!selectedLocationId || state === "updating") && styles.buttonDisabled,
-                ]}
-                onPress={handleConfirmTagging}
-                disabled={!selectedLocationId || state === "updating"}
-              >
-                {state === "updating" ? (
-                  <ActivityIndicator color="#fff" size="small" />
-                ) : (
-                  <>
-                    <CheckCircle2 size={24} color="#fff" strokeWidth={2.5} />
-                    <Text style={styles.confirmButtonText}>
-                      {isStore ? "UPDATE LOCATION" : "FINALIZE SHELVING"}
-                    </Text>
-                  </>
-                )}
-              </TouchableOpacity>
+              </>
             )}
           </View>
         </View>
@@ -998,6 +1026,55 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '900',
     letterSpacing: 1,
+  },
+  incomingWarningContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(245, 158, 11, 0.05)',
+    borderRadius: 32,
+    padding: 32,
+    marginTop: 20,
+    borderWidth: 2,
+    borderColor: '#f59e0b',
+    borderStyle: 'dashed',
+    gap: 16,
+  },
+  incomingWarningTitle: {
+    color: '#f59e0b',
+    fontSize: 22,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+    letterSpacing: -0.5,
+  },
+  incomingWarningText: {
+    color: '#94a3b8',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+    lineHeight: 24,
+    maxWidth: '80%',
+  },
+  onboardingButton: {
+    marginTop: 24,
+    paddingHorizontal: 32,
+    paddingVertical: 18,
+    borderRadius: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  onboardingButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '900',
+    letterSpacing: 1.5,
+  },
+  wineFormat: {
+    fontSize: 14,
+    fontWeight: '700',
   },
 });
 
