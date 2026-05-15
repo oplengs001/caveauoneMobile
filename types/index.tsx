@@ -130,3 +130,16 @@ export interface OnboardingTask {
   createdAt: any;
   updatedAt: any;
 }
+
+export type StockStatus = "in_stock" | "stockout" | "overstock" | "par_alert" | "discontinued";
+
+export interface StoreWineSetting {
+  id: string;
+  storeId: string;
+  masterWineId: string;
+  parLevel: number;
+  safetyStock: number;
+  discontinued: boolean;
+  createdAt: any;
+  updatedAt: any;
+}

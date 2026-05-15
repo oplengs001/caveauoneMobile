@@ -6,6 +6,7 @@ import { signOut } from 'firebase/auth';
 import {
   ClipboardList,
   FileDown,
+  LayoutList,
   LogOut,
   MapPin,
   Search,
@@ -111,6 +112,21 @@ export default function HomeScreen() {
                 <View style={styles.buttonTextContainer}>
                   <Text style={[styles.buttonTitle, { fontSize: 24 }]}>Wine Requests</Text>
                   <Text style={styles.buttonDesc}>Request stock from warehouse</Text>
+                </View>
+              </View>
+            </TouchableOpacity>
+          )}
+
+          {isStore && (
+            <TouchableOpacity
+              style={[styles.actionButton, { backgroundColor: '#0f766e', borderRadius: 24, padding: 32 }]}
+              onPress={() => router.push('/store-master-list')}
+            >
+              <View style={styles.buttonContent}>
+                <LayoutList size={42} color="#ffffff" strokeWidth={1.5} />
+                <View style={styles.buttonTextContainer}>
+                  <Text style={[styles.buttonTitle, { fontSize: 24 }]}>Master List</Text>
+                  <Text style={styles.buttonDesc}>PAR levels & stock management</Text>
                 </View>
               </View>
             </TouchableOpacity>

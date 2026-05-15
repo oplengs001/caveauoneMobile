@@ -19,7 +19,6 @@ import {
   Check,
   ChevronLeft,
   PackageOpen,
-  Printer,
   Search as SearchIcon
 } from 'lucide-react-native';
 import { useCallback, useEffect, useState } from "react";
@@ -35,7 +34,6 @@ import {
   View,
 } from "react-native";
 import { InventoryBottle, Location, MasterWine } from "../../types";
-import { printLabels } from "../../utils/printLabels";
 
 // A mapped type that includes the resolved master wine and location data
 type BottleView = InventoryBottle & {
@@ -187,24 +185,6 @@ export default function InventoryScreen() {
     if (next.size === 0) setIsSelectionMode(false);
   };
 
-  const handleBatchPrint = async () => {
-    const selectedBottles = bottles.filter(b => selectedIds.has(b.id));
-    const labelsData = selectedBottles.map(b => ({
-      bottleId: b.id,
-      sku: b.sku,
-      wineName: b.masterWineData?.name || "Unknown",
-      vintage: b.masterWineData?.vintage || "N/V",
-      dateAdded: b.createdAt.toLocaleDateString()
-    }));
-
-    try {
-      await printLabels(labelsData);
-      setSelectedIds(new Set());
-      setIsSelectionMode(false);
-    } catch (error) {
-      console.error("Batch print error:", error);
-    }
-  };
 
   const onRefresh = useCallback(() => {
     fetchInventory(true);
@@ -254,10 +234,10 @@ export default function InventoryScreen() {
       </View>
 
       <Text style={[styles.itemSubtitle, { color: theme.textSecondary }]}>
-        SKU: {item.sku} • {item.masterWineData?.vintage}
+        SKU: {item.sku} • {item.masterWineData?.vintage}{item.masterWineData?.format ? ` • ${item.masterWineData.format}` : ''}
       </Text>
-      <Text style={[styles.itemLocation, { color: theme.textSecondary }]}>
-        {item.locationData?.name || "UNSHELVED"}
+      <Text style={[styles.itemLocation, { color: item.locationData ? theme.secondary : theme.accent }]}>
+        {item.locationData ? `📍 ${item.locationData.name}` : '📦 Unshelved'}
       </Text>
     </TouchableOpacity>
   );
@@ -367,21 +347,7 @@ export default function InventoryScreen() {
         />
       )}
 
-      {isSelectionMode && (
-        <View style={styles.batchActionBar}>
-          <View style={styles.batchInfo}>
-            <Text style={styles.batchCount}>{selectedIds.size} labels selected</Text>
-          </View>
-          <TouchableOpacity
-            style={[styles.printButton, selectedIds.size === 0 && styles.printButtonDisabled]}
-            disabled={selectedIds.size === 0}
-            onPress={handleBatchPrint}
-          >
-            <Printer size={20} color="#fff" strokeWidth={2.5} />
-            <Text style={styles.printButtonText}>Print Batch</Text>
-          </TouchableOpacity>
-        </View>
-      )}
+
     </SafeAreaView>
   );
 }
