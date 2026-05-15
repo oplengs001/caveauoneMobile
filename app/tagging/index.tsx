@@ -397,9 +397,25 @@ export default function TaggingScreen() {
               </Text>
               <TouchableOpacity
                 style={[styles.onboardingButton, { backgroundColor: theme.primary }]}
-                onPress={() => router.push('/onboarding')}
+                onPress={() => isStore ? (isProcessing.current = false, setState("scanning"), setIsIncoming(false)) : router.push('/onboarding')}
               >
-                <Text style={styles.onboardingButtonText}>VIEW ONBOARDING TASKS</Text>
+                <Text style={styles.onboardingButtonText}>
+                  {isStore ? 'RESCAN BOTTLE' : 'VIEW ONBOARDING TASKS'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : (isStore && isIncoming && bottle?.status !== 'outbound') ? (
+            <View style={styles.incomingWarningContainer}>
+              <AlertTriangle size={48} color="#f59e0b" strokeWidth={1.5} />
+              <Text style={styles.incomingWarningTitle}>Transfer Required</Text>
+              <Text style={styles.incomingWarningText}>
+                This bottle is not marked as outbound to your store. It must be dispatched from its current location before it can be received.
+              </Text>
+              <TouchableOpacity
+                style={[styles.onboardingButton, { backgroundColor: theme.primary }]}
+                onPress={() => { isProcessing.current = false; setState("scanning"); setIsIncoming(false); }}
+              >
+                <Text style={styles.onboardingButtonText}>RESCAN BOTTLE</Text>
               </TouchableOpacity>
             </View>
           ) : (
@@ -469,7 +485,7 @@ export default function TaggingScreen() {
           )}
 
           <View style={styles.footer}>
-            {bottle?.status !== 'incoming' && (
+            {bottle?.status !== 'incoming' && !(isStore && isIncoming && bottle?.status !== 'outbound') && (
               <>
                 {isStore && (
                   <TouchableOpacity

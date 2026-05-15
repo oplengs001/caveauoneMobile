@@ -26,7 +26,7 @@ export interface InventoryBottle {
   locationRef: DocumentReference | null;
   storeRef: DocumentReference | null;
   sku: string;
-  status: "incoming" | "received" | "shelved" | "consumed" | "damaged" | "lost" | "in_transit";
+  status: "incoming" | "received" | "shelved" | "consumed" | "damaged" | "lost" | "outbound";
   receiptId?: string;
   createdAt: Date;
   updatedAt: Date;
