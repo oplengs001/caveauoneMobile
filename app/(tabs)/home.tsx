@@ -8,7 +8,6 @@ import {
   FileDown,
   LogOut,
   MapPin,
-  PackageSearch,
   Search,
   Truck,
   Wine
@@ -86,20 +85,6 @@ export default function HomeScreen() {
         </View>
 
         <View style={styles.buttonContainer}>
-          {!isStore && (
-            <TouchableOpacity
-              style={[styles.actionButton, { backgroundColor: theme.primary }]}
-              onPress={() => router.push('/intake/scan')}
-            >
-              <View style={styles.buttonContent}>
-                <PackageSearch size={42} color="#ffffff" strokeWidth={1.5} />
-                <View style={styles.buttonTextContainer}>
-                  <Text style={styles.buttonTitle}>Receive Delivery</Text>
-                  <Text style={styles.buttonDesc}>Scan and intake new arrivals</Text>
-                </View>
-              </View>
-            </TouchableOpacity>
-          )}
 
           {!isStore && (
             <TouchableOpacity

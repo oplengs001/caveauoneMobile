@@ -307,14 +307,6 @@ export default function InventoryScreen() {
                 </Text>
               </TouchableOpacity>
 
-              <TouchableOpacity
-                style={styles.headerActionChip}
-                onPress={() => setIsSelectionMode(true)}
-                activeOpacity={0.7}
-              >
-                <Printer size={16} color="#6366f1" strokeWidth={2.5} />
-                <Text style={styles.headerActionText}>Print</Text>
-              </TouchableOpacity>
             </View>
           )}
         </View>
