@@ -4,6 +4,7 @@ export interface AppUser {
   id: string;
   email: string;
   role: "admin" | "store" | "warehouse";
+  locationId?: string;
   createdAt: Date;
 }
 
@@ -22,15 +23,25 @@ export interface InventoryBottle {
   id: string;
   masterWineRef: DocumentReference;
   locationRef: DocumentReference | null;
+  storeRef: DocumentReference | null;
   sku: string;
-  status: "incoming" | "received" | "shelved" | "consumed" | "damaged" | "lost";
+  status: "incoming" | "received" | "shelved" | "consumed" | "damaged" | "lost" | "in_transit";
   receiptId?: string;
   createdAt: Date;
   updatedAt: Date;
 }
 
+export interface Store {
+  id: string;
+  name: string;
+  type: "Boutique" | "Warehouse";
+  address?: string;
+  createdAt?: any;
+}
+
 export interface Location {
   id: string;
+  storeId: string;
   name: string;
   type: string;
   capacity?: number;
@@ -102,10 +113,10 @@ export interface OnboardingItem {
   classification?: string;
   grapeVariety: string;
   wineType: WineType;
-  
+
   // Progress tracking
-  onboardedQty: number; 
-  bottleIds: string[]; 
+  onboardedQty: number;
+  bottleIds: string[];
 }
 
 export interface OnboardingTask {

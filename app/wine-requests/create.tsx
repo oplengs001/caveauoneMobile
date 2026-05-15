@@ -117,7 +117,8 @@ export default function CreateWineRequest() {
     setSubmitting(true);
     try {
       const requestData = {
-        storeId: profile?.id || 'anonymous',
+        storeId: profile?.locationId || 'unknown_store',
+        requesterId: profile?.id || 'anonymous',
         storeEmail: profile?.email || 'unknown',
         status: 'pending',
         items: selectedItems.map(item => ({

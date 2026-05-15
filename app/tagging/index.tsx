@@ -50,6 +50,7 @@ export default function TaggingScreen() {
   const [locations, setLocations] = useState<Location[]>([]);
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [isIncoming, setIsIncoming] = useState(false);
   const isProcessing = useRef(false);
   const router = useRouter();
   const { bottleId: initialBottleId } = useLocalSearchParams();
@@ -103,6 +104,13 @@ export default function TaggingScreen() {
       const bottleData = { id: bottleSnap.id, ...bottleSnap.data() } as InventoryBottle;
       setBottle(bottleData);
 
+      // Detection: If bottle is not at the user's assigned node
+      if (isStore && profile?.locationId && (bottleData as any).storeRef?.id !== profile.locationId) {
+        setIsIncoming(true);
+      } else {
+        setIsIncoming(false);
+      }
+
       if (bottleData.masterWineRef) {
         const wineSnap = await getDoc(bottleData.masterWineRef);
         if (wineSnap.exists()) {
@@ -149,6 +157,7 @@ export default function TaggingScreen() {
             setWine(null);
             setScannedSku(null);
             setSelectedLocationId(null);
+            setIsIncoming(false);
           },
         },
         {
@@ -159,6 +168,46 @@ export default function TaggingScreen() {
     } catch (error) {
       console.error("Error updating bottle:", error);
       Alert.alert("Error", "Failed to finalize shelving.");
+      setState("displaying");
+    }
+  };
+
+  const handleReceiveStock = async () => {
+    if (!bottle || !profile?.locationId) return;
+
+    setState("updating");
+    try {
+      const bottleRef = doc(db, "inventory_bottles", bottle.id);
+      const storeRef = doc(db, "stores", profile.locationId);
+
+      await updateDoc(bottleRef, {
+        storeRef: storeRef,
+        locationRef: null, // Clear physical bin until shelved
+        status: "shelved",
+        updatedAt: new Date(),
+      });
+
+      Alert.alert("Received!", "The bottle has been successfully added to your store's inventory.", [
+        {
+          text: "Scan Next",
+          onPress: () => {
+            isProcessing.current = false;
+            setState("scanning");
+            setBottle(null);
+            setWine(null);
+            setScannedSku(null);
+            setSelectedLocationId(null);
+            setIsIncoming(false);
+          },
+        },
+        {
+          text: "Finish",
+          onPress: () => router.back(),
+        },
+      ]);
+    } catch (error) {
+      console.error("Error receiving stock:", error);
+      Alert.alert("Error", "Failed to update bottle location.");
       setState("displaying");
     }
   };
@@ -334,26 +383,47 @@ export default function TaggingScreen() {
               </TouchableOpacity>
             )}
 
-            <TouchableOpacity
-              style={[
-                styles.confirmButton,
-                { backgroundColor: isStore ? theme.secondary : '#10b981' },
-                (!selectedLocationId || state === "updating") && styles.buttonDisabled,
-              ]}
-              onPress={handleConfirmTagging}
-              disabled={!selectedLocationId || state === "updating"}
-            >
-              {state === "updating" ? (
-                <ActivityIndicator color="#fff" size="small" />
-              ) : (
-                <>
-                  <CheckCircle2 size={24} color="#fff" strokeWidth={2.5} />
-                  <Text style={styles.confirmButtonText}>
-                    {isStore ? "UPDATE LOCATION" : "FINALIZE SHELVING"}
-                  </Text>
-                </>
-              )}
-            </TouchableOpacity>
+            {isIncoming ? (
+              <TouchableOpacity
+                style={[
+                  styles.confirmButton,
+                  { backgroundColor: '#059669' }, // Emerald-600
+                  state === "updating" && styles.buttonDisabled,
+                ]}
+                onPress={handleReceiveStock}
+                disabled={state === "updating"}
+              >
+                {state === "updating" ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <>
+                    <CheckCircle2 size={24} color="#fff" strokeWidth={2.5} />
+                    <Text style={styles.confirmButtonText}>RECEIVE INTO STORE</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={[
+                  styles.confirmButton,
+                  { backgroundColor: isStore ? theme.secondary : '#10b981' },
+                  (!selectedLocationId || state === "updating") && styles.buttonDisabled,
+                ]}
+                onPress={handleConfirmTagging}
+                disabled={!selectedLocationId || state === "updating"}
+              >
+                {state === "updating" ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <>
+                    <CheckCircle2 size={24} color="#fff" strokeWidth={2.5} />
+                    <Text style={styles.confirmButtonText}>
+                      {isStore ? "UPDATE LOCATION" : "FINALIZE SHELVING"}
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       )}

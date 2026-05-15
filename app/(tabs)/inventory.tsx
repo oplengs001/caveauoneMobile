@@ -5,6 +5,7 @@ import { Stack, useRouter } from "expo-router";
 import {
   QueryDocumentSnapshot,
   collection,
+  doc,
   getDoc,
   getDocs,
   limit,
@@ -82,6 +83,11 @@ export default function InventoryScreen() {
       const baseQueries = [];
       if (showUnshelvedOnly) {
         baseQueries.push(where("status", "==", "received"));
+      }
+
+      // Boutique Scoping: If store user, only show their node's inventory
+      if (isStore && profile?.locationId) {
+        baseQueries.push(where("storeRef", "==", doc(db, "stores", profile.locationId)));
       }
 
       if (searchQuery.trim()) {
