@@ -1,9 +1,18 @@
 import { Colors } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
-import { auth } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
 import { Stack, useRouter } from 'expo-router';
 import { signOut } from 'firebase/auth';
 import {
+  collection,
+  doc,
+  getCountFromServer,
+  getDocs,
+  query,
+  where,
+} from 'firebase/firestore';
+import {
+  AlertTriangle,
   ClipboardList,
   FileDown,
   LayoutList,
@@ -13,7 +22,7 @@ import {
   Truck,
   Wine
 } from 'lucide-react-native';
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Alert, Dimensions, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 const { width } = Dimensions.get('window');
@@ -21,6 +30,45 @@ const { width } = Dimensions.get('window');
 export default function HomeScreen() {
   const router = useRouter();
   const { profile, loading } = useAuth();
+  const [parAlertCount, setParAlertCount] = useState(0);
+
+  useEffect(() => {
+    const checkParAlerts = async () => {
+      const storeId = profile?.locationId;
+      if (profile?.role !== 'store' || !storeId) return;
+
+      try {
+        const settingsSnap = await getDocs(
+          query(collection(db, 'store_wine_settings'),
+            where('storeId', '==', storeId),
+            where('discontinued', '==', false)
+          )
+        );
+
+        const counts = await Promise.all(
+          settingsSnap.docs.map(async (d) => {
+            const { masterWineId, parLevel } = d.data();
+            const wineRef = doc(db, 'master_wines', masterWineId);
+            const snap = await getCountFromServer(
+              query(
+                collection(db, 'inventory_bottles'),
+                where('storeRef', '==', doc(db, 'stores', storeId)),
+                where('masterWineRef', '==', wineRef),
+                where('status', 'in', ['received', 'shelved']),
+              )
+            );
+            return snap.data().count <= parLevel ? 1 : 0;
+          })
+        );
+
+        setParAlertCount(counts.reduce((a, b) => a + b, 0));
+      } catch (err) {
+        console.error('PAR alert check failed:', err);
+      }
+    };
+
+    if (!loading) checkParAlerts();
+  }, [profile, loading]);
 
   const handleSignOut = () => {
     Alert.alert(
@@ -84,6 +132,23 @@ export default function HomeScreen() {
             {isStore ? 'Boutique Sommelier Terminal' : 'Warehouse Management System'}
           </Text>
         </View>
+
+        {/* PAR Alert Banner — store only */}
+        {isStore && parAlertCount > 0 && (
+          <TouchableOpacity
+            style={styles.parAlertBanner}
+            onPress={() => router.push('/store-master-list')}
+            activeOpacity={0.8}
+          >
+            <AlertTriangle size={20} color="#92400e" strokeWidth={2.5} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.parAlertTitle}>
+                {parAlertCount} wine{parAlertCount > 1 ? 's' : ''} below PAR level
+              </Text>
+              <Text style={styles.parAlertSub}>Tap to review & request stock →</Text>
+            </View>
+          </TouchableOpacity>
+        )}
 
         <View style={styles.buttonContainer}>
 
@@ -238,6 +303,33 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     marginTop: 4,
+  },
+  parAlertBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    backgroundColor: '#fef3c7',
+    borderWidth: 1.5,
+    borderColor: '#fcd34d',
+    borderRadius: 20,
+    padding: 18,
+    marginBottom: 24,
+    shadowColor: '#f59e0b',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  parAlertTitle: {
+    color: '#78350f',
+    fontWeight: '800',
+    fontSize: 15,
+    marginBottom: 2,
+  },
+  parAlertSub: {
+    color: '#92400e',
+    fontSize: 12,
+    fontWeight: '600',
   },
   buttonContainer: {
     gap: 20,
