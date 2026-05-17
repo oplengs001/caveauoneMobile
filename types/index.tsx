@@ -79,6 +79,7 @@ export interface WineRequestItem {
   masterWineId: string;
   wineName: string;
   vintage: string;
+  format?: string;
   sku: string;
   qty: number;
   pulledQty?: number;
