@@ -2,16 +2,10 @@ import { db } from "@/lib/firebase";
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import {
-  addDoc,
-  collection,
   doc,
-  getDocs,
   onSnapshot,
-  query,
   serverTimestamp,
-  setDoc,
-  updateDoc,
-  where
+  updateDoc
 } from "firebase/firestore";
 import {
   Camera,
@@ -134,7 +128,7 @@ export default function OnboardingDetailScreen() {
       // 1. Update the existing Inventory Bottle
       // These bottles were already created as "incoming" in the admin dashboard
       const bottleRef = doc(db, "inventory_bottles", scannedData);
-      
+
       await updateDoc(bottleRef, {
         status: "received",
         updatedAt: serverTimestamp(),
@@ -476,6 +470,7 @@ const styles = StyleSheet.create({
   mainButton: {
     flexDirection: 'row',
     backgroundColor: '#4f46e5',
+    paddingHorizontal: 30,
     paddingVertical: 20,
     borderRadius: 20,
     alignItems: 'center',

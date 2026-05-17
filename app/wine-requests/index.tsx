@@ -107,14 +107,14 @@ export default function WineRequestsIndex() {
   const renderItem = ({ item }: { item: WineRequest }) => {
     const status = getStatusStyle(item.status);
     const StatusIcon = status.icon;
-    console.log(item, "item");
+
     return (
       <TouchableOpacity
         style={[
           styles.card,
           { backgroundColor: theme.card, borderColor: theme.border },
         ]}
-        onPress={() => router.push(`/wine-requests/${item.id}`)}
+        onPress={() => router.push({ pathname: '/wine-requests/[id]', params: { id: item.id } })}
       >
         <View style={styles.cardHeader}>
           <View style={styles.dateRow}>
