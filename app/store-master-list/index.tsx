@@ -62,10 +62,10 @@ function computeStatus(stockCount: number, setting: StoreWineSetting | null): { 
 }
 
 const STATUS_CONFIG: Record<StockStatus, { label: string; color: string; bg: string }> = {
-  in_stock:     { label: 'In Stock',     color: '#065f46', bg: '#d1fae5' },
-  stockout:     { label: 'Stockout',     color: '#991b1b', bg: '#fee2e2' },
-  overstock:    { label: 'Overstock',    color: '#1e40af', bg: '#dbeafe' },
-  par_alert:    { label: 'PAR Alert',    color: '#92400e', bg: '#fef3c7' },
+  in_stock: { label: 'In Stock', color: '#065f46', bg: '#d1fae5' },
+  stockout: { label: 'Stockout', color: '#991b1b', bg: '#fee2e2' },
+  overstock: { label: 'Overstock', color: '#1e40af', bg: '#dbeafe' },
+  par_alert: { label: 'PAR Alert', color: '#92400e', bg: '#fef3c7' },
   discontinued: { label: 'Discontinued', color: '#475569', bg: '#f1f5f9' },
 };
 
