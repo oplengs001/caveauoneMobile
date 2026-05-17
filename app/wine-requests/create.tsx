@@ -47,7 +47,7 @@ export default function CreateWineRequest() {
   >([]);
   const [fetchingWines, setFetchingWines] = useState(false);
   const [selectedItems, setSelectedItems] = useState<
-    Array<{ wine: MasterWine & { stock: number }; qty: number }>
+    { wine: MasterWine & { stock: number }; qty: number }[]
   >([]);
   const [submitting, setSubmitting] = useState(false);
 
@@ -70,7 +70,8 @@ export default function CreateWineRequest() {
         const stock = bottlesData.filter(
           (b) =>
             b.masterWineRef.id === doc.id &&
-            (b.status === "received" || b.status === "shelved"),
+            (b.status === "received" || b.status === "shelved") &&
+            !b.storeRef,
         ).length;
 
         return { ...wine, stock };
