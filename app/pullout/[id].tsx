@@ -1,13 +1,4 @@
-import { 
-  ChevronLeft, 
-  Search, 
-  CheckCircle2, 
-  AlertCircle, 
-  ScanQrCode,
-  MapPin,
-  PackageSearch,
-  Check
-} from 'lucide-react-native';
+import { useAuth } from "@/context/AuthContext";
 import { db } from "@/lib/firebase";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
@@ -21,6 +12,15 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
+import {
+  AlertCircle,
+  CheckCircle2,
+  ChevronLeft,
+  MapPin,
+  PackageSearch,
+  ScanQrCode,
+  Search
+} from 'lucide-react-native';
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -37,11 +37,12 @@ import { InventoryBottle, Location, MasterWine, PulloutRequest } from "../../typ
 
 export default function PulloutDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { profile } = useAuth();
   const [request, setRequest] = useState<PulloutRequest | null>(null);
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<(InventoryBottle & { wineName: string, locationName: string })[]>([]);
+  const [searchResults, setSearchResults] = useState<(InventoryBottle & { wineName: string, locationName: string, vintage: string, producer: string, format: string })[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const isProcessing = useRef(false);
   const [permission, requestPermission] = useCameraPermissions();
@@ -241,21 +242,35 @@ export default function PulloutDetailScreen() {
     setSearchLoading(true);
     try {
       const bottlesRef = collection(db, "inventory_bottles");
-      const q = query(
-        bottlesRef,
+      const constraints: any[] = [
         where("sku", "==", term),
         where("status", "in", ["received", "shelved"])
-      );
+      ];
+
+      if (profile?.locationId) {
+        constraints.push(where("storeRef", "==", doc(db, "stores", profile.locationId)));
+      }
+
+      const q = query(bottlesRef, ...constraints);
       const snap = await getDocs(q);
 
       const results = await Promise.all(snap.docs.map(async (doc) => {
         const data = doc.data();
         let wineName = "Unknown Wine";
         let locationName = "No Location";
+        let vintage = "NV";
+        let producer = "";
+        let format = "75cl";
 
         if (data.masterWineRef) {
           const wineSnap = await getDoc(data.masterWineRef);
-          if (wineSnap.exists()) wineName = (wineSnap.data() as MasterWine).name;
+          if (wineSnap.exists()) {
+            const mw = wineSnap.data() as MasterWine;
+            wineName = mw.name;
+            vintage = mw.vintage || "NV";
+            producer = mw.producer || "";
+            format = mw.format || "75cl";
+          }
         }
 
         if (data.locationRef) {
@@ -267,6 +282,9 @@ export default function PulloutDetailScreen() {
           id: doc.id,
           ...data,
           wineName,
+          vintage,
+          producer,
+          format,
           locationName,
         } as any;
       }));
@@ -364,6 +382,9 @@ export default function PulloutDetailScreen() {
                     <View key={res.id} style={styles.searchResultItem}>
                       <View style={styles.resultInfo}>
                         <Text style={styles.resultWineName}>{res.wineName}</Text>
+                        <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '500', marginBottom: 4 }}>
+                          {res.vintage} • {res.producer} • {res.format}
+                        </Text>
                         <Text style={styles.resultLocation}>Located at: {res.locationName}</Text>
                       </View>
                       <View style={styles.resultBadge}>
@@ -400,9 +421,14 @@ export default function PulloutDetailScreen() {
                         onPress={() => !isFulfilled && !isSkipped && handleSearch(item.sku)}
                       >
                         <View style={styles.itemHeaderRow}>
-                          <Text style={[styles.itemName, isSkipped && styles.textMuted]}>
-                            {item.wineName}
-                          </Text>
+                          <View style={{ flex: 1, paddingRight: 10 }}>
+                            <Text style={[styles.itemName, isSkipped && styles.textMuted]}>
+                              {item.wineName}
+                            </Text>
+                            <Text style={[{ fontSize: 12, color: '#64748b', fontWeight: '600', marginTop: 2 }, isSkipped && styles.textMuted]}>
+                              {item.vintage} • {item.producer || "Independent Producer"} • {item.format}
+                            </Text>
+                          </View>
                           <View style={styles.itemActions}>
                             {isFulfilled ? (
                               <CheckCircle2 size={20} color="#10b981" strokeWidth={2.5} />
@@ -426,7 +452,7 @@ export default function PulloutDetailScreen() {
                             )}
                           </View>
                         </View>
-                        
+
                         <View style={styles.itemMetaRow}>
                           <Text style={styles.itemSku}>SKU: {item.sku}</Text>
                           <Text style={[
@@ -441,12 +467,12 @@ export default function PulloutDetailScreen() {
                         {!isSkipped && (
                           <View style={styles.progressContainer}>
                             <View style={styles.progressBarBg}>
-                              <View 
+                              <View
                                 style={[
-                                  styles.progressBarFill, 
+                                  styles.progressBarFill,
                                   { width: `${progress * 100}%` },
                                   isFulfilled && { backgroundColor: '#10b981' }
-                                ]} 
+                                ]}
                               />
                             </View>
                           </View>

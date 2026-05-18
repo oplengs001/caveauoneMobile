@@ -305,7 +305,7 @@ export default function TaggingScreen() {
           <View style={[styles.successCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
             <Text style={[styles.wineName, { color: theme.text, textAlign: 'center' }]}>{wine?.name}</Text>
             <Text style={[styles.wineVintage, { color: theme.textSecondary, textAlign: 'center', marginTop: 8 }]}>
-              {wine?.vintage} • {wine?.producer}
+              {wine?.vintage} • {wine?.producer} • {wine?.format}
             </Text>
           </View>
 

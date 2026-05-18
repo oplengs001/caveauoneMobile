@@ -51,6 +51,9 @@ export interface Location {
 export interface PulloutRequestItem {
   masterWineId: string;
   wineName: string;
+  vintage?: string;
+  producer?: string;
+  format?: string;
   sku: string;
   requestedQty: number;
   pulledQty: number;
@@ -79,7 +82,8 @@ export interface WineRequestItem {
   masterWineId: string;
   wineName: string;
   vintage: string;
-  format?: string;
+  producer: string;
+  format: string;
   sku: string;
   qty: number;
   pulledQty?: number;

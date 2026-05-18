@@ -143,6 +143,7 @@ export default function CreateWineRequest() {
           wineName: item.wine.name,
           vintage: item.wine.vintage,
           format: item.wine.format,
+          producer: item.wine.producer || "",
           sku: item.wine.sku || "N/A",
           price: item.wine.price || 0,
           qty: item.qty,

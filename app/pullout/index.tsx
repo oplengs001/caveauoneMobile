@@ -144,8 +144,9 @@ export default function PulloutRequestsScreen() {
         <View style={styles.itemsSummary}>
           <Text style={styles.summaryTitle}>Item List Overview</Text>
           {item.items.map((i, index) => (
-            <Text key={index} style={styles.summaryItem} numberOfLines={1}>
+            <Text key={index} style={styles.summaryItem} numberOfLines={2}>
               • {i.wineName} <Text style={styles.summaryQty}>({i.requestedQty})</Text>
+              {"\n"}  <Text style={{ fontSize: 11, color: '#94a3b8' }}>{i.vintage} • {i.producer || "Independent Producer"} • {i.format}</Text>
             </Text>
           ))}
         </View>
