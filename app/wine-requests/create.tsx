@@ -69,9 +69,9 @@ export default function CreateWineRequest() {
         const wine = { id: doc.id, ...doc.data() } as MasterWine;
         const stock = bottlesData.filter(
           (b) =>
-            b.masterWineRef.id === doc.id &&
+            b.masterWineRef?.id === doc.id &&
             (b.status === "received" || b.status === "shelved") &&
-            !b.storeRef,
+            b.storeRef?.id !== profile?.locationId,
         ).length;
 
         return { ...wine, stock };
@@ -144,10 +144,11 @@ export default function CreateWineRequest() {
           vintage: item.wine.vintage,
           format: item.wine.format,
           sku: item.wine.sku || "N/A",
+          price: item.wine.price || 0,
           qty: item.qty,
           pulledQty: 0,
         })),
-        totalAmount: 0, // Not used in mobile but for compatibility
+        totalAmount: selectedItems.reduce((sum, item) => sum + ((item.wine.price || 0) * item.qty), 0),
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       };
@@ -188,9 +189,12 @@ export default function CreateWineRequest() {
           <Text style={[styles.wineName, { color: theme.text }]}>
             {item.name}
           </Text>
+          <Text style={[styles.wineSub, { color: theme.textSecondary, marginBottom: 6 }]}>
+            {item.vintage} • {item.producer} • {item.format}
+          </Text>
           <View style={styles.wineMeta}>
-            <Text style={[styles.wineSub, { color: theme.textSecondary }]}>
-              {item.vintage} • {item.producer}
+            <Text style={[styles.wineSub, { color: theme.textSecondary, fontSize: 11, fontWeight: '700' }]}>
+              SKU: {item.sku || 'N/A'}
             </Text>
             <View
               style={[
