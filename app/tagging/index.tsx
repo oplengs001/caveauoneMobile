@@ -44,7 +44,7 @@ import {
 } from "react-native";
 import { InventoryBottle, Location, MasterWine } from "../../types";
 
-type TaggingState = "scanning" | "displaying" | "updating";
+type TaggingState = "scanning" | "displaying" | "updating" | "success";
 
 const STORAGE_CATEGORIES = [
   { label: "Locker", prefix: "L", icon: "🔒", major: "Locker", minor: "Box" },
@@ -68,6 +68,7 @@ export default function TaggingScreen() {
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [isIncoming, setIsIncoming] = useState(false);
+  const [successAction, setSuccessAction] = useState<"sold" | "received" | "tagged" | null>(null);
 
   // Add Location Modal State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -215,24 +216,8 @@ export default function TaggingScreen() {
         updatedAt: new Date(),
       });
 
-      Alert.alert("Success", "Bottle has been assigned to location.", [
-        {
-          text: "Scan Next",
-          onPress: () => {
-            isProcessing.current = false;
-            setState("scanning");
-            setBottle(null);
-            setWine(null);
-            setScannedSku(null);
-            setSelectedLocationId(null);
-            setIsIncoming(false);
-          },
-        },
-        {
-          text: "Finish",
-          onPress: () => router.back(),
-        },
-      ]);
+      setSuccessAction("tagged");
+      setState("success");
     } catch (error) {
       console.error("Error updating bottle:", error);
       Alert.alert("Error", "Failed to finalize shelving.");
@@ -255,24 +240,8 @@ export default function TaggingScreen() {
         updatedAt: new Date(),
       });
 
-      Alert.alert("Received!", "The bottle has been successfully added to your store's inventory.", [
-        {
-          text: "Scan Next",
-          onPress: () => {
-            isProcessing.current = false;
-            setState("scanning");
-            setBottle(null);
-            setWine(null);
-            setScannedSku(null);
-            setSelectedLocationId(null);
-            setIsIncoming(false);
-          },
-        },
-        {
-          text: "Finish",
-          onPress: () => router.back(),
-        },
-      ]);
+      setSuccessAction("received");
+      setState("success");
     } catch (error) {
       console.error("Error receiving stock:", error);
       Alert.alert("Error", "Failed to update bottle location.");
@@ -292,23 +261,8 @@ export default function TaggingScreen() {
         updatedAt: new Date(),
       });
 
-      Alert.alert("Sold!", "The bottle has been marked as sold and removed from active inventory.", [
-        {
-          text: "Scan Next",
-          onPress: () => {
-            isProcessing.current = false;
-            setState("scanning");
-            setBottle(null);
-            setWine(null);
-            setScannedSku(null);
-            setSelectedLocationId(null);
-          },
-        },
-        {
-          text: "Finish",
-          onPress: () => router.back(),
-        },
-      ]);
+      setSuccessAction("sold");
+      setState("success");
     } catch (error) {
       console.error("Error marking as sold:", error);
       Alert.alert("Error", "Failed to update status.");
@@ -333,7 +287,55 @@ export default function TaggingScreen() {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
       <Stack.Screen options={{ headerShown: false }} />
-      {state === "scanning" ? (
+
+      {state === "success" && (
+        <View style={styles.successContainer}>
+          <View style={styles.successCircle}>
+            <CheckCircle2 size={80} color="#10b981" strokeWidth={3} />
+          </View>
+          <Text style={styles.successTitle}>
+            {successAction === "sold" ? "Bottle Sold!" :
+              successAction === "received" ? "Bottle Received!" : "Location Tagged!"}
+          </Text>
+          <Text style={styles.successDesc}>
+            {successAction === "sold" ? "The bottle has been marked as sold and removed from active inventory." :
+              successAction === "received" ? "The bottle has been successfully added to your store's inventory." : "The bottle has been assigned to its new storage location."}
+          </Text>
+
+          <View style={[styles.successCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <Text style={[styles.wineName, { color: theme.text, textAlign: 'center' }]}>{wine?.name}</Text>
+            <Text style={[styles.wineVintage, { color: theme.textSecondary, textAlign: 'center', marginTop: 8 }]}>
+              {wine?.vintage} • {wine?.producer}
+            </Text>
+          </View>
+
+          <TouchableOpacity
+            style={[styles.mainButton, { backgroundColor: theme.primary, marginTop: 40 }]}
+            onPress={() => {
+              isProcessing.current = false;
+              setState("scanning");
+              setBottle(null);
+              setWine(null);
+              setScannedSku(null);
+              setSelectedLocationId(null);
+              setIsIncoming(false);
+              setSuccessAction(null);
+            }}
+          >
+            <ScanQrCode size={24} color="#fff" />
+            <Text style={styles.mainButtonText}>Scan Another Bottle</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.secondaryButton}
+            onPress={() => router.back()}
+          >
+            <Text style={styles.secondaryButtonText}>Finish & Return</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {state === "scanning" && (
         <View style={styles.scannerContainer}>
           <CameraView
             style={styles.camera}
@@ -359,7 +361,9 @@ export default function TaggingScreen() {
             </View>
           </CameraView>
         </View>
-      ) : (
+      )}
+
+      {(state === "displaying" || state === "updating") && (
         <View style={[styles.detailsContainer, { backgroundColor: theme.background }]}>
           <View style={[styles.header, { borderBottomColor: theme.border, borderBottomWidth: isStore ? 1 : 0 }]}>
             <TouchableOpacity onPress={() => { isProcessing.current = false; setState("scanning"); }} style={[styles.backButton, { backgroundColor: isStore ? theme.card : 'transparent', padding: isStore ? 10 : 0, borderRadius: 12, borderWidth: isStore ? 1 : 0, borderColor: theme.border }]}>
@@ -1091,6 +1095,70 @@ const styles = StyleSheet.create({
   wineFormat: {
     fontSize: 14,
     fontWeight: '700',
+  },
+  successContainer: {
+    flex: 1,
+    padding: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  successCircle: {
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 40,
+  },
+  successTitle: {
+    color: '#94a3b8',
+    fontSize: 32,
+    fontWeight: '900',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  successDesc: {
+    color: '#94a3b8',
+    fontSize: 16,
+    textAlign: 'center',
+    lineHeight: 24,
+    fontWeight: '500',
+    marginBottom: 32,
+  },
+  successCard: {
+    width: '100%',
+    padding: 24,
+    borderRadius: 24,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  mainButton: {
+    width: '100%',
+    flexDirection: 'row',
+    paddingHorizontal: 30,
+    paddingVertical: 20,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  mainButtonText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  secondaryButton: {
+    width: '100%',
+    padding: 20,
+    marginTop: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  secondaryButtonText: {
+    color: '#64748b',
+    fontSize: 16,
+    fontWeight: '800',
   },
 });
 
