@@ -18,6 +18,7 @@ import {
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
   Dimensions,
   Image,
   SafeAreaView,
@@ -28,7 +29,7 @@ import {
   View
 } from "react-native";
 import { OnboardingItem, OnboardingTask } from "../../types";
-
+const NEXT_JS_API_URL = "https://caveauone.vercel.app";
 const { width } = Dimensions.get('window');
 
 type Step = 'overview' | 'scan_label' | 'verify_qr' | 'success';
@@ -44,6 +45,28 @@ export default function OnboardingDetailScreen() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const cameraRef = useRef<CameraView>(null);
+  const scanAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (capturedImage) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(scanAnim, {
+            toValue: 1,
+            duration: 2500,
+            useNativeDriver: true,
+          }),
+          Animated.timing(scanAnim, {
+            toValue: 0,
+            duration: 2500,
+            useNativeDriver: true,
+          })
+        ])
+      ).start();
+    } else {
+      scanAnim.setValue(0);
+    }
+  }, [capturedImage, scanAnim]);
 
   useEffect(() => {
     if (!id) return;
@@ -73,7 +96,7 @@ export default function OnboardingDetailScreen() {
       setCapturedImage(photo.uri);
 
       // 1. Send to AI Analysis
-      const response = await fetch('http://192.168.1.10:3000/api/analyze-label', {
+      const response = await fetch(`${NEXT_JS_API_URL}/api/analyze-label`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ base64Image: photo.base64 }),
@@ -245,6 +268,21 @@ export default function OnboardingDetailScreen() {
               {capturedImage ? (
                 <View style={styles.capturedContainer}>
                   <Image source={{ uri: capturedImage }} style={styles.capturedImage} />
+
+                  <Animated.View
+                    style={[
+                      styles.laserScanner,
+                      {
+                        transform: [{
+                          translateY: scanAnim.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [-200, Dimensions.get('window').height]
+                          })
+                        }]
+                      }
+                    ]}
+                  />
+
                   <View style={styles.analyzingOverlay}>
                     <ActivityIndicator size="large" color="#fff" />
                     <Text style={styles.analyzingText}>Analyzing wine label...</Text>
@@ -683,11 +721,27 @@ const styles = StyleSheet.create({
     resizeMode: 'cover',
     opacity: 0.6,
   },
+  laserScanner: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: 150,
+    backgroundColor: 'rgba(79, 70, 229, 0.2)',
+    borderBottomWidth: 3,
+    borderBottomColor: '#6366f1',
+    shadowColor: '#6366f1',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.8,
+    shadowRadius: 15,
+    elevation: 10,
+    zIndex: 1,
+  },
   analyzingOverlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
     gap: 20,
+    zIndex: 2,
   },
   analyzingText: {
     color: '#fff',
