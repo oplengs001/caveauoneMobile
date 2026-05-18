@@ -20,7 +20,9 @@ import {
   Box,
   Camera,
   CheckCircle2,
+  Info,
   Map,
+  MapPin,
   Plus,
   RefreshCw,
   Save,
@@ -151,6 +153,8 @@ export default function TaggingScreen() {
           setWine({ id: wineSnap.id, ...wineSnap.data() } as MasterWine);
         }
       }
+
+      setSelectedLocationId(bottleData.locationRef?.id || null);
 
       setState("displaying");
     } catch (error) {
@@ -422,8 +426,29 @@ export default function TaggingScreen() {
                 <Text style={styles.onboardingButtonText}>RESCAN BOTTLE</Text>
               </TouchableOpacity>
             </View>
+          ) : isIncoming ? (
+            <View style={{ flex: 1, justifyContent: 'center' }}>
+              <View style={[styles.infoBanner, { flexDirection: 'column', alignItems: 'center', backgroundColor: 'rgba(16, 185, 129, 0.05)', borderColor: 'rgba(16, 185, 129, 0.2)', padding: 32, borderRadius: 24 }]}>
+                <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: 'rgba(16, 185, 129, 0.1)', justifyContent: 'center', alignItems: 'center', marginBottom: 16 }}>
+                  <CheckCircle2 size={32} color="#10b981" />
+                </View>
+                <Text style={[styles.infoBannerTitle, { color: '#10b981', fontSize: 20, textAlign: 'center' }]}>Ready to Receive</Text>
+                <Text style={[styles.infoBannerText, { textAlign: 'center', fontSize: 15, marginTop: 8 }]}>
+                  This bottle is inbound and ready. Tap the receive button below to finalize its transfer into your store inventory.
+                </Text>
+              </View>
+            </View>
           ) : (
             <>
+              {isStore && (
+                <View style={[styles.infoBanner, { backgroundColor: 'rgba(99, 102, 241, 0.05)', borderColor: 'rgba(99, 102, 241, 0.2)' }]}>
+                  <Wine size={24} color="#6366f1" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.infoBannerTitle, { color: '#6366f1' }]}>Store Actions</Text>
+                    <Text style={styles.infoBannerText}>This item is active in your inventory. You can mark it as sold instantly, or select a physical bin below.</Text>
+                  </View>
+                </View>
+              )}
               <View style={styles.sectionHeader}>
                 <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                   <Map size={18} color="#64748b" />
@@ -1095,6 +1120,28 @@ const styles = StyleSheet.create({
   wineFormat: {
     fontSize: 14,
     fontWeight: '700',
+  },
+  infoBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 16,
+    marginBottom: 24,
+  },
+  infoBannerTitle: {
+    fontSize: 13,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  infoBannerText: {
+    color: '#94a3b8',
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '600',
   },
   successContainer: {
     flex: 1,
