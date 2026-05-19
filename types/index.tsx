@@ -65,6 +65,7 @@ export interface PulloutRequestItem {
 export interface PulloutRequest {
   id: string;
   wineRequestId: string;
+  targetStoreId?: string;
   items: PulloutRequestItem[];
   status: "pending" | "in_progress" | "completed";
   createdAt: any;
@@ -93,6 +94,7 @@ export interface WineRequestItem {
 export interface WineRequest {
   id: string;
   storeId: string;
+  targetStoreId?: string;
   storeEmail: string;
   status: "pending" | "converted" | "rejected";
   items: WineRequestItem[];

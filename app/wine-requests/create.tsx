@@ -42,12 +42,14 @@ export default function CreateWineRequest() {
   [];
 
   const [searchQuery, setSearchQuery] = useState("");
+  const [locations, setLocations] = useState<{ id: string, name: string }[]>([]);
+  const [selectedLocationId, setSelectedLocationId] = useState<string>("all");
   const [masterWines, setMasterWines] = useState<
-    (MasterWine & { stock: number })[]
+    (MasterWine & { stock: number; stockByLocation: Record<string, number> })[]
   >([]);
   const [fetchingWines, setFetchingWines] = useState(false);
   const [selectedItems, setSelectedItems] = useState<
-    { wine: MasterWine & { stock: number }; qty: number }[]
+    { wine: MasterWine & { stock: number; stockByLocation: Record<string, number> }; qty: number }[]
   >([]);
   const [submitting, setSubmitting] = useState(false);
 
@@ -58,23 +60,40 @@ export default function CreateWineRequest() {
   const fetchWines = async () => {
     setFetchingWines(true);
     try {
-      const [winesSnap, bottlesSnap] = await Promise.all([
+      const [winesSnap, bottlesSnap, storesSnap] = await Promise.all([
         getDocs(collection(db, "master_wines")),
         getDocs(collection(db, "inventory_bottles")),
+        getDocs(collection(db, "stores"))
       ]);
 
+      const storesData = storesSnap.docs.map((d) => ({ id: d.id, name: d.data().name }));
       const bottlesData = bottlesSnap.docs.map((d) => d.data());
+
+      const availableStores = storesData.filter(s => s.id !== profile?.locationId);
+      setLocations(availableStores);
 
       const winesWithStock = winesSnap.docs.map((doc) => {
         const wine = { id: doc.id, ...doc.data() } as MasterWine;
-        const stock = bottlesData.filter(
-          (b) =>
+
+        let totalStock = 0;
+        const stockByLoc: Record<string, number> = {};
+
+        availableStores.forEach(store => {
+          stockByLoc[store.id] = 0;
+        });
+
+        bottlesData.forEach((b) => {
+          if (
             b.masterWineRef?.id === doc.id &&
             (b.status === "received" || b.status === "shelved") &&
-            b.storeRef?.id !== profile?.locationId,
-        ).length;
+            b.storeRef?.id && b.storeRef.id !== profile?.locationId
+          ) {
+            stockByLoc[b.storeRef.id] = (stockByLoc[b.storeRef.id] || 0) + 1;
+            totalStock++;
+          }
+        });
 
-        return { ...wine, stock };
+        return { ...wine, stock: totalStock, stockByLocation: stockByLoc };
       });
 
       setMasterWines(winesWithStock);
@@ -85,14 +104,21 @@ export default function CreateWineRequest() {
     }
   };
 
-  const filteredWines = masterWines.filter(
-    (w) =>
-      w.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      w.sku?.toLowerCase().includes(searchQuery.toLowerCase()),
-  );
+  const filteredWines = masterWines.filter((w) => {
+    const matchesSearch = w.name.toLowerCase().includes(searchQuery.toLowerCase()) || w.sku?.toLowerCase().includes(searchQuery.toLowerCase());
+    if (!matchesSearch) return false;
 
-  const addItem = (wine: MasterWine & { stock: number }) => {
-    if (wine.stock <= 0) {
+    if (selectedLocationId === "all") {
+      return true;
+    } else {
+      return w.stockByLocation[selectedLocationId] > 0;
+    }
+  });
+
+  const addItem = (wine: MasterWine & { stock: number; stockByLocation: Record<string, number> }) => {
+    const displayStock = selectedLocationId === "all" ? wine.stock : (wine.stockByLocation[selectedLocationId] || 0);
+
+    if (displayStock <= 0) {
       Alert.alert(
         "Out of Stock",
         "This wine is currently unavailable in the warehouse.",
@@ -102,7 +128,7 @@ export default function CreateWineRequest() {
 
     const existing = selectedItems.find((i) => i.wine.id === wine.id);
     if (existing) {
-      if (existing.qty + 1 > wine.stock) return;
+      if (existing.qty + 1 > displayStock) return;
       updateQty(wine.id, 1);
     } else {
       setSelectedItems([...selectedItems, { wine, qty: 1 }]);
@@ -135,6 +161,7 @@ export default function CreateWineRequest() {
     try {
       const requestData = {
         storeId: profile?.locationId || "unknown_store",
+        targetStoreId: selectedLocationId === "all" ? "warehouse" : selectedLocationId,
         requesterId: profile?.id || "anonymous",
         storeEmail: profile?.email || "unknown",
         status: "pending",
@@ -158,7 +185,7 @@ export default function CreateWineRequest() {
 
       Alert.alert(
         "Request Sent",
-        "Your requisition has been dispatched to the warehouse.",
+        "Your requisition has been dispatched to the admin.",
         [{ text: "OK", onPress: () => router.back() }],
       );
     } catch (error: any) {
@@ -171,9 +198,10 @@ export default function CreateWineRequest() {
   const renderWineItem = ({
     item,
   }: {
-    item: MasterWine & { stock: number };
+    item: MasterWine & { stock: number; stockByLocation: Record<string, number> };
   }) => {
-    const isOutOfStock = item.stock <= 0;
+    const displayStock = selectedLocationId === "all" ? item.stock : (item.stockByLocation[selectedLocationId] || 0);
+    const isOutOfStock = displayStock <= 0;
     const selectedCount =
       selectedItems.find((si) => si.wine.id === item.id)?.qty || 0;
 
@@ -213,7 +241,7 @@ export default function CreateWineRequest() {
                   { color: isOutOfStock ? theme.danger : theme.secondary },
                 ]}
               >
-                {item.stock} IN STOCK
+                {displayStock} IN STOCK
               </Text>
             </View>
           </View>
@@ -252,7 +280,7 @@ export default function CreateWineRequest() {
             Create Requisition
           </Text>
           <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-            Browse Warehouse Stock
+            Browse Inventory Stock
           </Text>
         </View>
         <View style={{ width: 28 }} />
@@ -274,6 +302,30 @@ export default function CreateWineRequest() {
             onChangeText={setSearchQuery}
           />
         </View>
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 12 }}>
+          <TouchableOpacity
+            style={[
+              styles.pill,
+              selectedLocationId === "all" ? { backgroundColor: theme.primary, borderColor: theme.primary } : { backgroundColor: theme.card, borderColor: theme.border }
+            ]}
+            onPress={() => setSelectedLocationId("all")}
+          >
+            <Text style={[styles.pillText, { color: selectedLocationId === "all" ? "#fff" : theme.textSecondary }]}>All Locations</Text>
+          </TouchableOpacity>
+          {locations.map(loc => (
+            <TouchableOpacity
+              key={loc.id}
+              style={[
+                styles.pill,
+                selectedLocationId === loc.id ? { backgroundColor: theme.primary, borderColor: theme.primary } : { backgroundColor: theme.card, borderColor: theme.border }
+              ]}
+              onPress={() => setSelectedLocationId(loc.id)}
+            >
+              <Text style={[styles.pillText, { color: selectedLocationId === loc.id ? "#fff" : theme.textSecondary }]}>{loc.name}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
       </View>
 
       {fetchingWines ? (
@@ -375,7 +427,7 @@ export default function CreateWineRequest() {
             ) : (
               <>
                 <Text style={styles.submitText}>
-                  SUBMIT TO WAREHOUSE ({totalQty})
+                  SUBMIT TO ADMIN ({totalQty})
                 </Text>
                 <Send size={18} color="#fff" strokeWidth={2.5} />
               </>
@@ -443,6 +495,17 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontWeight: "700",
     fontSize: 13,
+  },
+  pill: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    marginRight: 8,
+  },
+  pillText: {
+    fontSize: 12,
+    fontWeight: "700",
   },
   listContent: {
     padding: 24,
