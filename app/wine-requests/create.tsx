@@ -62,6 +62,9 @@ export default function CreateWineRequest() {
   >([]);
   const [submitting, setSubmitting] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [groupedForUI, setGroupedForUI] = useState<
+    Record<string, { items: typeof selectedItems; locationName: string }>
+  >({});
 
   useEffect(() => {
     fetchWines();
@@ -186,42 +189,144 @@ export default function CreateWineRequest() {
 
   const totalQty = selectedItems.reduce((acc, item) => acc + item.qty, 0);
 
+  const groupItemsByFulfillment = (
+    itemsToGroup: typeof selectedItems,
+    allLocations: typeof locations,
+  ) => {
+    if (itemsToGroup.length === 0) return {};
+
+    const itemAssignments: Map<string, string> = new Map(); // wine.id -> locationId
+    const usedLocations: Set<string> = new Set();
+
+    const sortedItems = [...itemsToGroup].sort((a, b) => {
+      const aOptions = Object.keys(a.wine.stockByLocation).filter(
+        (locId) => a.wine.stockByLocation[locId] >= a.qty,
+      ).length;
+      const bOptions = Object.keys(b.wine.stockByLocation).filter(
+        (locId) => b.wine.stockByLocation[locId] >= b.qty,
+      ).length;
+      return aOptions - bOptions;
+    });
+
+    for (const item of sortedItems) {
+      const potentialLocations = Object.keys(item.wine.stockByLocation).filter(
+        (locId) => item.wine.stockByLocation[locId] >= item.qty,
+      );
+
+      if (potentialLocations.length === 0) {
+        itemAssignments.set(item.wine.id, "unfulfillable");
+        continue;
+      }
+
+      let assignedLocation: string | undefined;
+
+      const preferredLocation = potentialLocations.find((loc) =>
+        usedLocations.has(loc),
+      );
+
+      if (preferredLocation) {
+        assignedLocation = preferredLocation;
+      } else {
+        assignedLocation = potentialLocations.reduce((best, current) => {
+          return item.wine.stockByLocation[current] >
+            item.wine.stockByLocation[best]
+            ? current
+            : best;
+        });
+      }
+
+      itemAssignments.set(item.wine.id, assignedLocation);
+      usedLocations.add(assignedLocation);
+    }
+
+    const grouped: Record<
+      string,
+      { items: typeof selectedItems; locationName: string }
+    > = {};
+
+    for (const item of itemsToGroup) {
+      const locId = itemAssignments.get(item.wine.id);
+      if (locId) {
+        if (!grouped[locId]) {
+          grouped[locId] = {
+            items: [],
+            locationName:
+              locId === "unfulfillable"
+                ? "Unfulfillable"
+                : allLocations.find((l) => l.id === locId)?.name ||
+                  "Unknown Location",
+          };
+        }
+        grouped[locId].items.push(item);
+      }
+    }
+
+    return grouped;
+  };
+
+  useEffect(() => {
+    const groups = groupItemsByFulfillment(selectedItems, locations);
+    setGroupedForUI(groups);
+  }, [selectedItems, locations]);
+
+  const createRequestObject = (
+    items: typeof selectedItems,
+    targetStoreId: string,
+  ) => {
+    return {
+      storeId: profile?.locationId || "unknown_store",
+      targetStoreId: targetStoreId,
+      requesterId: profile?.id || "anonymous",
+      createdBy: profile?.email || "unknown",
+      status: "pending",
+      items: items.map((item) => ({
+        masterWineId: item.wine.id,
+        wineName: item.wine.name,
+        vintage: item.wine.vintage,
+        format: item.wine.format,
+        producer: item.wine.producer || "",
+        sku: item.wine.sku || "N/A",
+        price: item.wine.price || 0,
+        qty: item.qty,
+        pulledQty: 0,
+      })),
+      totalAmount: items.reduce(
+        (sum, item) => sum + (item.wine.price || 0) * item.qty,
+        0,
+      ),
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    };
+  };
+
   const handleSubmit = async () => {
     if (selectedItems.length === 0) return;
 
     setSubmitting(true);
     try {
-      const requestData = {
-        storeId: profile?.locationId || "unknown_store",
-        targetStoreId:
-          selectedLocationId === "all" ? "warehouse" : selectedLocationId,
-        requesterId: profile?.id || "anonymous",
-        storeEmail: profile?.email || "unknown",
-        status: "pending",
-        items: selectedItems.map((item) => ({
-          masterWineId: item.wine.id,
-          wineName: item.wine.name,
-          vintage: item.wine.vintage,
-          format: item.wine.format,
-          producer: item.wine.producer || "",
-          sku: item.wine.sku || "N/A",
-          price: item.wine.price || 0,
-          qty: item.qty,
-          pulledQty: 0,
-        })),
-        totalAmount: selectedItems.reduce(
-          (sum, item) => sum + (item.wine.price || 0) * item.qty,
-          0,
-        ),
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      };
+      const groups = groupItemsByFulfillment(selectedItems, locations);
 
-      await addDoc(collection(db, "wine_requests"), requestData);
+      if (groups["unfulfillable"]) {
+        Alert.alert(
+          "Unfulfillable Items",
+          "Some items cannot be fulfilled with the requested quantity from a single location. Please adjust quantities.",
+          [{ text: "OK" }],
+        );
+        setSubmitting(false);
+        return;
+      }
+
+      const requests = Object.entries(groups).map(([locationId, group]) => {
+        return createRequestObject(group.items, locationId);
+      });
+
+      await Promise.all(
+        requests.map((req) => addDoc(collection(db, "wine_requests"), req)),
+      );
 
       Alert.alert(
-        "Request Sent",
-        "Your requisition has been dispatched to the admin.",
+        `Request${requests.length > 1 ? "s" : ""} Sent`,
+        `Your ${requests.length} requisition${requests.length > 1 ? "s have" : " has"} been dispatched.`,
         [{ text: "OK", onPress: () => router.back() }],
       );
     } catch (error: any) {
@@ -479,42 +584,61 @@ export default function CreateWineRequest() {
 
           <ScrollView
             horizontal
+            style={styles.cartItemsContainer}
             showsHorizontalScrollIndicator={false}
-            style={styles.cartItems}
           >
-            {selectedItems.map((item) => (
-              <View
-                key={item.wine.id}
-                style={[styles.cartItem, { borderColor: theme.border }]}
-              >
+            {Object.entries(groupedForUI).map(([locationId, group]) => (
+              <View key={locationId} style={styles.cartGroup}>
                 <Text
-                  style={[styles.cartItemName, { color: theme.text }]}
-                  numberOfLines={1}
+                  style={[
+                    styles.cartGroupTitle,
+                    {
+                      color:
+                        locationId === "unfulfillable"
+                          ? theme.danger
+                          : theme.secondary,
+                    },
+                  ]}
                 >
-                  {item.wine.name}
+                  FROM: {group.locationName.toUpperCase()}
                 </Text>
-                <View style={styles.cartControls}>
-                  <TouchableOpacity
-                    onPress={() => updateQty(item.wine.id, -1)}
-                    style={styles.miniBtn}
-                  >
-                    <Minus size={14} color={theme.primary} />
-                  </TouchableOpacity>
-                  <Text style={[styles.cartQty, { color: theme.text }]}>
-                    {item.qty}
-                  </Text>
-                  <TouchableOpacity
-                    onPress={() => updateQty(item.wine.id, 1)}
-                    style={styles.miniBtn}
-                  >
-                    <Plus size={14} color={theme.primary} />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={() => removeItem(item.wine.id)}
-                    style={[styles.miniBtn, { marginLeft: 4 }]}
-                  >
-                    <Trash2 size={14} color={theme.danger} />
-                  </TouchableOpacity>
+                <View>
+                  {group.items.map((item) => (
+                    <View
+                      key={item.wine.id}
+                      style={[styles.cartItem, { borderColor: theme.border }]}
+                    >
+                      <Text
+                        style={[styles.cartItemName, { color: theme.text }]}
+                        numberOfLines={1}
+                      >
+                        {item.wine.name}
+                      </Text>
+                      <View style={styles.cartControls}>
+                        <TouchableOpacity
+                          onPress={() => updateQty(item.wine.id, -1)}
+                          style={styles.miniBtn}
+                        >
+                          <Minus size={14} color={theme.primary} />
+                        </TouchableOpacity>
+                        <Text style={[styles.cartQty, { color: theme.text }]}>
+                          {item.qty}
+                        </Text>
+                        <TouchableOpacity
+                          onPress={() => updateQty(item.wine.id, 1)}
+                          style={styles.miniBtn}
+                        >
+                          <Plus size={14} color={theme.primary} />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() => removeItem(item.wine.id)}
+                          style={[styles.miniBtn, { marginLeft: 4 }]}
+                        >
+                          <Trash2 size={14} color={theme.danger} />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ))}
                 </View>
               </View>
             ))}
@@ -703,27 +827,40 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     letterSpacing: 1,
   },
-  cartItems: {
-    maxHeight: 100,
+  cartItemsContainer: {
+    maxHeight: 150,
     marginBottom: 16,
   },
+  cartGroup: {
+    marginRight: 16,
+    width: 280,
+  },
+  cartGroupTitle: {
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1,
+    marginBottom: 8,
+    paddingHorizontal: 4,
+  },
   cartItem: {
-    width: 140,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     padding: 12,
-    borderRadius: 16,
+    borderRadius: 12,
     borderWidth: 1,
-    marginRight: 10,
+    marginBottom: 6,
     backgroundColor: "rgba(0,0,0,0.02)",
   },
   cartItemName: {
     fontSize: 11,
     fontWeight: "800",
-    marginBottom: 8,
+    flex: 1,
+    marginRight: 8,
   },
   cartControls: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
   },
   miniBtn: {
     padding: 4,

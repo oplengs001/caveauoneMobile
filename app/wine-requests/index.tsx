@@ -13,6 +13,7 @@ import {
   Clock,
   Package,
   Plus,
+  Truck,
 } from "lucide-react-native";
 import React, { useCallback, useState } from "react";
 import {
@@ -32,6 +33,7 @@ export default function WineRequestsIndex() {
   const theme = Colors.store;
 
   const [requests, setRequests] = useState<WineRequest[]>([]);
+  const [locations, setLocations] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -39,13 +41,22 @@ export default function WineRequestsIndex() {
     if (!profile?.email) return;
 
     try {
-      const q = query(
-        collection(db, "wine_requests"),
-        where("storeEmail", "==", profile.email),
-        orderBy("createdAt", "desc"),
-      );
-      const snap = await getDocs(q);
-      const data = snap.docs.map((doc) => ({
+      const [requestsSnap, storesSnap] = await Promise.all([
+        getDocs(
+          query(
+            collection(db, "wine_requests"),
+            where("createdBy", "==", profile.email),
+            orderBy("createdAt", "desc"),
+          ),
+        ),
+        getDocs(collection(db, "stores")),
+      ]);
+
+      const locMap: Record<string, string> = {};
+      storesSnap.docs.forEach((d) => (locMap[d.id] = d.data().name));
+      setLocations(locMap);
+
+      const data = requestsSnap.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
         createdAt: doc.data().createdAt?.toDate() || new Date(),
@@ -107,6 +118,10 @@ export default function WineRequestsIndex() {
   const renderItem = ({ item }: { item: WineRequest }) => {
     const status = getStatusStyle(item.status);
     const StatusIcon = status.icon;
+    const targetStoreName =
+      item.targetStoreId === "warehouse"
+        ? "Central Warehouse"
+        : locations[item.targetStoreId || ""] || "Unknown";
 
     return (
       <TouchableOpacity
@@ -114,7 +129,12 @@ export default function WineRequestsIndex() {
           styles.card,
           { backgroundColor: theme.card, borderColor: theme.border },
         ]}
-        onPress={() => router.push({ pathname: '/wine-requests/[id]', params: { id: item.id } })}
+        onPress={() =>
+          router.push({
+            pathname: "/wine-requests/[id]",
+            params: { id: item.id },
+          })
+        }
       >
         <View style={styles.cardHeader}>
           <View style={styles.dateRow}>
@@ -163,7 +183,19 @@ export default function WineRequestsIndex() {
             </View>
           ))}
         </View>
-
+        <View style={styles.targetStoreContainer}>
+          <Truck size={14} color={theme.textSecondary} />
+          <Text
+            style={[styles.targetStoreText, { color: theme.textSecondary }]}
+            numberOfLines={1}
+          >
+            {" "}
+            Requesting from:{" "}
+            <Text style={{ fontWeight: "800", color: theme.text }}>
+              {targetStoreName}
+            </Text>
+          </Text>
+        </View>
         <View style={[styles.cardFooter, { borderTopColor: theme.border }]}>
           <Text style={[styles.idText, { color: theme.textSecondary }]}>
             REQ: {item.id.slice(0, 8).toUpperCase()}
@@ -308,7 +340,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 16,
   },
   dateRow: {
     flexDirection: "row",
@@ -331,6 +362,18 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "900",
     letterSpacing: 0.5,
+  },
+  targetStoreContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+    borderRadius: 12,
+    // theme is defined above
+  },
+  targetStoreText: {
+    fontSize: 12,
+    fontWeight: "600",
+    flex: 1,
   },
   itemsContainer: {
     gap: 10,

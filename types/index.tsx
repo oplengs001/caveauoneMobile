@@ -26,7 +26,14 @@ export interface InventoryBottle {
   locationRef: DocumentReference | null;
   storeRef: DocumentReference | null;
   sku: string;
-  status: "incoming" | "received" | "shelved" | "consumed" | "damaged" | "lost" | "outbound";
+  status:
+    | "incoming"
+    | "received"
+    | "shelved"
+    | "consumed"
+    | "damaged"
+    | "lost"
+    | "outbound";
   receiptId?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -95,7 +102,7 @@ export interface WineRequest {
   id: string;
   storeId: string;
   targetStoreId?: string;
-  storeEmail: string;
+  createdBy: string;
   status: "pending" | "converted" | "rejected";
   items: WineRequestItem[];
   totalAmount: number;
@@ -103,8 +110,20 @@ export interface WineRequest {
   updatedAt: any;
 }
 
-export type WineFormat = "37.5cl" | "50cl" | "70cl" | "75cl" | "150cl" | "300cl" | "600cl";
-export type WineType = "Red Wine" | "White wine" | "Sweet Wine" | "Sparkling wine" | "Rose wine";
+export type WineFormat =
+  | "37.5cl"
+  | "50cl"
+  | "70cl"
+  | "75cl"
+  | "150cl"
+  | "300cl"
+  | "600cl";
+export type WineType =
+  | "Red Wine"
+  | "White wine"
+  | "Sweet Wine"
+  | "Sparkling wine"
+  | "Rose wine";
 
 export interface OnboardingItem {
   id: string;
@@ -138,7 +157,12 @@ export interface OnboardingTask {
   updatedAt: any;
 }
 
-export type StockStatus = "in_stock" | "stockout" | "overstock" | "par_alert" | "discontinued";
+export type StockStatus =
+  | "in_stock"
+  | "stockout"
+  | "overstock"
+  | "par_alert"
+  | "discontinued";
 
 export interface StoreWineSetting {
   id: string;
