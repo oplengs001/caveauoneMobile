@@ -24,6 +24,7 @@ import {
   Alert,
   Dimensions,
   FlatList,
+  RefreshControl,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -42,34 +43,48 @@ export default function CreateWineRequest() {
   [];
 
   const [searchQuery, setSearchQuery] = useState("");
-  const [locations, setLocations] = useState<{ id: string, name: string }[]>([]);
+  const [locations, setLocations] = useState<{ id: string; name: string }[]>(
+    [],
+  );
   const [selectedLocationId, setSelectedLocationId] = useState<string>("all");
   const [masterWines, setMasterWines] = useState<
     (MasterWine & { stock: number; stockByLocation: Record<string, number> })[]
   >([]);
   const [fetchingWines, setFetchingWines] = useState(false);
   const [selectedItems, setSelectedItems] = useState<
-    { wine: MasterWine & { stock: number; stockByLocation: Record<string, number> }; qty: number }[]
+    {
+      wine: MasterWine & {
+        stock: number;
+        stockByLocation: Record<string, number>;
+      };
+      qty: number;
+    }[]
   >([]);
   const [submitting, setSubmitting] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     fetchWines();
   }, []);
 
-  const fetchWines = async () => {
-    setFetchingWines(true);
+  const fetchWines = async (isRefresh = false) => {
+    if (!isRefresh) setFetchingWines(true);
     try {
       const [winesSnap, bottlesSnap, storesSnap] = await Promise.all([
         getDocs(collection(db, "master_wines")),
         getDocs(collection(db, "inventory_bottles")),
-        getDocs(collection(db, "stores"))
+        getDocs(collection(db, "stores")),
       ]);
 
-      const storesData = storesSnap.docs.map((d) => ({ id: d.id, name: d.data().name }));
+      const storesData = storesSnap.docs.map((d) => ({
+        id: d.id,
+        name: d.data().name,
+      }));
       const bottlesData = bottlesSnap.docs.map((d) => d.data());
 
-      const availableStores = storesData.filter(s => s.id !== profile?.locationId);
+      const availableStores = storesData.filter(
+        (s) => s.id !== profile?.locationId,
+      );
       setLocations(availableStores);
 
       const winesWithStock = winesSnap.docs.map((doc) => {
@@ -78,7 +93,7 @@ export default function CreateWineRequest() {
         let totalStock = 0;
         const stockByLoc: Record<string, number> = {};
 
-        availableStores.forEach(store => {
+        availableStores.forEach((store) => {
           stockByLoc[store.id] = 0;
         });
 
@@ -86,7 +101,8 @@ export default function CreateWineRequest() {
           if (
             b.masterWineRef?.id === doc.id &&
             (b.status === "received" || b.status === "shelved") &&
-            b.storeRef?.id && b.storeRef.id !== profile?.locationId
+            b.storeRef?.id &&
+            b.storeRef.id !== profile?.locationId
           ) {
             stockByLoc[b.storeRef.id] = (stockByLoc[b.storeRef.id] || 0) + 1;
             totalStock++;
@@ -100,12 +116,20 @@ export default function CreateWineRequest() {
     } catch (error) {
       console.error("Error fetching wines:", error);
     } finally {
-      setFetchingWines(false);
+      if (!isRefresh) setFetchingWines(false);
     }
   };
 
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchWines(true);
+    setRefreshing(false);
+  };
+
   const filteredWines = masterWines.filter((w) => {
-    const matchesSearch = w.name.toLowerCase().includes(searchQuery.toLowerCase()) || w.sku?.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch =
+      w.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      w.sku?.toLowerCase().includes(searchQuery.toLowerCase());
     if (!matchesSearch) return false;
 
     if (selectedLocationId === "all") {
@@ -115,8 +139,16 @@ export default function CreateWineRequest() {
     }
   });
 
-  const addItem = (wine: MasterWine & { stock: number; stockByLocation: Record<string, number> }) => {
-    const displayStock = selectedLocationId === "all" ? wine.stock : (wine.stockByLocation[selectedLocationId] || 0);
+  const addItem = (
+    wine: MasterWine & {
+      stock: number;
+      stockByLocation: Record<string, number>;
+    },
+  ) => {
+    const displayStock =
+      selectedLocationId === "all"
+        ? wine.stock
+        : wine.stockByLocation[selectedLocationId] || 0;
 
     if (displayStock <= 0) {
       Alert.alert(
@@ -161,7 +193,8 @@ export default function CreateWineRequest() {
     try {
       const requestData = {
         storeId: profile?.locationId || "unknown_store",
-        targetStoreId: selectedLocationId === "all" ? "warehouse" : selectedLocationId,
+        targetStoreId:
+          selectedLocationId === "all" ? "warehouse" : selectedLocationId,
         requesterId: profile?.id || "anonymous",
         storeEmail: profile?.email || "unknown",
         status: "pending",
@@ -176,7 +209,10 @@ export default function CreateWineRequest() {
           qty: item.qty,
           pulledQty: 0,
         })),
-        totalAmount: selectedItems.reduce((sum, item) => sum + ((item.wine.price || 0) * item.qty), 0),
+        totalAmount: selectedItems.reduce(
+          (sum, item) => sum + (item.wine.price || 0) * item.qty,
+          0,
+        ),
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       };
@@ -198,12 +234,23 @@ export default function CreateWineRequest() {
   const renderWineItem = ({
     item,
   }: {
-    item: MasterWine & { stock: number; stockByLocation: Record<string, number> };
+    item: MasterWine & {
+      stock: number;
+      stockByLocation: Record<string, number>;
+    };
   }) => {
-    const displayStock = selectedLocationId === "all" ? item.stock : (item.stockByLocation[selectedLocationId] || 0);
+    const displayStock =
+      selectedLocationId === "all"
+        ? item.stock
+        : item.stockByLocation[selectedLocationId] || 0;
     const isOutOfStock = displayStock <= 0;
     const selectedCount =
       selectedItems.find((si) => si.wine.id === item.id)?.qty || 0;
+
+    const locationsWithStock = Object.entries(item.stockByLocation)
+      .filter(([, stock]) => stock > 0)
+      .map(([locId]) => locations.find((l) => l.id === locId)?.name)
+      .filter(Boolean) as string[];
 
     return (
       <TouchableOpacity
@@ -218,12 +265,32 @@ export default function CreateWineRequest() {
           <Text style={[styles.wineName, { color: theme.text }]}>
             {item.name}
           </Text>
-          <Text style={[styles.wineSub, { color: theme.textSecondary, marginBottom: 6 }]}>
+          <Text
+            style={[
+              styles.wineSub,
+              { color: theme.textSecondary, marginBottom: 6 },
+            ]}
+          >
             {item.vintage} • {item.producer} • {item.format}
           </Text>
+          {selectedLocationId === "all" && locationsWithStock.length > 0 && (
+            <View style={styles.locationInfo}>
+              <Text
+                style={[styles.locationText, { color: theme.textSecondary }]}
+                numberOfLines={1}
+              >
+                Available at: {locationsWithStock.join(", ")}
+              </Text>
+            </View>
+          )}
           <View style={styles.wineMeta}>
-            <Text style={[styles.wineSub, { color: theme.textSecondary, fontSize: 11, fontWeight: '700' }]}>
-              SKU: {item.sku || 'N/A'}
+            <Text
+              style={[
+                styles.wineSub,
+                { color: theme.textSecondary, fontSize: 11, fontWeight: "700" },
+              ]}
+            >
+              SKU: {item.sku || "N/A"}
             </Text>
             <View
               style={[
@@ -303,26 +370,59 @@ export default function CreateWineRequest() {
           />
         </View>
 
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 12 }}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={{ marginTop: 12 }}
+        >
           <TouchableOpacity
             style={[
               styles.pill,
-              selectedLocationId === "all" ? { backgroundColor: theme.primary, borderColor: theme.primary } : { backgroundColor: theme.card, borderColor: theme.border }
+              selectedLocationId === "all"
+                ? { backgroundColor: theme.primary, borderColor: theme.primary }
+                : { backgroundColor: theme.card, borderColor: theme.border },
             ]}
             onPress={() => setSelectedLocationId("all")}
           >
-            <Text style={[styles.pillText, { color: selectedLocationId === "all" ? "#fff" : theme.textSecondary }]}>All Locations</Text>
+            <Text
+              style={[
+                styles.pillText,
+                {
+                  color:
+                    selectedLocationId === "all" ? "#fff" : theme.textSecondary,
+                },
+              ]}
+            >
+              All Locations
+            </Text>
           </TouchableOpacity>
-          {locations.map(loc => (
+          {locations.map((loc) => (
             <TouchableOpacity
               key={loc.id}
               style={[
                 styles.pill,
-                selectedLocationId === loc.id ? { backgroundColor: theme.primary, borderColor: theme.primary } : { backgroundColor: theme.card, borderColor: theme.border }
+                selectedLocationId === loc.id
+                  ? {
+                      backgroundColor: theme.primary,
+                      borderColor: theme.primary,
+                    }
+                  : { backgroundColor: theme.card, borderColor: theme.border },
               ]}
               onPress={() => setSelectedLocationId(loc.id)}
             >
-              <Text style={[styles.pillText, { color: selectedLocationId === loc.id ? "#fff" : theme.textSecondary }]}>{loc.name}</Text>
+              <Text
+                style={[
+                  styles.pillText,
+                  {
+                    color:
+                      selectedLocationId === loc.id
+                        ? "#fff"
+                        : theme.textSecondary,
+                  },
+                ]}
+              >
+                {loc.name}
+              </Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
@@ -342,6 +442,13 @@ export default function CreateWineRequest() {
           renderItem={renderWineItem}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={theme.primary}
+            />
+          }
         />
       )}
 
@@ -536,6 +643,15 @@ const styles = StyleSheet.create({
   wineSub: {
     fontSize: 12,
     fontWeight: "500",
+  },
+  locationInfo: {
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  locationText: {
+    fontSize: 11,
+    fontWeight: "600",
+    fontStyle: "italic",
   },
   stockBadge: {
     paddingHorizontal: 6,
