@@ -26,6 +26,7 @@ export interface InventoryBottle {
   locationRef: DocumentReference | null;
   storeRef: DocumentReference | null;
   sku: string;
+  readableId?: string;
   status:
     | "incoming"
     | "received"
