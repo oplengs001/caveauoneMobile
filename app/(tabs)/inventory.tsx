@@ -327,7 +327,7 @@ export default function InventoryScreen() {
           </Text>
           <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
             {isStore ? "Boutique View" : "Warehouse View"}
-          </Text>
+          </Text> 
         </View>
         <View style={styles.headerActions}>
           {isSelectionMode ? (

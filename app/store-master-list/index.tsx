@@ -18,8 +18,10 @@ import {
 import {
   AlertTriangle,
   BarChart3,
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  Clock,
   RefreshCw,
   TrendingUp,
   X,
@@ -49,34 +51,39 @@ interface WineEntry {
   setting: StoreWineSetting | null;
   status: StockStatus;
   requestedQty: number;
+  pendingRequestId?: string;
 }
 
 function computeStatus(
   stockCount: number,
   setting: StoreWineSetting | null,
+  hasPendingRequest?: boolean,
 ): { status: StockStatus; requestedQty: number } {
   if (!setting) return { status: "unset", requestedQty: 0 };
   if (setting.discontinued) return { status: "discontinued", requestedQty: 0 };
-  if (stockCount === 0)
-    return {
-      status: "stockout",
-      requestedQty: setting.safetyStock,
-    };
-  if (stockCount > setting.safetyStock)
-    return { status: "overstock", requestedQty: 0 };
-  if (stockCount <= setting.parLevel) {
-    return {
-      status: "par_alert",
-      requestedQty: setting.safetyStock - stockCount,
-    };
+
+  let status: StockStatus = "in_stock";
+  let requestedQty = 0;
+
+  if (stockCount === 0) {
+    status = "stockout";
+    requestedQty = setting.safetyStock;
+  } else if (stockCount > setting.safetyStock) {
+    status = "overstock";
+  } else if (stockCount <= setting.parLevel) {
+    status = "par_alert";
+    requestedQty = setting.safetyStock - stockCount;
+  } else if (stockCount < setting.safetyStock) {
+    status = "under_safety";
+    requestedQty = setting.safetyStock - stockCount;
   }
-  if (stockCount < setting.safetyStock) {
-    return {
-      status: "under_safety",
-      requestedQty: setting.safetyStock - stockCount,
-    };
+
+  // If there's a pending request, override requestedQty to 0 to prevent re-requesting.
+  if (hasPendingRequest) {
+    requestedQty = 0;
   }
-  return { status: "in_stock", requestedQty: 0 };
+
+  return { status, requestedQty: Math.max(0, requestedQty) };
 }
 
 const STATUS_CONFIG: Record<
@@ -150,6 +157,9 @@ export default function StoreMasterListScreen() {
   const [sheetDiscontinued, setSheetDiscontinued] = useState(false);
   const [saving, setSaving] = useState(false);
   const [requesting, setRequesting] = useState(false);
+  const [isBatchConfirmVisible, setIsBatchConfirmVisible] = useState(false);
+  const [batchRequesting, setBatchRequesting] = useState(false);
+  const [isSuccessVisible, setIsSuccessVisible] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!storeId) return;
@@ -184,7 +194,25 @@ export default function StoreMasterListScreen() {
         } as StoreWineSetting),
       );
 
-      // 3. For each wine, count active bottles & fetch wine doc
+      // 3. Fetch pending requests to link them to wines
+      const pendingRequestsSnap = await getDocs(
+        query(
+          collection(db, "wine_requests"),
+          where("storeId", "==", storeId),
+          where("status", "==", "pending"),
+        ),
+      );
+      const pendingWineRequestMap = new Map<string, string>();
+      pendingRequestsSnap.docs.forEach((reqDoc) => {
+        const request = reqDoc.data();
+        request.items?.forEach((item: { masterWineId: string }) => {
+          if (item.masterWineId) {
+            pendingWineRequestMap.set(item.masterWineId, reqDoc.id);
+          }
+        });
+      });
+
+      // 4. For each wine, count active bottles & fetch wine doc
       const results: WineEntry[] = await Promise.all(
         Array.from(wineRefMap.entries()).map(async ([wineId, wineRef]) => {
           const [wineSnap, countSnap] = await Promise.all([
@@ -208,9 +236,21 @@ export default function StoreMasterListScreen() {
 
           const stockCount = countSnap.data().count;
           const setting = settingsMap.get(wineId) ?? null;
-          const { status, requestedQty } = computeStatus(stockCount, setting);
+          const pendingRequestId = pendingWineRequestMap.get(wineId);
+          const { status, requestedQty } = computeStatus(
+            stockCount,
+            setting,
+            !!pendingRequestId,
+          );
 
-          return { masterWine, stockCount, setting, status, requestedQty };
+          return {
+            masterWine,
+            stockCount,
+            setting,
+            status,
+            requestedQty,
+            pendingRequestId,
+          };
         }),
       );
 
@@ -302,7 +342,9 @@ export default function StoreMasterListScreen() {
             try {
               await addDoc(collection(db, "wine_requests"), {
                 storeId,
+                targetStoreId: "warehouse",
                 createdBy: profile.email,
+                requesterId: profile.id,
                 status: "pending",
                 items: [
                   {
@@ -310,8 +352,11 @@ export default function StoreMasterListScreen() {
                     wineName: selected.masterWine.name,
                     vintage: selected.masterWine.vintage,
                     sku: selected.masterWine.sku ?? "",
+                    format: selected.masterWine.format,
+                    producer: selected.masterWine.producer,
                     qty,
                     price: selected.masterWine.price,
+                    pulledQty: 0,
                   },
                 ],
                 totalAmount: selected.masterWine.price * qty,
@@ -336,6 +381,69 @@ export default function StoreMasterListScreen() {
     );
   };
 
+  const executeBatchRequest = async () => {
+    if (!storeId || !profile) return;
+
+    if (itemsToRequest.length === 0) return;
+
+    const totalBottles = itemsToRequest.reduce(
+      (sum, item) => sum + item.requestedQty,
+      0,
+    );
+
+    setBatchRequesting(true);
+    try {
+      const requestItems = itemsToRequest.map((item) => ({
+        masterWineId: item.masterWine.id,
+        wineName: item.masterWine.name,
+        vintage: item.masterWine.vintage,
+        format: item.masterWine.format,
+        producer: item.masterWine.producer,
+        sku: item.masterWine.sku ?? "",
+        qty: item.requestedQty,
+        price: item.masterWine.price,
+        pulledQty: 0,
+      }));
+
+      const totalAmount = requestItems.reduce(
+        (sum, item) => sum + item.price * item.qty,
+        0,
+      );
+
+      await addDoc(collection(db, "wine_requests"), {
+        storeId,
+        targetStoreId: "warehouse",
+        createdBy: profile.email,
+        requesterId: profile.id,
+        status: "pending",
+        items: requestItems,
+        totalAmount,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+
+      setIsBatchConfirmVisible(false);
+      setIsSuccessVisible(true);
+    } catch (err) {
+      Alert.alert("Error", "Failed to submit batch request.");
+      console.error(err);
+    } finally {
+      setBatchRequesting(false);
+    }
+  };
+
+  const handleBatchRequest = () => {
+    if (itemsToRequest.length === 0) {
+      Alert.alert(
+        "No Items",
+        "There are no items that need replenishment in the current view.",
+      );
+      return;
+    }
+
+    setIsBatchConfirmVisible(true);
+  };
+
   const filtered = entries.filter((e) => {
     if (filter === "alerts") return e.status === "par_alert";
     if (filter === "under_safety") return e.status === "under_safety";
@@ -344,6 +452,10 @@ export default function StoreMasterListScreen() {
     if (filter === "unset") return e.status === "unset";
     return true;
   });
+
+  const itemsToRequest = filtered.filter(
+    (entry) => entry.requestedQty > 0 && !entry.setting?.discontinued,
+  );
 
   const alertCount = entries.filter(
     (e) => e.status === "par_alert" || e.status === "stockout",
@@ -426,6 +538,31 @@ export default function StoreMasterListScreen() {
                   </Text>
                 </>
               )}
+              {item.pendingRequestId && (
+                <>
+                  <Text style={styles.inlineMetricDot}>·</Text>
+                  <TouchableOpacity
+                    style={styles.requestedIndicator}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      router.push(`/wine-requests/${item.pendingRequestId}`);
+                    }}
+                  >
+                    <Clock
+                      size={11}
+                      color={STATUS_CONFIG.under_safety.accent}
+                    />
+                    <Text
+                      style={[
+                        styles.inlineMetricText,
+                        { color: STATUS_CONFIG.under_safety.accent },
+                      ]}
+                    >
+                      Requested
+                    </Text>
+                  </TouchableOpacity>
+                </>
+              )}
             </View>
           </View>
         </View>
@@ -501,7 +638,7 @@ export default function StoreMasterListScreen() {
                       : f === "stockout"
                         ? "🔴 Stockout"
                         : f === "overstock"
-                          ? "🔵 Overstock"
+                          ? "🟢 Overstock"
                           : "⚪️ Unset"}
               </Text>
             </TouchableOpacity>
@@ -537,6 +674,182 @@ export default function StoreMasterListScreen() {
           }
         />
       )}
+
+      {itemsToRequest.length > 0 && !loading && (
+        <View style={styles.batchRequestContainer}>
+          <TouchableOpacity
+            style={[
+              styles.batchRequestButton,
+              batchRequesting && styles.btnDisabled,
+            ]}
+            onPress={handleBatchRequest}
+            disabled={batchRequesting}
+          >
+            {batchRequesting ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <>
+                <TrendingUp size={20} color="#fff" strokeWidth={2.5} />
+                <Text style={styles.batchRequestButtonText}>
+                  REQUEST ALL (
+                  {itemsToRequest.reduce(
+                    (sum, item) => sum + item.requestedQty,
+                    0,
+                  )}{" "}
+                  bottles)
+                </Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Success Modal */}
+      <Modal visible={isSuccessVisible} animationType="fade" transparent>
+        <View style={styles.successOverlay}>
+          <View style={styles.successContainer}>
+            <View
+              style={[
+                styles.successIconContainer,
+                { backgroundColor: theme.primary + "15" },
+              ]}
+            >
+              <CheckCircle2 size={48} color={theme.primary} strokeWidth={1.5} />
+            </View>
+            <Text style={styles.successTitle}>Request Sent!</Text>
+            <Text style={styles.successMessage}>
+              Your batch request has been sent to the warehouse for processing.
+            </Text>
+            <TouchableOpacity
+              style={[
+                styles.successViewButton,
+                { backgroundColor: theme.primary },
+              ]}
+              onPress={() => {
+                setIsSuccessVisible(false);
+                fetchData();
+                router.push("/wine-requests");
+              }}
+            >
+              <Text style={styles.successViewButtonText}>VIEW REQUESTS</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.successCloseButton}
+              onPress={() => {
+                setIsSuccessVisible(false);
+                fetchData();
+              }}
+            >
+              <Text
+                style={[
+                  styles.successCloseButtonText,
+                  { color: theme.textSecondary },
+                ]}
+              >
+                CLOSE
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Batch Request Confirmation Modal */}
+      <Modal
+        visible={isBatchConfirmVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setIsBatchConfirmVisible(false)}
+      >
+        <View style={styles.sheetOverlay}>
+          <View style={[styles.sheet, { maxHeight: "80%" }]}>
+            <View style={styles.sheetHandle} />
+
+            <View style={styles.sheetHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.sheetWineName}>Confirm Batch Request</Text>
+                <Text style={styles.sheetWineMeta}>
+                  Requesting {itemsToRequest.length} wines (
+                  {itemsToRequest.reduce(
+                    (sum, item) => sum + item.requestedQty,
+                    0,
+                  )}{" "}
+                  total bottles)
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setIsBatchConfirmVisible(false)}
+                style={styles.closeBtn}
+              >
+                <X size={22} color={theme.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <FlatList
+              data={itemsToRequest}
+              keyExtractor={(item) => item.masterWine.id}
+              renderItem={({ item }) => (
+                <View style={styles.confirmItemRow}>
+                  <View
+                    style={[
+                      styles.confirmItemQty,
+                      { backgroundColor: theme.primary + "15" },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.confirmItemQtyText,
+                        { color: theme.primary },
+                      ]}
+                    >
+                      {item.requestedQty}x
+                    </Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      style={[styles.confirmItemName, { color: theme.text }]}
+                      numberOfLines={1}
+                    >
+                      {item.masterWine.name}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.confirmItemMeta,
+                        { color: theme.textSecondary },
+                      ]}
+                    >
+                      {item.masterWine.vintage}
+                      {item.masterWine.format
+                        ? ` · ${item.masterWine.format}`
+                        : ""}
+                    </Text>
+                  </View>
+                </View>
+              )}
+              contentContainerStyle={{ paddingBottom: 20, paddingTop: 10 }}
+            />
+
+            <View style={styles.confirmActions}>
+              <TouchableOpacity
+                style={styles.confirmCancelBtn}
+                onPress={() => setIsBatchConfirmVisible(false)}
+              >
+                <Text style={styles.confirmCancelBtnText}>CANCEL</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.saveBtn,
+                  { flex: 2, marginTop: 0 },
+                  batchRequesting && styles.btnDisabled,
+                ]}
+                onPress={executeBatchRequest}
+                disabled={batchRequesting}
+              >
+                <Text style={styles.saveBtnText}>CONFIRM & SUBMIT</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Adjustment Sheet */}
       <Modal
@@ -671,27 +984,47 @@ export default function StoreMasterListScreen() {
                 )}
               </TouchableOpacity>
 
-              {selected && selected.requestedQty > 0 && !sheetDiscontinued && (
+              {selected?.pendingRequestId ? (
                 <TouchableOpacity
-                  style={[styles.requestBtn, requesting && styles.btnDisabled]}
-                  onPress={handleRequestStock}
-                  disabled={requesting}
+                  style={styles.requestBtn}
+                  onPress={() => {
+                    closeSheet();
+                    router.push(`/wine-requests/${selected.pendingRequestId}`);
+                  }}
                 >
-                  {requesting ? (
-                    <ActivityIndicator color={theme.primary} />
-                  ) : (
-                    <>
-                      <TrendingUp
-                        size={18}
-                        color={theme.primary}
-                        strokeWidth={2.5}
-                      />
-                      <Text style={styles.requestBtnText}>
-                        REQUEST {selected.requestedQty} BOTTLES
-                      </Text>
-                    </>
-                  )}
+                  <Clock size={18} color={theme.primary} strokeWidth={2.5} />
+                  <Text style={styles.requestBtnText}>
+                    VIEW PENDING REQUEST
+                  </Text>
                 </TouchableOpacity>
+              ) : (
+                selected &&
+                selected.requestedQty > 0 &&
+                !sheetDiscontinued && (
+                  <TouchableOpacity
+                    style={[
+                      styles.requestBtn,
+                      requesting && styles.btnDisabled,
+                    ]}
+                    onPress={handleRequestStock}
+                    disabled={requesting}
+                  >
+                    {requesting ? (
+                      <ActivityIndicator color={theme.primary} />
+                    ) : (
+                      <>
+                        <TrendingUp
+                          size={18}
+                          color={theme.primary}
+                          strokeWidth={2.5}
+                        />
+                        <Text style={styles.requestBtnText}>
+                          REQUEST {selected.requestedQty} BOTTLES
+                        </Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                )
               )}
 
               <View style={{ height: 40 }} />
@@ -845,6 +1178,11 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 6,
   },
+  requestedIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
   inlineMetricText: {
     fontSize: 11,
     fontWeight: "600",
@@ -861,6 +1199,157 @@ const styles = StyleSheet.create({
   },
   empty: { alignItems: "center", paddingTop: 80, gap: 12 },
   emptyText: { color: theme.textSecondary, fontWeight: "600", fontSize: 15 },
+
+  // --- Success Modal ---
+  successOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  successContainer: {
+    backgroundColor: theme.card,
+    borderRadius: 24,
+    padding: 32,
+    paddingTop: 24,
+    alignItems: "center",
+    width: "100%",
+    maxWidth: 400,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 20,
+  },
+  successIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  successTitle: {
+    fontSize: 22,
+    fontWeight: "900",
+    color: theme.text,
+    marginBottom: 8,
+  },
+  successMessage: {
+    fontSize: 14,
+    color: theme.textSecondary,
+    textAlign: "center",
+    marginBottom: 28,
+    lineHeight: 20,
+  },
+  successViewButton: {
+    width: "100%",
+    height: 56,
+    borderRadius: 16,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  successViewButtonText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "900",
+    letterSpacing: 1,
+  },
+  successCloseButton: {
+    marginTop: 8,
+    padding: 12,
+  },
+  successCloseButtonText: {
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  // --- Batch Confirm Modal ---
+  confirmItemRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.border,
+  },
+  confirmItemQty: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  confirmItemQtyText: {
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  confirmItemName: {
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  confirmItemMeta: {
+    fontSize: 12,
+    fontWeight: "500",
+    marginTop: 2,
+  },
+  confirmActions: {
+    flexDirection: "row",
+    gap: 12,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: theme.border,
+  },
+  confirmCancelBtn: {
+    flex: 1,
+    height: 58,
+    borderRadius: 18,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: theme.card,
+    borderWidth: 1.5,
+    borderColor: theme.border,
+  },
+  confirmCancelBtnText: {
+    color: theme.textSecondary,
+    fontSize: 14,
+    fontWeight: "900",
+    letterSpacing: 1,
+  },
+  confirmSubmitBtn: {
+    flex: 2,
+  },
+  confirmSubmitBtnText: {
+    color: "#fff",
+  },
+
+  batchRequestContainer: {
+    position: "absolute",
+    bottom: 30,
+    left: 20,
+    right: 20,
+    alignItems: "center",
+  },
+  batchRequestButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    backgroundColor: theme.primary,
+    height: 58,
+    borderRadius: 29,
+    paddingHorizontal: 24,
+    shadowColor: theme.primary,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  batchRequestButtonText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "900",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+  },
 
   // Sheet
   sheetOverlay: {
@@ -978,16 +1467,17 @@ const styles = StyleSheet.create({
   saveBtn: {
     backgroundColor: theme.primary,
     height: 58,
-    borderRadius: 18,
     justifyContent: "center",
     alignItems: "center",
-    marginTop: 24,
+    paddingHorizontal: 24,
     shadowColor: theme.primary,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.25,
     shadowRadius: 12,
     elevation: 4,
+    borderRadius: 18,
   },
+
   saveBtnText: {
     color: "#fff",
     fontSize: 14,
@@ -1009,6 +1499,7 @@ const styles = StyleSheet.create({
     color: theme.primary,
     fontSize: 14,
     fontWeight: "900",
+    textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   btnDisabled: { opacity: 0.4 },
