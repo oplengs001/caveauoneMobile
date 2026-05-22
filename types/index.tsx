@@ -163,6 +163,8 @@ export type StockStatus =
   | "stockout"
   | "overstock"
   | "par_alert"
+  | "under_safety"
+  | "unset"
   | "discontinued";
 
 export interface StoreWineSetting {

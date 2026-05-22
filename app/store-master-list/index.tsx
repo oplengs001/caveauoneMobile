@@ -2,7 +2,7 @@ import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { db } from "@/lib/firebase";
 import { MasterWine, StockStatus, StoreWineSetting } from "@/types";
-import { Stack, useRouter } from "expo-router";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import {
   addDoc,
   collection,
@@ -55,17 +55,24 @@ function computeStatus(
   stockCount: number,
   setting: StoreWineSetting | null,
 ): { status: StockStatus; requestedQty: number } {
-  if (setting?.discontinued) return { status: "discontinued", requestedQty: 0 };
+  if (!setting) return { status: "unset", requestedQty: 0 };
+  if (setting.discontinued) return { status: "discontinued", requestedQty: 0 };
   if (stockCount === 0)
     return {
       status: "stockout",
-      requestedQty: setting ? setting.safetyStock : 0,
+      requestedQty: setting.safetyStock,
     };
-  if (setting && stockCount > setting.safetyStock)
+  if (stockCount > setting.safetyStock)
     return { status: "overstock", requestedQty: 0 };
-  if (setting && stockCount <= setting.parLevel) {
+  if (stockCount <= setting.parLevel) {
     return {
       status: "par_alert",
+      requestedQty: setting.safetyStock - stockCount,
+    };
+  }
+  if (stockCount < setting.safetyStock) {
+    return {
+      status: "under_safety",
       requestedQty: setting.safetyStock - stockCount,
     };
   }
@@ -80,6 +87,8 @@ const STATUS_CONFIG: Record<
   stockout: { label: "Stockout", color: "#991b1b", bg: "#fee2e2" },
   overstock: { label: "Overstock", color: "#1e40af", bg: "#dbeafe" },
   par_alert: { label: "PAR Alert", color: "#92400e", bg: "#fef3c7" },
+  under_safety: { label: "Under Safety", color: "#9a3412", bg: "#ffedd5" },
+  unset: { label: "Unset", color: "#475569", bg: "#e2e8f0" },
   discontinued: { label: "Discontinued", color: "#475569", bg: "#f1f5f9" },
 };
 
@@ -91,7 +100,8 @@ export default function StoreMasterListScreen() {
   const [entries, setEntries] = useState<WineEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [filter, setFilter] = useState<"all" | "alerts" | "stockout">("all");
+  const { filter: initialFilter } = useLocalSearchParams<{ filter: "all" | "alerts" | "under_safety" | "stockout" | "overstock" | "unset" }>();
+  const [filter, setFilter] = useState<"all" | "alerts" | "under_safety" | "stockout" | "overstock" | "unset">(initialFilter || "all");
 
   // Adjustment sheet
   const [selected, setSelected] = useState<WineEntry | null>(null);
@@ -168,8 +178,10 @@ export default function StoreMasterListScreen() {
       const order: StockStatus[] = [
         "stockout",
         "par_alert",
+        "under_safety",
         "in_stock",
         "overstock",
+        "unset",
         "discontinued",
       ];
       results.sort((a, b) => order.indexOf(a.status) - order.indexOf(b.status));
@@ -286,7 +298,10 @@ export default function StoreMasterListScreen() {
 
   const filtered = entries.filter((e) => {
     if (filter === "alerts") return e.status === "par_alert";
+    if (filter === "under_safety") return e.status === "under_safety";
     if (filter === "stockout") return e.status === "stockout";
+    if (filter === "overstock") return e.status === "overstock";
+    if (filter === "unset") return e.status === "unset";
     return true;
   });
 
@@ -398,26 +413,34 @@ export default function StoreMasterListScreen() {
 
       {/* Filter Chips */}
       <View style={styles.filterRow}>
-        {(["all", "alerts", "stockout"] as const).map((f) => (
-          <TouchableOpacity
-            key={f}
-            style={[styles.filterChip, filter === f && styles.filterChipActive]}
-            onPress={() => setFilter(f)}
-          >
-            <Text
-              style={[
-                styles.filterChipText,
-                filter === f && styles.filterChipTextActive,
-              ]}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+          {(["all", "alerts", "under_safety", "stockout", "overstock", "unset"] as const).map((f) => (
+            <TouchableOpacity
+              key={f}
+              style={[styles.filterChip, filter === f && styles.filterChipActive]}
+              onPress={() => setFilter(f)}
             >
-              {f === "all"
-                ? "All"
-                : f === "alerts"
-                  ? "⚠ PAR Alerts"
-                  : "🔴 Stockout"}
-            </Text>
-          </TouchableOpacity>
-        ))}
+              <Text
+                style={[
+                  styles.filterChipText,
+                  filter === f && styles.filterChipTextActive,
+                ]}
+              >
+                {f === "all"
+                  ? "All"
+                  : f === "alerts"
+                    ? "⚠ PAR Alerts"
+                    : f === "under_safety"
+                      ? "🛡 Under Safety"
+                      : f === "stockout"
+                        ? "🔴 Stockout"
+                        : f === "overstock"
+                          ? "🔵 Overstock"
+                          : "⚪️ Unset"}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
       </View>
 
       {/* List */}

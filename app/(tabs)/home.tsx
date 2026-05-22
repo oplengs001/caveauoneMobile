@@ -13,6 +13,8 @@ import {
 } from "firebase/firestore";
 import {
   AlertTriangle,
+  AlertOctagon,
+  CheckCircle2,
   ClipboardList,
   FileDown,
   LayoutList,
@@ -36,10 +38,10 @@ import {
 export default function HomeScreen() {
   const router = useRouter();
   const { profile, loading } = useAuth();
-  const [parAlertCount, setParAlertCount] = useState(0);
+  const [dashboardMetrics, setDashboardMetrics] = useState({ stockout: 0, parAlert: 0, underSafety: 0, overstock: 0 });
 
   useEffect(() => {
-    const checkParAlerts = async () => {
+    const fetchMetrics = async () => {
       const storeId = profile?.locationId;
       if (profile?.role !== "store" || !storeId) return;
 
@@ -52,9 +54,14 @@ export default function HomeScreen() {
           ),
         );
 
-        const counts = await Promise.all(
+        let stockout = 0;
+        let parAlert = 0;
+        let underSafety = 0;
+        let overstock = 0;
+
+        await Promise.all(
           settingsSnap.docs.map(async (d) => {
-            const { masterWineId, parLevel } = d.data();
+            const { masterWineId, parLevel, safetyStock } = d.data();
             const wineRef = doc(db, "master_wines", masterWineId);
             const snap = await getCountFromServer(
               query(
@@ -64,17 +71,19 @@ export default function HomeScreen() {
                 where("status", "in", ["received", "shelved"]),
               ),
             );
-            return snap.data().count <= parLevel ? 1 : 0;
-          }),
+            const count = snap.data().count;
+            if (count === 0) stockout++;
+            else if (count > (safetyStock || 0)) overstock++;
+            else if (count <= (parLevel || 0)) parAlert++;
+            else if (count < (safetyStock || 0)) underSafety++;
+          })
         );
-
-        setParAlertCount(counts.reduce((a, b) => a + b, 0));
+        setDashboardMetrics({ stockout, parAlert, underSafety, overstock });
       } catch (err) {
-        console.error("PAR alert check failed:", err);
+        console.error("Failed to fetch dashboard metrics:", err);
       }
     };
-
-    if (!loading) checkParAlerts();
+    if (!loading) fetchMetrics();
   }, [profile, loading]);
 
   const handleSignOut = () => {
@@ -173,24 +182,47 @@ export default function HomeScreen() {
           </Text>
         </View>
 
-        {/* PAR Alert Banner — store only */}
-        {isStore && parAlertCount > 0 && (
-          <TouchableOpacity
-            style={styles.parAlertBanner}
-            onPress={() => router.push("/store-master-list")}
-            activeOpacity={0.8}
-          >
-            <AlertTriangle size={20} color="#92400e" strokeWidth={2.5} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.parAlertTitle}>
-                {parAlertCount} wine{parAlertCount > 1 ? "s" : ""} below PAR
-                level
-              </Text>
-              <Text style={styles.parAlertSub}>
-                Tap to review & request stock →
-              </Text>
+        {isStore && (
+          <View style={styles.metricsDashboard}>
+            <Text style={styles.metricsTitle}>Inventory Health</Text>
+            <View style={styles.metricsGrid}>
+              <TouchableOpacity 
+                style={[styles.metricCard, { backgroundColor: '#fee2e2', borderColor: '#fca5a5' }]} 
+                onPress={() => router.push({ pathname: "/store-master-list", params: { filter: 'stockout' } })}
+              >
+                <AlertOctagon size={28} color="#991b1b" strokeWidth={2.5} />
+                <Text style={[styles.metricCount, { color: '#991b1b' }]}>{dashboardMetrics.stockout}</Text>
+                <Text style={[styles.metricLabel, { color: '#991b1b' }]}>Stockout</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={[styles.metricCard, { backgroundColor: '#fef3c7', borderColor: '#fcd34d' }]} 
+                onPress={() => router.push({ pathname: "/store-master-list", params: { filter: 'alerts' } })}
+              >
+                <AlertTriangle size={28} color="#92400e" strokeWidth={2.5} />
+                <Text style={[styles.metricCount, { color: '#92400e' }]}>{dashboardMetrics.parAlert}</Text>
+                <Text style={[styles.metricLabel, { color: '#92400e' }]}>PAR Alert</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={[styles.metricCard, { backgroundColor: '#ffedd5', borderColor: '#fdba74' }]} 
+                onPress={() => router.push({ pathname: "/store-master-list", params: { filter: 'under_safety' } })}
+              >
+                <AlertTriangle size={28} color="#9a3412" strokeWidth={2.5} />
+                <Text style={[styles.metricCount, { color: '#9a3412' }]}>{dashboardMetrics.underSafety}</Text>
+                <Text style={[styles.metricLabel, { color: '#9a3412' }]}>Under Safety</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={[styles.metricCard, { backgroundColor: '#dbeafe', borderColor: '#93c5fd' }]} 
+                onPress={() => router.push({ pathname: "/store-master-list", params: { filter: 'overstock' } })}
+              >
+                <CheckCircle2 size={28} color="#1e40af" strokeWidth={2.5} />
+                <Text style={[styles.metricCount, { color: '#1e40af' }]}>{dashboardMetrics.overstock}</Text>
+                <Text style={[styles.metricLabel, { color: '#1e40af' }]}>Overstock</Text>
+              </TouchableOpacity>
             </View>
-          </TouchableOpacity>
+          </View>
         )}
 
         <View style={styles.buttonContainer}>
@@ -413,32 +445,47 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginTop: 4,
   },
-  parAlertBanner: {
+  metricsDashboard: {
+    marginBottom: 32,
+  },
+  metricsTitle: {
+    color: "#475569",
+    fontSize: 14,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginBottom: 16,
+    paddingHorizontal: 4,
+  },
+  metricsGrid: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-    backgroundColor: "#fef3c7",
+    flexWrap: "wrap",
+    gap: 12,
+  },
+  metricCard: {
+    width: "47%",
     borderWidth: 1.5,
-    borderColor: "#fcd34d",
-    borderRadius: 20,
-    padding: 18,
-    marginBottom: 24,
-    shadowColor: "#f59e0b",
+    borderRadius: 24,
+    padding: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    elevation: 3,
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+    marginBottom: 8,
   },
-  parAlertTitle: {
-    color: "#78350f",
+  metricCount: {
+    fontSize: 28,
+    fontWeight: "900",
+    marginVertical: 8,
+  },
+  metricLabel: {
+    fontSize: 11,
     fontWeight: "800",
-    fontSize: 15,
-    marginBottom: 2,
-  },
-  parAlertSub: {
-    color: "#92400e",
-    fontSize: 12,
-    fontWeight: "600",
+    textTransform: "uppercase",
+    textAlign: "center",
   },
   buttonContainer: {
     gap: 20,
