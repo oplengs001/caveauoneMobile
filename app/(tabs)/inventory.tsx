@@ -1,5 +1,5 @@
-import { Colors } from '@/constants/theme';
-import { useAuth } from '@/context/AuthContext';
+import { Colors } from "@/constants/theme";
+import { useAuth } from "@/context/AuthContext";
 import { db } from "@/lib/firebase";
 import { Stack, useRouter } from "expo-router";
 import {
@@ -12,15 +12,15 @@ import {
   orderBy,
   query,
   startAfter,
-  where
+  where,
 } from "firebase/firestore";
 import {
   Box,
   Check,
   ChevronLeft,
   PackageOpen,
-  Search as SearchIcon
-} from 'lucide-react-native';
+  Search as SearchIcon,
+} from "lucide-react-native";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -45,8 +45,8 @@ const PAGE_SIZE = 10;
 
 export default function InventoryScreen() {
   const { profile } = useAuth();
-  const theme = profile?.role === 'store' ? Colors.store : Colors.warehouse;
-  const isStore = profile?.role === 'store';
+  const theme = profile?.role === "store" ? Colors.store : Colors.warehouse;
+  const isStore = profile?.role === "store";
 
   const [bottles, setBottles] = useState<BottleView[]>([]);
   const [loading, setLoading] = useState(true);
@@ -85,7 +85,9 @@ export default function InventoryScreen() {
 
       // Boutique Scoping: If store user, only show their node's inventory
       if (isStore && profile?.locationId) {
-        baseQueries.push(where("storeRef", "==", doc(db, "stores", profile.locationId)));
+        baseQueries.push(
+          where("storeRef", "==", doc(db, "stores", profile.locationId)),
+        );
       }
 
       if (searchQuery.trim()) {
@@ -93,14 +95,14 @@ export default function InventoryScreen() {
           bottlesRef,
           ...baseQueries,
           where("sku", "==", searchQuery.trim()),
-          limit(PAGE_SIZE)
+          limit(PAGE_SIZE),
         );
       } else {
         q = query(
           bottlesRef,
           ...baseQueries,
           orderBy("createdAt", "desc"),
-          limit(PAGE_SIZE)
+          limit(PAGE_SIZE),
         );
 
         if (!isRefresh && lastDoc) {
@@ -109,50 +111,58 @@ export default function InventoryScreen() {
             ...baseQueries,
             orderBy("createdAt", "desc"),
             startAfter(lastDoc),
-            limit(PAGE_SIZE)
+            limit(PAGE_SIZE),
           );
         }
       }
 
       const snap = await getDocs(q);
 
-      const resolved = await Promise.all(snap.docs.map(async (docSnap) => {
-        const data = docSnap.data();
-        let masterWineData = wineCache.get(data.masterWineRef?.id);
-        let locationData = locationCache.get(data.locationRef?.id);
+      const resolved = await Promise.all(
+        snap.docs.map(async (docSnap) => {
+          const data = docSnap.data();
+          let masterWineData = wineCache.get(data.masterWineRef?.id);
+          let locationData = locationCache.get(data.locationRef?.id);
 
-        if (!masterWineData && data.masterWineRef) {
-          const wSnap = await getDoc(data.masterWineRef);
-          if (wSnap.exists()) {
-            masterWineData = { id: wSnap.id, ...(wSnap.data() as object) } as MasterWine;
-            wineCache.set(wSnap.id, masterWineData);
+          if (!masterWineData && data.masterWineRef) {
+            const wSnap = await getDoc(data.masterWineRef);
+            if (wSnap.exists()) {
+              masterWineData = {
+                id: wSnap.id,
+                ...(wSnap.data() as object),
+              } as MasterWine;
+              wineCache.set(wSnap.id, masterWineData);
+            }
           }
-        }
 
-        if (!locationData && data.locationRef) {
-          const lSnap = await getDoc(data.locationRef);
-          if (lSnap.exists()) {
-            locationData = { id: lSnap.id, ...(lSnap.data() as object) } as Location;
-            locationCache.set(lSnap.id, locationData);
+          if (!locationData && data.locationRef) {
+            const lSnap = await getDoc(data.locationRef);
+            if (lSnap.exists()) {
+              locationData = {
+                id: lSnap.id,
+                ...(lSnap.data() as object),
+              } as Location;
+              locationCache.set(lSnap.id, locationData);
+            }
           }
-        }
 
-        return {
-          id: docSnap.id,
-          ...(data as object),
-          createdAt: data.createdAt?.toDate() || new Date(),
-          updatedAt: data.updatedAt?.toDate() || new Date(),
-          masterWineData,
-          locationData,
-        } as BottleView;
-      }));
+          return {
+            id: docSnap.id,
+            ...(data as object),
+            createdAt: data.createdAt?.toDate() || new Date(),
+            updatedAt: data.updatedAt?.toDate() || new Date(),
+            masterWineData,
+            locationData,
+          } as BottleView;
+        }),
+      );
 
       if (isRefresh) {
         setBottles(resolved);
         setLastDoc(snap.docs[snap.docs.length - 1]);
         setHasMore(snap.docs.length === PAGE_SIZE);
       } else {
-        setBottles(prev => [...prev, ...resolved]);
+        setBottles((prev) => [...prev, ...resolved]);
         if (snap.docs.length > 0) {
           setLastDoc(snap.docs[snap.docs.length - 1]);
         }
@@ -185,7 +195,6 @@ export default function InventoryScreen() {
     if (next.size === 0) setIsSelectionMode(false);
   };
 
-
   const onRefresh = useCallback(() => {
     fetchInventory(true);
   }, [searchQuery]);
@@ -211,7 +220,10 @@ export default function InventoryScreen() {
       style={[
         styles.itemContainer,
         { backgroundColor: theme.card, borderColor: theme.border },
-        selectedIds.has(item.id) && [styles.itemSelected, { borderColor: theme.accent }]
+        selectedIds.has(item.id) && [
+          styles.itemSelected,
+          { borderColor: theme.accent },
+        ],
       ]}
       onPress={() => toggleSelection(item.id)}
       onLongPress={() => {
@@ -222,31 +234,79 @@ export default function InventoryScreen() {
       <View style={styles.itemHeader}>
         <View style={styles.titleContainer}>
           {isSelectionMode && (
-            <View style={[styles.checkbox, selectedIds.has(item.id) && [styles.checkboxSelected, { backgroundColor: theme.accent, borderColor: theme.accent }]]}>
-              {selectedIds.has(item.id) && <Check size={14} color="#fff" strokeWidth={3} />}
+            <View
+              style={[
+                styles.checkbox,
+                selectedIds.has(item.id) && [
+                  styles.checkboxSelected,
+                  { backgroundColor: theme.accent, borderColor: theme.accent },
+                ],
+              ]}
+            >
+              {selectedIds.has(item.id) && (
+                <Check size={14} color="#fff" strokeWidth={3} />
+              )}
             </View>
           )}
-          <Text style={[styles.itemTitle, { color: theme.text }]}>{item.masterWineData?.name || "Loading..."}</Text>
+          <Text style={[styles.itemTitle, { color: theme.text }]}>
+            {item.masterWineData?.name || "Loading..."}
+          </Text>
         </View>
-        <View style={[styles.statusBadge, { backgroundColor: item.status === 'received' ? theme.accent + '20' : theme.secondary + '20' }]}>
-          <Text style={[styles.statusText, { color: item.status === 'received' ? theme.accent : theme.secondary }]}>{item.status}</Text>
+        <View
+          style={[
+            styles.statusBadge,
+            {
+              backgroundColor:
+                item.status === "received"
+                  ? theme.accent + "20"
+                  : theme.secondary + "20",
+            },
+          ]}
+        >
+          <Text
+            style={[
+              styles.statusText,
+              {
+                color:
+                  item.status === "received" ? theme.accent : theme.secondary,
+              },
+            ]}
+          >
+            {item.status}
+          </Text>
         </View>
       </View>
 
       <Text style={[styles.itemSubtitle, { color: theme.textSecondary }]}>
-        SKU: {item.sku} • {item.masterWineData?.vintage}{item.masterWineData?.format ? ` • ${item.masterWineData.format}` : ''}
+        SKU: {item.sku} • {item.masterWineData?.vintage}
+        {item.masterWineData?.format ? ` • ${item.masterWineData.format}` : ""}
       </Text>
-      <Text style={[styles.itemLocation, { color: item.locationData ? theme.secondary : theme.accent }]}>
-        {item.locationData ? `📍 ${item.locationData.name}` : '📦 Unshelved'}
+      <Text
+        style={[
+          styles.itemLocation,
+          { color: item.locationData ? theme.secondary : theme.accent },
+        ]}
+      >
+        {item.locationData ? `📍 ${item.locationData.name}` : "📦 Unshelved"}
       </Text>
     </TouchableOpacity>
   );
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: theme.background }]}
+    >
       <Stack.Screen options={{ headerShown: false }} />
 
-      <View style={[styles.header, { borderBottomWidth: isStore ? 1 : 0, borderBottomColor: theme.border }]}>
+      <View
+        style={[
+          styles.header,
+          {
+            borderBottomWidth: isStore ? 1 : 0,
+            borderBottomColor: theme.border,
+          },
+        ]}
+      >
         <TouchableOpacity
           onPress={() => {
             if (isSelectionMode) {
@@ -258,13 +318,17 @@ export default function InventoryScreen() {
           }}
           style={styles.backButton}
         >
-          <ChevronLeft size={28} color="#fff" strokeWidth={2.5} />
+          <ChevronLeft size={28} color={theme.primary} strokeWidth={2.5} />
         </TouchableOpacity>
 
-        <Text style={[styles.title, { color: theme.text }]} numberOfLines={1}>
-          {isSelectionMode ? `${selectedIds.size} Selected` : "Inventory"}
-        </Text>
-
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.title, { color: theme.primary }]}>
+            {isSelectionMode ? `${selectedIds.size} Selected` : "Inventory"}
+          </Text>
+          <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
+            {isStore ? "Boutique View" : "Warehouse View"}
+          </Text>
+        </View>
         <View style={styles.headerActions}>
           {isSelectionMode ? (
             <TouchableOpacity
@@ -279,7 +343,10 @@ export default function InventoryScreen() {
           ) : (
             <View style={styles.actionRow}>
               <TouchableOpacity
-                style={[styles.headerActionChip, showUnshelvedOnly && styles.headerActionChipActive]}
+                style={[
+                  styles.headerActionChip,
+                  showUnshelvedOnly && styles.headerActionChipActive,
+                ]}
                 onPress={() => setShowUnshelvedOnly(!showUnshelvedOnly)}
                 activeOpacity={0.7}
               >
@@ -288,20 +355,39 @@ export default function InventoryScreen() {
                   color={showUnshelvedOnly ? "#000" : "#fff"}
                   strokeWidth={2.5}
                 />
-                <Text style={[styles.headerActionText, showUnshelvedOnly && styles.headerActionTextActive]}>
+                <Text
+                  style={[
+                    styles.headerActionText,
+                    showUnshelvedOnly && styles.headerActionTextActive,
+                  ]}
+                >
                   Unshelved
                 </Text>
               </TouchableOpacity>
-
             </View>
           )}
         </View>
       </View>
 
       <View style={styles.topControls}>
-        <View style={[styles.searchContainer, { marginBottom: isStore ? 16 : 4 }]}>
-          <View style={[styles.searchWrapper, { backgroundColor: theme.card, borderColor: theme.border, borderRadius: isStore ? 16 : 16 }]}>
-            <SearchIcon size={20} color={theme.textSecondary} style={styles.searchIcon} />
+        <View
+          style={[styles.searchContainer, { marginBottom: isStore ? 16 : 4 }]}
+        >
+          <View
+            style={[
+              styles.searchWrapper,
+              {
+                backgroundColor: theme.card,
+                borderColor: theme.border,
+                borderRadius: isStore ? 16 : 16,
+              },
+            ]}
+          >
+            <SearchIcon
+              size={20}
+              color={theme.textSecondary}
+              style={styles.searchIcon}
+            />
             <TextInput
               style={[styles.searchInput, { color: theme.text }]}
               placeholder="Search SKU..."
@@ -324,11 +410,15 @@ export default function InventoryScreen() {
           contentContainerStyle={styles.listContent}
           onEndReached={() => fetchInventory(false)}
           onEndReachedThreshold={0.5}
-          ListFooterComponent={() => (
+          ListFooterComponent={() =>
             loadingMore ? (
-              <ActivityIndicator size="small" color="#4f46e5" style={{ marginVertical: 20 }} />
+              <ActivityIndicator
+                size="small"
+                color="#4f46e5"
+                style={{ marginVertical: 20 }}
+              />
             ) : null
-          )}
+          }
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -346,8 +436,6 @@ export default function InventoryScreen() {
           }
         />
       )}
-
-
     </SafeAreaView>
   );
 }
@@ -371,8 +459,14 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     color: "#fff",
     flex: 1,
-    textTransform: 'uppercase',
+    textTransform: "uppercase",
     letterSpacing: -0.5,
+  },
+  subtitle: {
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 1.5,
   },
   headerActions: {
     flexDirection: "row",
@@ -425,8 +519,8 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   searchWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: "#1e293b",
     borderRadius: 16,
     borderWidth: 1,
@@ -495,12 +589,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#94a3b8",
     marginBottom: 6,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   itemLocation: {
     fontSize: 13,
     color: "#64748b",
-    fontWeight: '600',
+    fontWeight: "600",
   },
   statusBadge: {
     paddingHorizontal: 10,
@@ -510,11 +604,11 @@ const styles = StyleSheet.create({
   statusText: {
     fontSize: 11,
     fontWeight: "800",
-    textTransform: 'uppercase',
+    textTransform: "uppercase",
   },
   emptyContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     marginTop: 80,
     gap: 16,
   },
@@ -522,7 +616,7 @@ const styles = StyleSheet.create({
     color: "#475569",
     textAlign: "center",
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   batchActionBar: {
     position: "absolute",
@@ -576,5 +670,3 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
 });
-
-

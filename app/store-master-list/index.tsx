@@ -83,13 +83,43 @@ const STATUS_CONFIG: Record<
   StockStatus,
   { label: string; color: string; bg: string; accent: string }
 > = {
-  in_stock: { label: "In Stock", color: "#065f46", bg: "#d1fae5", accent: "#10b981" },
-  stockout: { label: "Stockout", color: "#991b1b", bg: "#fee2e2", accent: "#ef4444" },
-  overstock: { label: "Overstock", color: "#166534", bg: "#dcfce7", accent: "#22c55e" },
-  par_alert: { label: "PAR Alert", color: "#9a3412", bg: "#fff7ed", accent: "#f97316" },
-  under_safety: { label: "Under Safety", color: "#854d0e", bg: "#fefce8", accent: "#eab308" },
+  in_stock: {
+    label: "In Stock",
+    color: "#065f46",
+    bg: "#d1fae5",
+    accent: "#10b981",
+  },
+  stockout: {
+    label: "Stockout",
+    color: "#991b1b",
+    bg: "#fee2e2",
+    accent: "#ef4444",
+  },
+  overstock: {
+    label: "Overstock",
+    color: "#166534",
+    bg: "#dcfce7",
+    accent: "#22c55e",
+  },
+  par_alert: {
+    label: "PAR Alert",
+    color: "#9a3412",
+    bg: "#fff7ed",
+    accent: "#f97316",
+  },
+  under_safety: {
+    label: "Under Safety",
+    color: "#854d0e",
+    bg: "#fefce8",
+    accent: "#eab308",
+  },
   unset: { label: "Unset", color: "#475569", bg: "#e2e8f0", accent: "#94a3b8" },
-  discontinued: { label: "Discontinued", color: "#475569", bg: "#f1f5f9", accent: "#94a3b8" },
+  discontinued: {
+    label: "Discontinued",
+    color: "#475569",
+    bg: "#f1f5f9",
+    accent: "#94a3b8",
+  },
 };
 
 export default function StoreMasterListScreen() {
@@ -100,8 +130,18 @@ export default function StoreMasterListScreen() {
   const [entries, setEntries] = useState<WineEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const { filter: initialFilter } = useLocalSearchParams<{ filter: "all" | "alerts" | "under_safety" | "stockout" | "overstock" | "unset" }>();
-  const [filter, setFilter] = useState<"all" | "alerts" | "under_safety" | "stockout" | "overstock" | "unset">(initialFilter || "all");
+  const { filter: initialFilter } = useLocalSearchParams<{
+    filter:
+      | "all"
+      | "alerts"
+      | "under_safety"
+      | "stockout"
+      | "overstock"
+      | "unset";
+  }>();
+  const [filter, setFilter] = useState<
+    "all" | "alerts" | "under_safety" | "stockout" | "overstock" | "unset"
+  >(initialFilter || "all");
 
   // Adjustment sheet
   const [selected, setSelected] = useState<WineEntry | null>(null);
@@ -161,9 +201,9 @@ export default function StoreMasterListScreen() {
 
           const masterWine: MasterWine = wineSnap.exists()
             ? ({
-              id: wineSnap.id,
-              ...(wineSnap.data() as object),
-            } as MasterWine)
+                id: wineSnap.id,
+                ...(wineSnap.data() as object),
+              } as MasterWine)
             : { id: wineId, name: "Unknown Wine", vintage: "", price: 0 };
 
           const stockCount = countSnap.data().count;
@@ -313,7 +353,10 @@ export default function StoreMasterListScreen() {
     const cfg = STATUS_CONFIG[item.status];
     return (
       <TouchableOpacity
-        style={[styles.card, { borderLeftWidth: 4, borderLeftColor: cfg.accent }]}
+        style={[
+          styles.card,
+          { borderLeftWidth: 4, borderLeftColor: cfg.accent },
+        ]}
         onPress={() => openSheet(item)}
         activeOpacity={0.8}
       >
@@ -323,7 +366,9 @@ export default function StoreMasterListScreen() {
             <Text style={[styles.stockCircleCount, { color: cfg.color }]}>
               {item.stockCount}
             </Text>
-            <Text style={[styles.stockCircleLabel, { color: cfg.color }]}>in store</Text>
+            <Text style={[styles.stockCircleLabel, { color: cfg.color }]}>
+              in store
+            </Text>
           </View>
 
           {/* Right: Wine info + inline metrics */}
@@ -335,7 +380,9 @@ export default function StoreMasterListScreen() {
                 </Text>
                 <Text style={styles.wineMeta}>
                   {item.masterWine.vintage}
-                  {item.masterWine.producer ? ` · ${item.masterWine.producer}` : ""}
+                  {item.masterWine.producer
+                    ? ` · ${item.masterWine.producer}`
+                    : ""}
                   {item.masterWine.format ? ` · ${item.masterWine.format}` : ""}
                 </Text>
               </View>
@@ -352,19 +399,30 @@ export default function StoreMasterListScreen() {
               {item.setting && (
                 <>
                   <Text style={styles.inlineMetricText}>
-                    PAR <Text style={styles.inlineMetricVal}>{item.setting.parLevel}</Text>
+                    PAR{" "}
+                    <Text style={styles.inlineMetricVal}>
+                      {item.setting.parLevel}
+                    </Text>
                   </Text>
                   <Text style={[styles.inlineMetricDot]}>·</Text>
                   <Text style={styles.inlineMetricText}>
-                    Safety <Text style={styles.inlineMetricVal}>{item.setting.safetyStock}</Text>
+                    Safety{" "}
+                    <Text style={styles.inlineMetricVal}>
+                      {item.setting.safetyStock}
+                    </Text>
                   </Text>
                 </>
               )}
               {item.requestedQty > 0 && (
                 <>
                   <Text style={styles.inlineMetricDot}>·</Text>
-                  <Text style={[styles.inlineMetricText, { color: cfg.accent }]}>
-                    Need <Text style={{ fontWeight: "900" }}>+{item.requestedQty}</Text>
+                  <Text
+                    style={[styles.inlineMetricText, { color: cfg.accent }]}
+                  >
+                    Need{" "}
+                    <Text style={{ fontWeight: "900" }}>
+                      +{item.requestedQty}
+                    </Text>
                   </Text>
                 </>
               )}
@@ -405,11 +463,27 @@ export default function StoreMasterListScreen() {
 
       {/* Filter Chips */}
       <View style={styles.filterRow}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-          {(["all", "alerts", "under_safety", "stockout", "overstock", "unset"] as const).map((f) => (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ gap: 8 }}
+        >
+          {(
+            [
+              "all",
+              "alerts",
+              "under_safety",
+              "stockout",
+              "overstock",
+              "unset",
+            ] as const
+          ).map((f) => (
             <TouchableOpacity
               key={f}
-              style={[styles.filterChip, filter === f && styles.filterChipActive]}
+              style={[
+                styles.filterChip,
+                filter === f && styles.filterChipActive,
+              ]}
               onPress={() => setFilter(f)}
             >
               <Text
