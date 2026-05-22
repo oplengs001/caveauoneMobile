@@ -196,30 +196,30 @@ export default function HomeScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity 
-                style={[styles.metricCard, { backgroundColor: '#fef3c7', borderColor: '#fcd34d' }]} 
+                style={[styles.metricCard, { backgroundColor: '#fff7ed', borderColor: '#fdba74' }]} 
                 onPress={() => router.push({ pathname: "/store-master-list", params: { filter: 'alerts' } })}
               >
-                <AlertTriangle size={28} color="#92400e" strokeWidth={2.5} />
-                <Text style={[styles.metricCount, { color: '#92400e' }]}>{dashboardMetrics.parAlert}</Text>
-                <Text style={[styles.metricLabel, { color: '#92400e' }]}>PAR Alert</Text>
+                <AlertTriangle size={28} color="#9a3412" strokeWidth={2.5} />
+                <Text style={[styles.metricCount, { color: '#9a3412' }]}>{dashboardMetrics.parAlert}</Text>
+                <Text style={[styles.metricLabel, { color: '#9a3412' }]}>PAR Alert</Text>
               </TouchableOpacity>
 
               <TouchableOpacity 
-                style={[styles.metricCard, { backgroundColor: '#ffedd5', borderColor: '#fdba74' }]} 
+                style={[styles.metricCard, { backgroundColor: '#fefce8', borderColor: '#fde047' }]} 
                 onPress={() => router.push({ pathname: "/store-master-list", params: { filter: 'under_safety' } })}
               >
-                <AlertTriangle size={28} color="#9a3412" strokeWidth={2.5} />
-                <Text style={[styles.metricCount, { color: '#9a3412' }]}>{dashboardMetrics.underSafety}</Text>
-                <Text style={[styles.metricLabel, { color: '#9a3412' }]}>Under Safety</Text>
+                <AlertTriangle size={28} color="#854d0e" strokeWidth={2.5} />
+                <Text style={[styles.metricCount, { color: '#854d0e' }]}>{dashboardMetrics.underSafety}</Text>
+                <Text style={[styles.metricLabel, { color: '#854d0e' }]}>Under Safety</Text>
               </TouchableOpacity>
 
               <TouchableOpacity 
-                style={[styles.metricCard, { backgroundColor: '#dbeafe', borderColor: '#93c5fd' }]} 
+                style={[styles.metricCard, { backgroundColor: '#dcfce7', borderColor: '#86efac' }]} 
                 onPress={() => router.push({ pathname: "/store-master-list", params: { filter: 'overstock' } })}
               >
-                <CheckCircle2 size={28} color="#1e40af" strokeWidth={2.5} />
-                <Text style={[styles.metricCount, { color: '#1e40af' }]}>{dashboardMetrics.overstock}</Text>
-                <Text style={[styles.metricLabel, { color: '#1e40af' }]}>Overstock</Text>
+                <CheckCircle2 size={28} color="#166534" strokeWidth={2.5} />
+                <Text style={[styles.metricCount, { color: '#166534' }]}>{dashboardMetrics.overstock}</Text>
+                <Text style={[styles.metricLabel, { color: '#166534' }]}>Overstock</Text>
               </TouchableOpacity>
             </View>
           </View>

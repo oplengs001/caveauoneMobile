@@ -81,15 +81,15 @@ function computeStatus(
 
 const STATUS_CONFIG: Record<
   StockStatus,
-  { label: string; color: string; bg: string }
+  { label: string; color: string; bg: string; accent: string }
 > = {
-  in_stock: { label: "In Stock", color: "#065f46", bg: "#d1fae5" },
-  stockout: { label: "Stockout", color: "#991b1b", bg: "#fee2e2" },
-  overstock: { label: "Overstock", color: "#1e40af", bg: "#dbeafe" },
-  par_alert: { label: "PAR Alert", color: "#92400e", bg: "#fef3c7" },
-  under_safety: { label: "Under Safety", color: "#9a3412", bg: "#ffedd5" },
-  unset: { label: "Unset", color: "#475569", bg: "#e2e8f0" },
-  discontinued: { label: "Discontinued", color: "#475569", bg: "#f1f5f9" },
+  in_stock: { label: "In Stock", color: "#065f46", bg: "#d1fae5", accent: "#10b981" },
+  stockout: { label: "Stockout", color: "#991b1b", bg: "#fee2e2", accent: "#ef4444" },
+  overstock: { label: "Overstock", color: "#166534", bg: "#dcfce7", accent: "#22c55e" },
+  par_alert: { label: "PAR Alert", color: "#9a3412", bg: "#fff7ed", accent: "#f97316" },
+  under_safety: { label: "Under Safety", color: "#854d0e", bg: "#fefce8", accent: "#eab308" },
+  unset: { label: "Unset", color: "#475569", bg: "#e2e8f0", accent: "#94a3b8" },
+  discontinued: { label: "Discontinued", color: "#475569", bg: "#f1f5f9", accent: "#94a3b8" },
 };
 
 export default function StoreMasterListScreen() {
@@ -161,9 +161,9 @@ export default function StoreMasterListScreen() {
 
           const masterWine: MasterWine = wineSnap.exists()
             ? ({
-                id: wineSnap.id,
-                ...(wineSnap.data() as object),
-              } as MasterWine)
+              id: wineSnap.id,
+              ...(wineSnap.data() as object),
+            } as MasterWine)
             : { id: wineId, name: "Unknown Wine", vintage: "", price: 0 };
 
           const stockCount = countSnap.data().count;
@@ -313,71 +313,63 @@ export default function StoreMasterListScreen() {
     const cfg = STATUS_CONFIG[item.status];
     return (
       <TouchableOpacity
-        style={styles.card}
+        style={[styles.card, { borderLeftWidth: 4, borderLeftColor: cfg.accent }]}
         onPress={() => openSheet(item)}
         activeOpacity={0.8}
       >
-        <View style={styles.cardTop}>
-          <View style={styles.cardMain}>
-            <Text style={styles.wineName} numberOfLines={2}>
-              {item.masterWine.name}
+        <View style={styles.cardBody}>
+          {/* Left: Big stock count */}
+          <View style={[styles.stockCircle, { backgroundColor: cfg.bg }]}>
+            <Text style={[styles.stockCircleCount, { color: cfg.color }]}>
+              {item.stockCount}
             </Text>
-            <Text style={styles.wineMeta}>
-              {item.masterWine.vintage}
-              {item.masterWine.producer ? ` · ${item.masterWine.producer}` : ""}
-              {item.masterWine.format ? ` · ${item.masterWine.format}` : ""}
-            </Text>
+            <Text style={[styles.stockCircleLabel, { color: cfg.color }]}>in store</Text>
           </View>
-          <View style={styles.cardRight}>
-            <View style={[styles.statusBadge, { backgroundColor: cfg.bg }]}>
-              <Text style={[styles.statusText, { color: cfg.color }]}>
-                {cfg.label}
-              </Text>
-            </View>
-            <ChevronRight size={18} color="#94a3b8" />
-          </View>
-        </View>
 
-        <View style={styles.cardMetrics}>
-          <View style={styles.metric}>
-            <Text style={styles.metricValue}>{item.stockCount}</Text>
-            <Text style={styles.metricLabel}>In Store</Text>
-          </View>
-          <View style={styles.metricDivider} />
-          <View style={styles.metric}>
-            <Text
-              style={[
-                styles.metricValue,
-                { color: item.setting ? theme.accent : "#94a3b8" },
-              ]}
-            >
-              {item.setting?.parLevel ?? "—"}
-            </Text>
-            <Text style={styles.metricLabel}>PAR</Text>
-          </View>
-          <View style={styles.metricDivider} />
-          <View style={styles.metric}>
-            <Text
-              style={[
-                styles.metricValue,
-                { color: item.setting ? theme.secondary : "#94a3b8" },
-              ]}
-            >
-              {item.setting?.safetyStock ?? "—"}
-            </Text>
-            <Text style={styles.metricLabel}>Safety</Text>
-          </View>
-          {item.requestedQty > 0 && (
-            <>
-              <View style={styles.metricDivider} />
-              <View style={styles.metric}>
-                <Text style={[styles.metricValue, { color: "#dc2626" }]}>
-                  +{item.requestedQty}
+          {/* Right: Wine info + inline metrics */}
+          <View style={styles.cardInfo}>
+            <View style={styles.cardInfoTop}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.wineName} numberOfLines={2}>
+                  {item.masterWine.name}
                 </Text>
-                <Text style={styles.metricLabel}>Needed</Text>
+                <Text style={styles.wineMeta}>
+                  {item.masterWine.vintage}
+                  {item.masterWine.producer ? ` · ${item.masterWine.producer}` : ""}
+                  {item.masterWine.format ? ` · ${item.masterWine.format}` : ""}
+                </Text>
               </View>
-            </>
-          )}
+              <ChevronRight size={18} color="#94a3b8" />
+            </View>
+
+            {/* Compact inline metrics row */}
+            <View style={styles.inlineMetrics}>
+              <View style={[styles.statusBadge, { backgroundColor: cfg.bg }]}>
+                <Text style={[styles.statusText, { color: cfg.color }]}>
+                  {cfg.label}
+                </Text>
+              </View>
+              {item.setting && (
+                <>
+                  <Text style={styles.inlineMetricText}>
+                    PAR <Text style={styles.inlineMetricVal}>{item.setting.parLevel}</Text>
+                  </Text>
+                  <Text style={[styles.inlineMetricDot]}>·</Text>
+                  <Text style={styles.inlineMetricText}>
+                    Safety <Text style={styles.inlineMetricVal}>{item.setting.safetyStock}</Text>
+                  </Text>
+                </>
+              )}
+              {item.requestedQty > 0 && (
+                <>
+                  <Text style={styles.inlineMetricDot}>·</Text>
+                  <Text style={[styles.inlineMetricText, { color: cfg.accent }]}>
+                    Need <Text style={{ fontWeight: "900" }}>+{item.requestedQty}</Text>
+                  </Text>
+                </>
+              )}
+            </View>
+          </View>
         </View>
       </TouchableOpacity>
     );
@@ -712,57 +704,87 @@ const styles = StyleSheet.create({
   list: { paddingHorizontal: 16, paddingBottom: 40 },
   card: {
     backgroundColor: theme.card,
-    borderRadius: 20,
-    padding: 20,
-    marginBottom: 12,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 10,
     borderWidth: 1,
     borderColor: theme.border,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
     elevation: 2,
+    overflow: "hidden",
   },
-  cardTop: {
+  cardBody: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+  },
+  stockCircle: {
+    width: 68,
+    height: 68,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  stockCircleCount: {
+    fontSize: 26,
+    fontWeight: "900",
+    letterSpacing: -1,
+  },
+  stockCircleLabel: {
+    fontSize: 8,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    opacity: 0.7,
+    marginTop: -1,
+  },
+  cardInfo: {
+    flex: 1,
+    gap: 8,
+  },
+  cardInfoTop: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 12,
-    marginBottom: 16,
+    gap: 8,
   },
-  cardMain: { flex: 1 },
-  cardRight: { alignItems: "flex-end", gap: 8 },
   wineName: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "800",
     color: theme.text,
-    letterSpacing: -0.3,
-    marginBottom: 4,
+    letterSpacing: -0.2,
+    marginBottom: 2,
   },
-  wineMeta: { fontSize: 12, color: theme.textSecondary, fontWeight: "500" },
-  statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
+  wineMeta: { fontSize: 11, color: theme.textSecondary, fontWeight: "500" },
+  statusBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
   statusText: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "800",
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
-  cardMetrics: { flexDirection: "row", alignItems: "center", gap: 0 },
-  metric: { flex: 1, alignItems: "center" },
-  metricValue: {
-    fontSize: 20,
+  inlineMetrics: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  inlineMetricText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: theme.textSecondary,
+  },
+  inlineMetricVal: {
     fontWeight: "900",
     color: theme.text,
-    letterSpacing: -0.5,
   },
-  metricLabel: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: theme.textSecondary,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-    marginTop: 2,
+  inlineMetricDot: {
+    fontSize: 11,
+    color: theme.border,
+    fontWeight: "800",
   },
-  metricDivider: { width: 1, height: 32, backgroundColor: theme.border },
   empty: { alignItems: "center", paddingTop: 80, gap: 12 },
   emptyText: { color: theme.textSecondary, fontWeight: "600", fontSize: 15 },
 
