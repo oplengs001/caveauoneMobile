@@ -12,9 +12,8 @@ import {
   where,
 } from "firebase/firestore";
 import {
-  AlertTriangle,
   AlertOctagon,
-  CheckCircle2,
+  AlertTriangle,
   ClipboardList,
   FileDown,
   LayoutList,
@@ -38,7 +37,11 @@ import {
 export default function HomeScreen() {
   const router = useRouter();
   const { profile, loading } = useAuth();
-  const [dashboardMetrics, setDashboardMetrics] = useState({ stockout: 0, parAlert: 0, underSafety: 0, overstock: 0 });
+  const [dashboardMetrics, setDashboardMetrics] = useState({
+    stockout: { wines: 0, bottles: 0 },
+    parAlert: { wines: 0, bottles: 0 },
+    underSafety: { wines: 0, bottles: 0 },
+  });
 
   useEffect(() => {
     const fetchMetrics = async () => {
@@ -46,6 +49,23 @@ export default function HomeScreen() {
       if (profile?.role !== "store" || !storeId) return;
 
       try {
+        // Fetch pending requests to exclude them from metrics
+        const pendingRequestsSnap = await getDocs(
+          query(
+            collection(db, "wine_requests"),
+            where("storeId", "==", storeId),
+            where("status", "==", "pending"),
+          ),
+        );
+        const pendingWineIds = new Set<string>();
+        pendingRequestsSnap.docs.forEach((reqDoc) => {
+          reqDoc.data().items?.forEach((item: { masterWineId: string }) => {
+            if (item.masterWineId) {
+              pendingWineIds.add(item.masterWineId);
+            }
+          });
+        });
+
         const settingsSnap = await getDocs(
           query(
             collection(db, "store_wine_settings"),
@@ -54,14 +74,20 @@ export default function HomeScreen() {
           ),
         );
 
-        let stockout = 0;
-        let parAlert = 0;
-        let underSafety = 0;
-        let overstock = 0;
+        const metrics = {
+          stockout: { wines: 0, bottles: 0 },
+          parAlert: { wines: 0, bottles: 0 },
+          underSafety: { wines: 0, bottles: 0 },
+        };
 
         await Promise.all(
           settingsSnap.docs.map(async (d) => {
-            const { masterWineId, parLevel, safetyStock } = d.data();
+            const { masterWineId, parLevel = 0, safetyStock = 0 } = d.data();
+
+            if (pendingWineIds.has(masterWineId)) {
+              return;
+            }
+
             const wineRef = doc(db, "master_wines", masterWineId);
             const snap = await getCountFromServer(
               query(
@@ -72,13 +98,19 @@ export default function HomeScreen() {
               ),
             );
             const count = snap.data().count;
-            if (count === 0) stockout++;
-            else if (count > (safetyStock || 0)) overstock++;
-            else if (count <= (parLevel || 0)) parAlert++;
-            else if (count < (safetyStock || 0)) underSafety++;
-          })
+            if (count === 0) {
+              metrics.stockout.wines++;
+              metrics.stockout.bottles += safetyStock;
+            } else if (count <= parLevel) {
+              metrics.parAlert.wines++;
+              metrics.parAlert.bottles += safetyStock - count;
+            } else if (count < safetyStock) {
+              metrics.underSafety.wines++;
+              metrics.underSafety.bottles += safetyStock - count;
+            }
+          }),
         );
-        setDashboardMetrics({ stockout, parAlert, underSafety, overstock });
+        setDashboardMetrics(metrics);
       } catch (err) {
         console.error("Failed to fetch dashboard metrics:", err);
       }
@@ -185,43 +217,74 @@ export default function HomeScreen() {
         {isStore && (
           <View style={styles.metricsDashboard}>
             <Text style={styles.metricsTitle}>Inventory Health</Text>
-            <View style={styles.metricsGrid}>
-              <TouchableOpacity 
-                style={[styles.metricCard, { backgroundColor: '#fee2e2', borderColor: '#fca5a5' }]} 
-                onPress={() => router.push({ pathname: "/store-master-list", params: { filter: 'stockout' } })}
-              >
-                <AlertOctagon size={28} color="#991b1b" strokeWidth={2.5} />
-                <Text style={[styles.metricCount, { color: '#991b1b' }]}>{dashboardMetrics.stockout}</Text>
-                <Text style={[styles.metricLabel, { color: '#991b1b' }]}>Stockout</Text>
-              </TouchableOpacity>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.metricsGrid}
+            >
+              {dashboardMetrics.stockout.wines > 0 && (
+                <TouchableOpacity
+                  style={[styles.metricCard, { backgroundColor: "#ef4444" }]}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/store-master-list",
+                      params: { filter: "stockout" },
+                    })
+                  }
+                >
+                  <AlertOctagon size={24} color="#ffffff" strokeWidth={2.5} />
+                  <Text style={[styles.metricCount, { color: "#ffffff" }]}>
+                    {dashboardMetrics.stockout.wines}
+                  </Text>
+                  <Text style={styles.metricLabel}>Stockout Wines</Text>
+                  <Text style={styles.metricSubLabel}>
+                    {dashboardMetrics.stockout.bottles} bottles needed
+                  </Text>
+                </TouchableOpacity>
+              )}
 
-              <TouchableOpacity 
-                style={[styles.metricCard, { backgroundColor: '#fff7ed', borderColor: '#fdba74' }]} 
-                onPress={() => router.push({ pathname: "/store-master-list", params: { filter: 'alerts' } })}
-              >
-                <AlertTriangle size={28} color="#9a3412" strokeWidth={2.5} />
-                <Text style={[styles.metricCount, { color: '#9a3412' }]}>{dashboardMetrics.parAlert}</Text>
-                <Text style={[styles.metricLabel, { color: '#9a3412' }]}>PAR Alert</Text>
-              </TouchableOpacity>
+              {dashboardMetrics.parAlert.wines > 0 && (
+                <TouchableOpacity
+                  style={[styles.metricCard, { backgroundColor: "#f97316" }]}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/store-master-list",
+                      params: { filter: "alerts" },
+                    })
+                  }
+                >
+                  <AlertTriangle size={24} color="#ffffff" strokeWidth={2.5} />
+                  <Text style={[styles.metricCount, { color: "#ffffff" }]}>
+                    {dashboardMetrics.parAlert.wines}
+                  </Text>
+                  <Text style={styles.metricLabel}>PAR Alert Wines</Text>
+                  <Text style={styles.metricSubLabel}>
+                    {dashboardMetrics.parAlert.bottles} bottles needed
+                  </Text>
+                </TouchableOpacity>
+              )}
 
-              <TouchableOpacity 
-                style={[styles.metricCard, { backgroundColor: '#fefce8', borderColor: '#fde047' }]} 
-                onPress={() => router.push({ pathname: "/store-master-list", params: { filter: 'under_safety' } })}
-              >
-                <AlertTriangle size={28} color="#854d0e" strokeWidth={2.5} />
-                <Text style={[styles.metricCount, { color: '#854d0e' }]}>{dashboardMetrics.underSafety}</Text>
-                <Text style={[styles.metricLabel, { color: '#854d0e' }]}>Under Safety</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity 
-                style={[styles.metricCard, { backgroundColor: '#dcfce7', borderColor: '#86efac' }]} 
-                onPress={() => router.push({ pathname: "/store-master-list", params: { filter: 'overstock' } })}
-              >
-                <CheckCircle2 size={28} color="#166534" strokeWidth={2.5} />
-                <Text style={[styles.metricCount, { color: '#166534' }]}>{dashboardMetrics.overstock}</Text>
-                <Text style={[styles.metricLabel, { color: '#166534' }]}>Overstock</Text>
-              </TouchableOpacity>
-            </View>
+              {dashboardMetrics.underSafety.wines > 0 && (
+                <TouchableOpacity
+                  style={[styles.metricCard, { backgroundColor: "#eab308" }]}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/store-master-list",
+                      params: { filter: "under_safety" },
+                    })
+                  }
+                >
+                  <AlertTriangle size={24} color="#ffffff" strokeWidth={2.5} />
+                  <Text style={[styles.metricCount, { color: "#ffffff" }]}>
+                    {dashboardMetrics.underSafety.wines}
+                  </Text>
+                  <Text style={styles.metricLabel}>Under Safety</Text>
+                  <Text style={styles.metricSubLabel}>
+                    {dashboardMetrics.underSafety.bottles} bottles needed
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </ScrollView>
           </View>
         )}
 
@@ -459,32 +522,39 @@ const styles = StyleSheet.create({
   },
   metricsGrid: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
+    gap: 16,
   },
   metricCard: {
-    width: "47%",
-    borderWidth: 1.5,
+    width: 140,
+    height: 160,
     borderRadius: 24,
-    padding: 20,
+    padding: 16,
     alignItems: "center",
     justifyContent: "center",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-    marginBottom: 8,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 5,
   },
   metricCount: {
-    fontSize: 28,
+    fontSize: 32,
     fontWeight: "900",
-    marginVertical: 8,
+    marginTop: 8,
+    marginBottom: 4,
   },
   metricLabel: {
     fontSize: 11,
     fontWeight: "800",
     textTransform: "uppercase",
+    textAlign: "center",
+    color: "rgba(255,255,255,0.8)",
+  },
+  metricSubLabel: {
+    marginTop: 6,
+    fontSize: 11,
+    fontWeight: "600",
+    color: "rgba(255,255,255,0.7)",
     textAlign: "center",
   },
   buttonContainer: {
