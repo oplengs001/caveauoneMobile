@@ -14,6 +14,7 @@ import {
 import {
   AlertOctagon,
   AlertTriangle,
+  Banknote,
   ClipboardList,
   FileDown,
   LayoutList,
@@ -353,32 +354,28 @@ export default function HomeScreen() {
               </View>
             </TouchableOpacity>
           )}
-
-          <TouchableOpacity
-            style={[
-              styles.actionButton,
-              {
-                backgroundColor: isStore ? theme.secondary : theme.secondary,
-                borderRadius: isStore ? 24 : 24,
-              },
-            ]}
-            onPress={() => router.push("/tagging")}
-          >
-            <View style={styles.buttonContent}>
-              <MapPin size={42} color="#ffffff" strokeWidth={1.5} />
-              <View style={styles.buttonTextContainer}>
-                <Text style={styles.buttonTitle}>
-                  {isStore ? "Bottle Management" : "Bottle Tagging"}
-                </Text>
-                <Text style={styles.buttonDesc}>
-                  {isStore
-                    ? "Update location or fulfill sales"
-                    : "Assign bottles to bin locations"}
-                </Text>
+          {!isStore && (
+            <TouchableOpacity
+              style={[
+                styles.actionButton,
+                {
+                  backgroundColor: isStore ? theme.secondary : theme.secondary,
+                  borderRadius: isStore ? 24 : 24,
+                },
+              ]}
+              onPress={() => router.push("/tagging")}
+            >
+              <View style={styles.buttonContent}>
+                <MapPin size={42} color="#ffffff" strokeWidth={1.5} />
+                <View style={styles.buttonTextContainer}>
+                  <Text style={styles.buttonTitle}>{"Bottle Tagging"}</Text>
+                  <Text style={styles.buttonDesc}>
+                    {"Assign bottles to bin locations"}
+                  </Text>
+                </View>
               </View>
-            </View>
-          </TouchableOpacity>
-
+            </TouchableOpacity>
+          )}
           {!isStore && (
             <TouchableOpacity
               style={[styles.actionButton, { backgroundColor: theme.accent }]}
@@ -413,6 +410,30 @@ export default function HomeScreen() {
               </View>
             </View>
           </TouchableOpacity>
+
+          {isStore && (
+            <TouchableOpacity
+              style={[
+                styles.actionButton,
+                { backgroundColor: "#10b981", borderRadius: 24, padding: 32 },
+              ]}
+              onPress={() =>
+                router.push({ pathname: "/tagging", params: { mode: "sell" } })
+              }
+            >
+              <View style={styles.buttonContent}>
+                <Banknote size={42} color="#ffffff" strokeWidth={1.5} />
+                <View style={styles.buttonTextContainer}>
+                  <Text style={[styles.buttonTitle, { fontSize: 24 }]}>
+                    Sell Bottle
+                  </Text>
+                  <Text style={styles.buttonDesc}>
+                    Scan a bottle to mark it as sold
+                  </Text>
+                </View>
+              </View>
+            </TouchableOpacity>
+          )}
         </View>
 
         {isStore && (
