@@ -50,6 +50,7 @@ export default function OnboardingDetailScreen() {
 
   const [showFormatPicker, setShowFormatPicker] = useState(false);
   const [selectedFormat, setSelectedFormat] = useState<string | null>(null);
+  const [sizeConfirmed, setSizeConfirmed] = useState(false);
 
   useEffect(() => {
     if (capturedImage) {
@@ -126,6 +127,7 @@ export default function OnboardingDetailScreen() {
 
       if (matchedItem) {
         setActiveItem(matchedItem);
+        setSizeConfirmed(matchedItem.format === '75cl');
         setCurrentStep('verify_qr');
         setCapturedImage(null);
       } else {
@@ -372,16 +374,37 @@ export default function OnboardingDetailScreen() {
             </View>
           </View>
 
-          <View style={styles.qrScannerPlaceholder}>
-            <CameraView
-              style={styles.qrCamera}
-              onBarcodeScanned={({ data }) => handleVerifyQR(data)}
-            />
-            <View style={styles.qrOverlay}>
-              <View style={styles.qrFrame} />
-              <Text style={styles.qrInstruction}>Scan the applied QR code</Text>
+          {(!sizeConfirmed && activeItem.format !== '75cl') ? (
+            <View style={styles.confirmFormatCard}>
+              <Text style={styles.confirmFormatTitle}>Confirm Bottle Size</Text>
+              <Text style={styles.confirmFormatDesc}>
+                This label matched a <Text style={{fontWeight: '900', color: '#f59e0b'}}>{activeItem.format}</Text> bottle. Please physically verify the bottle size before applying the sticker.
+              </Text>
+              <TouchableOpacity 
+                style={styles.confirmFormatButton}
+                onPress={() => setSizeConfirmed(true)}
+              >
+                <Text style={styles.confirmFormatButtonText}>Confirm {activeItem.format} Size</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.cancelFormatButton}
+                onPress={() => setCurrentStep('scan_label')}
+              >
+                <Text style={styles.cancelFormatButtonText}>Cancel & Rescan</Text>
+              </TouchableOpacity>
             </View>
-          </View>
+          ) : (
+            <View style={styles.qrScannerPlaceholder}>
+              <CameraView
+                style={styles.qrCamera}
+                onBarcodeScanned={({ data }) => handleVerifyQR(data)}
+              />
+              <View style={styles.qrOverlay}>
+                <View style={styles.qrFrame} />
+                <Text style={styles.qrInstruction}>Scan the applied QR code</Text>
+              </View>
+            </View>
+          )}
         </View>
       )}
 
@@ -753,13 +776,60 @@ const styles = StyleSheet.create({
     width: 200,
     height: 200,
     borderWidth: 2,
-    borderColor: '#fff',
-    borderRadius: 24,
+    borderColor: '#4f46e5',
+    backgroundColor: 'transparent',
   },
   qrInstruction: {
     color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+    marginTop: 24,
+  },
+  confirmFormatCard: {
+    backgroundColor: '#1e293b',
+    borderRadius: 24,
+    padding: 24,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#f59e0b',
+  },
+  confirmFormatTitle: {
+    color: '#f59e0b',
+    fontSize: 20,
+    fontWeight: '900',
+    marginBottom: 8,
+  },
+  confirmFormatDesc: {
+    color: '#94a3b8',
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 24,
+  },
+  confirmFormatButton: {
+    backgroundColor: '#f59e0b',
+    width: '100%',
+    paddingVertical: 16,
+    borderRadius: 16,
+    alignItems: 'center',
+  },
+  confirmFormatButtonText: {
+    color: '#fff',
+    fontSize: 16,
     fontWeight: '800',
-    marginTop: 20,
+  },
+  cancelFormatButton: {
+    marginTop: 12,
+    width: '100%',
+    paddingVertical: 16,
+    borderRadius: 16,
+    alignItems: 'center',
+    backgroundColor: '#334155',
+  },
+  cancelFormatButtonText: {
+    color: '#cbd5e1',
+    fontSize: 16,
+    fontWeight: '700',
   },
   successContainer: {
     flex: 1,
