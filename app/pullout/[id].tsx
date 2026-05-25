@@ -267,11 +267,46 @@ export default function PulloutDetailScreen() {
           text: "Complete",
           onPress: async () => {
             try {
+              // 1. Update Pullout Request
               await updateDoc(doc(db, "pullout_requests", id as string), {
                 status: "completed",
                 completedAt: new Date(),
                 updatedAt: new Date(),
               });
+
+              // 2. Update original Wine Request with pulled quantities
+              if (request.wineRequestId) {
+                const wineRequestRef = doc(
+                  db,
+                  "wine_requests",
+                  request.wineRequestId,
+                );
+                const wineRequestSnap = await getDoc(wineRequestRef);
+                if (wineRequestSnap.exists()) {
+                  const wineRequestData = wineRequestSnap.data();
+                  const updatedWineRequestItems = wineRequestData.items.map(
+                    (wineReqItem: any) => {
+                      const correspondingPulloutItem = request.items.find(
+                        (pulloutItem) =>
+                          pulloutItem.masterWineId === wineReqItem.masterWineId,
+                      );
+                      if (correspondingPulloutItem) {
+                        return {
+                          ...wineReqItem,
+                          pulledQty: correspondingPulloutItem.pulledQty,
+                        };
+                      }
+                      return wineReqItem;
+                    },
+                  );
+
+                  await updateDoc(wineRequestRef, {
+                    items: updatedWineRequestItems,
+                    updatedAt: new Date(),
+                  });
+                }
+              }
+
               router.back();
             } catch (error) {
               console.error("Error completing request:", error);

@@ -383,6 +383,7 @@ export default function StoreMasterListScreen() {
                     qty,
                     price: selected.masterWine.price,
                     pulledQty: 0,
+                    ingressedQty: 0,
                   },
                 ],
                 totalAmount: selected.masterWine.price * qty,
@@ -429,6 +430,7 @@ export default function StoreMasterListScreen() {
         qty: item.requestedQty,
         price: item.masterWine.price,
         pulledQty: 0,
+        ingressedQty: 0,
       }));
 
       const totalAmount = requestItems.reduce(

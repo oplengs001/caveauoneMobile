@@ -75,7 +75,14 @@ export default function WineRequestDetail() {
       }
 
       const bottleData = bottleSnap.data() as InventoryBottle;
-
+      if (bottleData.storeRef?.id === request.storeId) {
+        Alert.alert(
+          "Already Received",
+          "This bottle has already been received for this request.",
+          [{ text: "OK", onPress: () => setScanning(true) }],
+        );
+        return;
+      }
       if (bottleData.outboundLocationRef?.id !== request.storeId) {
         Alert.alert(
           "Wrong Store",
@@ -108,7 +115,7 @@ export default function WineRequestDetail() {
 
       const item = request.items[itemIndex];
       const ingressedQty = item.ingressedQty || 0;
-      const targetQty = item.pulledQty ?? item.qty;
+      const targetQty = item.qty;
 
       if (ingressedQty >= targetQty) {
         Alert.alert(
@@ -132,9 +139,7 @@ export default function WineRequestDetail() {
         ...item,
         ingressedQty: (item.ingressedQty || 0) + 1,
       };
-      const allReceived = newItems.every(
-        (i) => (i.ingressedQty || 0) >= (i.pulledQty ?? i.qty),
-      );
+      const allReceived = newItems.every((i) => (i.ingressedQty || 0) >= i.qty);
       const newStatus = allReceived ? "ingress_complete" : "receiving";
 
       await updateDoc(doc(db, "wine_requests", request.id), {
@@ -380,7 +385,7 @@ export default function WineRequestDetail() {
                 request.status === "ingress_complete") && (
                 <View style={styles.progressContainer}>
                   <Text style={styles.progressText}>
-                    {wine.ingressedQty || 0} / {wine.pulledQty ?? wine.qty}
+                    {wine.ingressedQty || 0} / {wine.qty}
                   </Text>
                   <Text style={styles.progressLabel}>RECEIVED</Text>
                 </View>
@@ -419,9 +424,7 @@ export default function WineRequestDetail() {
       {(request.status === "converted" ||
         request.status === "receiving" ||
         (request.status === "ingress_complete" &&
-          !request.items.every(
-            (i) => (i.ingressedQty || 0) >= (i.pulledQty ?? i.qty),
-          ))) && (
+          !request.items.every((i) => (i.ingressedQty || 0) >= i.qty))) && (
         <View style={styles.footer}>
           <TouchableOpacity
             style={styles.scanButton}

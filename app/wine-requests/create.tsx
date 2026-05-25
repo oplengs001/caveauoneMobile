@@ -289,6 +289,7 @@ export default function CreateWineRequest() {
         price: item.wine.price || 0,
         qty: item.qty,
         pulledQty: 0,
+        ingressedQty: 0,
       })),
       totalAmount: items.reduce(
         (sum, item) => sum + (item.wine.price || 0) * item.qty,
