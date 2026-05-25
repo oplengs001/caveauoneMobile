@@ -19,8 +19,8 @@ import {
   MapPin,
   PackageSearch,
   ScanQrCode,
-  Search
-} from 'lucide-react-native';
+  Search,
+} from "lucide-react-native";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -33,7 +33,12 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { InventoryBottle, Location, MasterWine, PulloutRequest } from "../../types";
+import {
+  InventoryBottle,
+  Location,
+  MasterWine,
+  PulloutRequest,
+} from "../../types";
 
 export default function PulloutDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -42,7 +47,15 @@ export default function PulloutDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<(InventoryBottle & { wineName: string, locationName: string, vintage: string, producer: string, format: string })[]>([]);
+  const [searchResults, setSearchResults] = useState<
+    (InventoryBottle & {
+      wineName: string;
+      locationName: string;
+      vintage: string;
+      producer: string;
+      format: string;
+    })[]
+  >([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const isProcessing = useRef(false);
   const [permission, requestPermission] = useCameraPermissions();
@@ -77,25 +90,38 @@ export default function PulloutDetailScreen() {
       const bottleSnap = await getDoc(doc(db, "inventory_bottles", data));
 
       if (!bottleSnap.exists()) {
-        Alert.alert("Not Found", `No bottle found with ID: ${data}`, [{
-          text: "OK", onPress: () => {
-            isProcessing.current = false;
-            setScanning(true);
-          }
-        }]);
+        Alert.alert("Not Found", `No bottle found with ID: ${data}`, [
+          {
+            text: "OK",
+            onPress: () => {
+              isProcessing.current = false;
+              setScanning(true);
+            },
+          },
+        ]);
         setLoading(false);
         return;
       }
 
-      const bottleData = { id: bottleSnap.id, ...bottleSnap.data() } as InventoryBottle;
+      const bottleData = {
+        id: bottleSnap.id,
+        ...bottleSnap.data(),
+      } as InventoryBottle;
 
       if (bottleData.status !== "received" && bottleData.status !== "shelved") {
-        Alert.alert("Invalid Status", `Bottle is already ${bottleData.status}.`, [{
-          text: "OK", onPress: () => {
-            isProcessing.current = false;
-            setScanning(true);
-          }
-        }]);
+        Alert.alert(
+          "Invalid Status",
+          `Bottle is already ${bottleData.status}.`,
+          [
+            {
+              text: "OK",
+              onPress: () => {
+                isProcessing.current = false;
+                setScanning(true);
+              },
+            },
+          ],
+        );
         setLoading(false);
         return;
       }
@@ -103,16 +129,37 @@ export default function PulloutDetailScreen() {
       // 2. Check if this wine is in the request
       const masterWineId = bottleData.masterWineRef.id;
       const itemIndex = request.items.findIndex(
-        (i) => i.masterWineId === masterWineId && i.pulledQty < i.requestedQty
+        (i) => i.masterWineId === masterWineId && i.pulledQty < i.requestedQty,
       );
 
       if (itemIndex === -1) {
-        Alert.alert("Not Requested", "This wine is not needed for this request or already fulfilled.", [{
-          text: "OK", onPress: () => {
-            isProcessing.current = false;
-            setScanning(true);
-          }
-        }]);
+        Alert.alert(
+          "Not Requested",
+          "This wine is not needed for this request or already fulfilled.",
+          [
+            {
+              text: "OK",
+              onPress: () => {
+                isProcessing.current = false;
+                setScanning(true);
+              },
+            },
+          ],
+        );
+        setLoading(false);
+        return;
+      }
+
+      if (!request.outBoundStoreId) {
+        Alert.alert("Error", "Pullout request is missing a target store.", [
+          {
+            text: "OK",
+            onPress: () => {
+              isProcessing.current = false;
+              setScanning(true);
+            },
+          },
+        ]);
         setLoading(false);
         return;
       }
@@ -120,6 +167,7 @@ export default function PulloutDetailScreen() {
       // 3. Update Bottle
       await updateDoc(doc(db, "inventory_bottles", bottleData.id), {
         status: "outbound",
+        outboundLocationRef: doc(db, "stores", request.outBoundStoreId),
         updatedAt: Timestamp.now(),
       });
 
@@ -131,7 +179,9 @@ export default function PulloutDetailScreen() {
         bottleData.id,
       ];
 
-      const allFulfilled = updatedItems.every(i => (i.pulledQty >= i.requestedQty) || i.skipped);
+      const allFulfilled = updatedItems.every(
+        (i) => i.pulledQty >= i.requestedQty || i.skipped,
+      );
 
       await updateDoc(doc(db, "pullout_requests", request.id), {
         items: updatedItems,
@@ -141,15 +191,16 @@ export default function PulloutDetailScreen() {
 
       Alert.alert("Success", `Pulled ${updatedItems[itemIndex].wineName}`, [
         {
-          text: allFulfilled ? "Finish" : "Scan Next", onPress: () => {
+          text: allFulfilled ? "Finish" : "Scan Next",
+          onPress: () => {
             isProcessing.current = false;
             if (allFulfilled) {
               fetchRequest();
             } else {
               setScanning(true);
             }
-          }
-        }
+          },
+        },
       ]);
 
       await fetchRequest();
@@ -179,7 +230,7 @@ export default function PulloutDetailScreen() {
               newItems[index] = {
                 ...newItems[index],
                 skipped: true,
-                skippedAt: new Date()
+                skippedAt: new Date(),
               };
 
               await updateDoc(doc(db, "pullout_requests", id as string), {
@@ -187,21 +238,23 @@ export default function PulloutDetailScreen() {
                 updatedAt: new Date(),
               });
 
-              setRequest(prev => prev ? { ...prev, items: newItems } : null);
+              setRequest((prev) =>
+                prev ? { ...prev, items: newItems } : null,
+              );
             } catch (error) {
               console.error("Error skipping item:", error);
               Alert.alert("Error", "Failed to skip item.");
             }
-          }
-        }
-      ]
+          },
+        },
+      ],
     );
   };
 
   const handleCompleteRequest = async () => {
     if (!request) return;
 
-    const hasSkipped = request.items.some(i => i.skipped);
+    const hasSkipped = request.items.some((i) => i.skipped);
 
     Alert.alert(
       "Complete Request?",
@@ -224,9 +277,9 @@ export default function PulloutDetailScreen() {
               console.error("Error completing request:", error);
               Alert.alert("Error", "Failed to complete request.");
             }
-          }
-        }
-      ]
+          },
+        },
+      ],
     );
   };
 
@@ -244,50 +297,55 @@ export default function PulloutDetailScreen() {
       const bottlesRef = collection(db, "inventory_bottles");
       const constraints: any[] = [
         where("sku", "==", term),
-        where("status", "in", ["received", "shelved"])
+        where("status", "in", ["received", "shelved"]),
       ];
 
       if (profile?.locationId) {
-        constraints.push(where("storeRef", "==", doc(db, "stores", profile.locationId)));
+        constraints.push(
+          where("storeRef", "==", doc(db, "stores", profile.locationId)),
+        );
       }
 
       const q = query(bottlesRef, ...constraints);
       const snap = await getDocs(q);
 
-      const results = await Promise.all(snap.docs.map(async (doc) => {
-        const data = doc.data();
-        let wineName = "Unknown Wine";
-        let locationName = "No Location";
-        let vintage = "NV";
-        let producer = "";
-        let format = "75cl";
+      const results = await Promise.all(
+        snap.docs.map(async (doc) => {
+          const data = doc.data();
+          let wineName = "Unknown Wine";
+          let locationName = "No Location";
+          let vintage = "NV";
+          let producer = "";
+          let format = "75cl";
 
-        if (data.masterWineRef) {
-          const wineSnap = await getDoc(data.masterWineRef);
-          if (wineSnap.exists()) {
-            const mw = wineSnap.data() as MasterWine;
-            wineName = mw.name;
-            vintage = mw.vintage || "NV";
-            producer = mw.producer || "";
-            format = mw.format || "75cl";
+          if (data.masterWineRef) {
+            const wineSnap = await getDoc(data.masterWineRef);
+            if (wineSnap.exists()) {
+              const mw = wineSnap.data() as MasterWine;
+              wineName = mw.name;
+              vintage = mw.vintage || "NV";
+              producer = mw.producer || "";
+              format = mw.format || "75cl";
+            }
           }
-        }
 
-        if (data.locationRef) {
-          const locSnap = await getDoc(data.locationRef);
-          if (locSnap.exists()) locationName = (locSnap.data() as Location).name;
-        }
+          if (data.locationRef) {
+            const locSnap = await getDoc(data.locationRef);
+            if (locSnap.exists())
+              locationName = (locSnap.data() as Location).name;
+          }
 
-        return {
-          id: doc.id,
-          ...data,
-          wineName,
-          vintage,
-          producer,
-          format,
-          locationName,
-        } as any;
-      }));
+          return {
+            id: doc.id,
+            ...data,
+            wineName,
+            vintage,
+            producer,
+            format,
+            locationName,
+          } as any;
+        }),
+      );
 
       setSearchResults(results);
     } catch (error) {
@@ -302,7 +360,10 @@ export default function PulloutDetailScreen() {
     return (
       <View style={styles.container}>
         <Text style={styles.permissionText}>Camera permission required</Text>
-        <TouchableOpacity style={styles.permissionButton} onPress={requestPermission}>
+        <TouchableOpacity
+          style={styles.permissionButton}
+          onPress={requestPermission}
+        >
           <Text style={styles.permissionButtonText}>Grant Permission</Text>
         </TouchableOpacity>
       </View>
@@ -320,7 +381,10 @@ export default function PulloutDetailScreen() {
           <View style={styles.scannerOverlay}>
             <View style={styles.scanTarget} />
             <Text style={styles.scanText}>Scan bottle QR to pull</Text>
-            <TouchableOpacity onPress={() => setScanning(false)} style={styles.cancelScanButton}>
+            <TouchableOpacity
+              onPress={() => setScanning(false)}
+              style={styles.cancelScanButton}
+            >
               <Text style={styles.cancelScanText}>Cancel</Text>
             </TouchableOpacity>
           </View>
@@ -333,7 +397,10 @@ export default function PulloutDetailScreen() {
     <SafeAreaView style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={styles.backButton}
+        >
           <ChevronLeft size={28} color="#fff" strokeWidth={2.5} />
         </TouchableOpacity>
         <Text style={styles.title}>Pullout Details</Text>
@@ -346,7 +413,9 @@ export default function PulloutDetailScreen() {
           <ScrollView contentContainerStyle={styles.scrollContent}>
             <View style={styles.statusCard}>
               <Text style={styles.statusLabel}>TASK STATUS</Text>
-              <Text style={styles.statusValue}>{request.status.replace('_', ' ').toUpperCase()}</Text>
+              <Text style={styles.statusValue}>
+                {request.status.replace("_", " ").toUpperCase()}
+              </Text>
             </View>
 
             <View style={styles.searchSection}>
@@ -381,14 +450,27 @@ export default function PulloutDetailScreen() {
                   {searchResults.map((res) => (
                     <View key={res.id} style={styles.searchResultItem}>
                       <View style={styles.resultInfo}>
-                        <Text style={styles.resultWineName}>{res.wineName}</Text>
-                        <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '500', marginBottom: 4 }}>
+                        <Text style={styles.resultWineName}>
+                          {res.wineName}
+                        </Text>
+                        <Text
+                          style={{
+                            fontSize: 12,
+                            color: "#64748b",
+                            fontWeight: "500",
+                            marginBottom: 4,
+                          }}
+                        >
                           {res.vintage} • {res.producer} • {res.format}
                         </Text>
-                        <Text style={styles.resultLocation}>Located at: {res.locationName}</Text>
+                        <Text style={styles.resultLocation}>
+                          Located at: {res.locationName}
+                        </Text>
                       </View>
                       <View style={styles.resultBadge}>
-                        <Text style={styles.resultStatus}>{res.status.toUpperCase()}</Text>
+                        <Text style={styles.resultStatus}>
+                          {res.status.toUpperCase()}
+                        </Text>
                       </View>
                     </View>
                   ))}
@@ -404,7 +486,10 @@ export default function PulloutDetailScreen() {
               {request.items.map((item, index) => {
                 const isFulfilled = item.pulledQty >= item.requestedQty;
                 const isSkipped = item.skipped;
-                const progress = Math.min(1, item.pulledQty / item.requestedQty);
+                const progress = Math.min(
+                  1,
+                  item.pulledQty / item.requestedQty,
+                );
 
                 return (
                   <View
@@ -412,41 +497,74 @@ export default function PulloutDetailScreen() {
                     style={[
                       styles.itemCard,
                       isFulfilled && styles.itemCardFulfilled,
-                      isSkipped && styles.itemCardSkipped
+                      isSkipped && styles.itemCardSkipped,
                     ]}
                   >
                     <View style={styles.itemMain}>
                       <TouchableOpacity
                         style={styles.itemInfo}
-                        onPress={() => !isFulfilled && !isSkipped && handleSearch(item.sku)}
+                        onPress={() =>
+                          !isFulfilled && !isSkipped && handleSearch(item.sku)
+                        }
                       >
                         <View style={styles.itemHeaderRow}>
                           <View style={{ flex: 1, paddingRight: 10 }}>
-                            <Text style={[styles.itemName, isSkipped && styles.textMuted]}>
+                            <Text
+                              style={[
+                                styles.itemName,
+                                isSkipped && styles.textMuted,
+                              ]}
+                            >
                               {item.wineName}
                             </Text>
-                            <Text style={[{ fontSize: 12, color: '#64748b', fontWeight: '600', marginTop: 2 }, isSkipped && styles.textMuted]}>
-                              {item.vintage} • {item.producer || "Independent Producer"} • {item.format}
+                            <Text
+                              style={[
+                                {
+                                  fontSize: 12,
+                                  color: "#64748b",
+                                  fontWeight: "600",
+                                  marginTop: 2,
+                                },
+                                isSkipped && styles.textMuted,
+                              ]}
+                            >
+                              {item.vintage} •{" "}
+                              {item.producer || "Independent Producer"} •{" "}
+                              {item.format}
                             </Text>
                           </View>
                           <View style={styles.itemActions}>
                             {isFulfilled ? (
-                              <CheckCircle2 size={20} color="#10b981" strokeWidth={2.5} />
+                              <CheckCircle2
+                                size={20}
+                                color="#10b981"
+                                strokeWidth={2.5}
+                              />
                             ) : isSkipped ? (
-                              <AlertCircle size={20} color="#ef4444" strokeWidth={2.5} />
+                              <AlertCircle
+                                size={20}
+                                color="#ef4444"
+                                strokeWidth={2.5}
+                              />
                             ) : (
                               <View style={styles.actionButtons}>
                                 <TouchableOpacity
                                   onPress={() => handleSearch(item.sku)}
                                   style={styles.actionIcon}
                                 >
-                                  <Search size={18} color="#6366f1" strokeWidth={2} />
+                                  <Search
+                                    size={18}
+                                    color="#6366f1"
+                                    strokeWidth={2}
+                                  />
                                 </TouchableOpacity>
                                 <TouchableOpacity
                                   onPress={() => handleSkipItem(index)}
                                   style={styles.skipButton}
                                 >
-                                  <Text style={styles.skipButtonText}>Skip</Text>
+                                  <Text style={styles.skipButtonText}>
+                                    Skip
+                                  </Text>
                                 </TouchableOpacity>
                               </View>
                             )}
@@ -455,12 +573,16 @@ export default function PulloutDetailScreen() {
 
                         <View style={styles.itemMetaRow}>
                           <Text style={styles.itemSku}>SKU: {item.sku}</Text>
-                          <Text style={[
-                            styles.itemProgress,
-                            isSkipped && { color: '#ef4444' },
-                            isFulfilled && { color: '#10b981' }
-                          ]}>
-                            {isSkipped ? "SKIPPED" : `${item.pulledQty} OF ${item.requestedQty} PULLED`}
+                          <Text
+                            style={[
+                              styles.itemProgress,
+                              isSkipped && { color: "#ef4444" },
+                              isFulfilled && { color: "#10b981" },
+                            ]}
+                          >
+                            {isSkipped
+                              ? "SKIPPED"
+                              : `${item.pulledQty} OF ${item.requestedQty} PULLED`}
                           </Text>
                         </View>
 
@@ -471,7 +593,7 @@ export default function PulloutDetailScreen() {
                                 style={[
                                   styles.progressBarFill,
                                   { width: `${progress * 100}%` },
-                                  isFulfilled && { backgroundColor: '#10b981' }
+                                  isFulfilled && { backgroundColor: "#10b981" },
                                 ]}
                               />
                             </View>
@@ -485,9 +607,11 @@ export default function PulloutDetailScreen() {
             </View>
           </ScrollView>
 
-          {request.status !== 'completed' && (
+          {request.status !== "completed" && (
             <View style={styles.footer}>
-              {request.items.every(i => (i.pulledQty >= i.requestedQty) || i.skipped) ? (
+              {request.items.every(
+                (i) => i.pulledQty >= i.requestedQty || i.skipped,
+              ) ? (
                 <TouchableOpacity
                   style={[styles.completeButton]}
                   onPress={handleCompleteRequest}
@@ -535,7 +659,7 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: "900",
     color: "#fff",
-    textTransform: 'uppercase',
+    textTransform: "uppercase",
     letterSpacing: -0.5,
   },
   scrollContent: {
@@ -569,8 +693,8 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
   },
   sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 10,
     marginBottom: 20,
   },
@@ -578,7 +702,7 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 14,
     fontWeight: "900",
-    textTransform: 'uppercase',
+    textTransform: "uppercase",
     letterSpacing: 1.5,
   },
   itemsList: {
@@ -590,7 +714,7 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     borderWidth: 1,
     borderColor: "#334155",
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   itemCardFulfilled: {
     borderColor: "rgba(16, 185, 129, 0.3)",
@@ -604,9 +728,9 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   itemHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
     gap: 12,
     marginBottom: 12,
   },
@@ -622,9 +746,9 @@ const styles = StyleSheet.create({
     opacity: 0.3,
   },
   itemMetaRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 12,
   },
   itemSku: {
@@ -636,20 +760,20 @@ const styles = StyleSheet.create({
   itemProgress: {
     color: "#64748b",
     fontSize: 10,
-    fontWeight: '900',
+    fontWeight: "900",
     letterSpacing: 0.5,
   },
   progressContainer: {
-    width: '100%',
+    width: "100%",
   },
   progressBarBg: {
     height: 6,
     backgroundColor: "#0f172a",
     borderRadius: 3,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   progressBarFill: {
-    height: '100%',
+    height: "100%",
     backgroundColor: "#6366f1",
     borderRadius: 3,
   },
@@ -670,7 +794,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: "#334155",
   },
   skipButton: {
     backgroundColor: "rgba(239, 68, 68, 0.1)",
@@ -684,10 +808,10 @@ const styles = StyleSheet.create({
     color: "#ef4444",
     fontSize: 10,
     fontWeight: "900",
-    textTransform: 'uppercase',
+    textTransform: "uppercase",
   },
   itemInfo: {
-    width: '100%',
+    width: "100%",
   },
   footer: {
     padding: 24,
@@ -711,7 +835,7 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontWeight: "900",
-    textTransform: 'uppercase',
+    textTransform: "uppercase",
     letterSpacing: 1.5,
   },
   completeButton: {
@@ -732,7 +856,7 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontWeight: "900",
-    textTransform: 'uppercase',
+    textTransform: "uppercase",
     letterSpacing: 1.5,
   },
   scannerOverlay: {
@@ -748,30 +872,30 @@ const styles = StyleSheet.create({
     borderColor: "#4f46e5",
     borderRadius: 32,
     marginBottom: 40,
-    backgroundColor: 'rgba(79, 70, 229, 0.05)',
+    backgroundColor: "rgba(79, 70, 229, 0.05)",
   },
   scanText: {
     color: "#fff",
     fontSize: 14,
     fontWeight: "900",
-    textTransform: 'uppercase',
+    textTransform: "uppercase",
     letterSpacing: 2,
   },
   cancelScanButton: {
     position: "absolute",
     bottom: 60,
-    backgroundColor: '#1e293b',
+    backgroundColor: "#1e293b",
     paddingHorizontal: 40,
     paddingVertical: 18,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: "#334155",
   },
   cancelScanText: {
     color: "#fff",
     fontSize: 14,
     fontWeight: "900",
-    textTransform: 'uppercase',
+    textTransform: "uppercase",
     letterSpacing: 1,
   },
   permissionText: {
@@ -779,7 +903,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 100,
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   permissionButton: {
     backgroundColor: "#4f46e5",
@@ -791,13 +915,13 @@ const styles = StyleSheet.create({
   permissionButtonText: {
     color: "#fff",
     fontWeight: "900",
-    textTransform: 'uppercase',
+    textTransform: "uppercase",
   },
   errorText: {
     color: "#ef4444",
     textAlign: "center",
     marginTop: 40,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   searchSection: {
     marginBottom: 32,
@@ -819,7 +943,7 @@ const styles = StyleSheet.create({
     height: 56,
     color: "#fff",
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: "600",
     borderWidth: 1,
     borderColor: "#334155",
   },
@@ -858,7 +982,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "900",
     marginTop: 4,
-    textTransform: 'uppercase',
+    textTransform: "uppercase",
   },
   resultBadge: {
     backgroundColor: "#1e293b",

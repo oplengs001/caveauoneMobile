@@ -25,6 +25,7 @@ export interface InventoryBottle {
   masterWineRef: DocumentReference;
   locationRef: DocumentReference | null;
   storeRef: DocumentReference | null;
+  outboundLocationRef?: DocumentReference | null;
   sku: string;
   readableId?: string;
   status:
@@ -73,7 +74,7 @@ export interface PulloutRequestItem {
 export interface PulloutRequest {
   id: string;
   wineRequestId: string;
-  targetStoreId?: string;
+  outBoundStoreId?: string;
   items: PulloutRequestItem[];
   status: "pending" | "in_progress" | "completed";
   createdAt: any;
@@ -96,6 +97,7 @@ export interface WineRequestItem {
   sku: string;
   qty: number;
   pulledQty?: number;
+  ingressedQty?: number;
   price?: number;
 }
 
@@ -104,7 +106,12 @@ export interface WineRequest {
   storeId: string;
   targetStoreId?: string;
   createdBy: string;
-  status: "pending" | "converted" | "rejected";
+  status:
+    | "pending"
+    | "converted"
+    | "rejected"
+    | "ingress_complete"
+    | "receiving";
   items: WineRequestItem[];
   totalAmount: number;
   createdAt: any;

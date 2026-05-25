@@ -98,6 +98,13 @@ export default function WineRequestsIndex() {
           icon: CheckCircle2,
           label: "AUTHORIZED",
         };
+      case "ingress_complete":
+        return {
+          color: "#059669",
+          bg: "#a7f3d0",
+          icon: CheckCircle2,
+          label: "RECEIVED",
+        };
       case "rejected":
         return {
           color: "#ef4444",
