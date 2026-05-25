@@ -168,35 +168,53 @@ export default function StoreMasterListScreen() {
   const fetchData = useCallback(async () => {
     if (!storeId) return;
     try {
-      // 1. Fetch all master wines that have ever been at this store
-      const bottlesSnap = await getDocs(
-        query(
-          collection(db, "inventory_bottles"),
-          where("storeRef", "==", doc(db, "stores", storeId)),
+      // 1. Fetch bottles with stock and all wine settings for the store
+      const [bottlesSnap, settingsSnap] = await Promise.all([
+        getDocs(
+          query(
+            collection(db, "inventory_bottles"),
+            where("storeRef", "==", doc(db, "stores", storeId)),
+          ),
         ),
-      );
+        getDocs(
+          query(
+            collection(db, "store_wine_settings"),
+            where("storeId", "==", storeId),
+          ),
+        ),
+      ]);
 
-      // Build unique masterWineRef map
+      // 2. Build a comprehensive list of wines to display and a map of their settings.
       const wineRefMap = new Map<string, any>();
+      const settingsMap = new Map<string, StoreWineSetting>();
+
+      // Add wines from inventory
       bottlesSnap.docs.forEach((d) => {
         const ref = d.data().masterWineRef;
-        if (ref && !wineRefMap.has(ref.id)) wineRefMap.set(ref.id, ref);
+        if (ref && !wineRefMap.has(ref.id)) {
+          wineRefMap.set(ref.id, ref);
+        }
       });
 
-      // 2. Fetch settings
-      const settingsSnap = await getDocs(
-        query(
-          collection(db, "store_wine_settings"),
-          where("storeId", "==", storeId),
-        ),
-      );
-      const settingsMap = new Map<string, StoreWineSetting>();
-      settingsSnap.docs.forEach((d) =>
-        settingsMap.set(d.data().masterWineId, {
+      // Add wines from settings, and build the settings map
+      settingsSnap.docs.forEach((d) => {
+        const settingData = d.data();
+        settingsMap.set(settingData.masterWineId, {
           id: d.id,
-          ...d.data(),
-        } as StoreWineSetting),
-      );
+          ...settingData,
+        } as StoreWineSetting);
+
+        // If a wine has settings but no stock, it should still be on the list.
+        if (
+          settingData.masterWineId &&
+          !wineRefMap.has(settingData.masterWineId)
+        ) {
+          wineRefMap.set(
+            settingData.masterWineId,
+            doc(db, "master_wines", settingData.masterWineId),
+          );
+        }
+      });
 
       // 3. Fetch pending requests to link them to wines
       const pendingRequestsSnap = await getDocs(
