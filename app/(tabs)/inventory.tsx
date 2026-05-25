@@ -16,17 +16,22 @@ import {
 } from "firebase/firestore";
 import {
   Box,
+  Building2,
+  Calendar,
   Check,
   ChevronLeft,
+  Globe,
+  Layers,
   PackageOpen,
   Search as SearchIcon,
+  Tag,
 } from "lucide-react-native";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  FlatList,
   RefreshControl,
   SafeAreaView,
+  SectionList,
   StyleSheet,
   Text,
   TextInput,
@@ -59,6 +64,9 @@ export default function InventoryScreen() {
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [showUnshelvedOnly, setShowUnshelvedOnly] = useState(false);
   const router = useRouter();
+  const [sections, setSections] = useState<
+    { title: string; masterWineData?: MasterWine; data: BottleView[] }[]
+  >([]);
 
   const [wineCache] = useState(new Map<string, MasterWine>());
   const [locationCache] = useState(new Map<string, Location>());
@@ -184,6 +192,35 @@ export default function InventoryScreen() {
     return () => clearTimeout(delayDebounce);
   }, [searchQuery, showUnshelvedOnly]);
 
+  useEffect(() => {
+    const grouped = bottles.reduce(
+      (
+        acc,
+        bottle,
+      ): Record<
+        string,
+        { title: string; masterWineData?: MasterWine; data: BottleView[] }
+      > => {
+        const wineId = bottle.masterWineRef?.id || "unknown";
+        if (!acc[wineId]) {
+          acc[wineId] = {
+            title: bottle.masterWineData?.name || "Unknown Wine",
+            masterWineData: bottle.masterWineData,
+            data: [],
+          };
+        }
+        acc[wineId].data.push(bottle);
+        return acc;
+      },
+      {},
+    );
+
+    const sortedGroups = Object.values(grouped).sort((a, b) =>
+      a.title.localeCompare(b.title),
+    );
+    setSections(sortedGroups);
+  }, [bottles]);
+
   const toggleSelection = (id: string) => {
     const next = new Set(selectedIds);
     if (next.has(id)) {
@@ -215,6 +252,24 @@ export default function InventoryScreen() {
     }
   };
 
+  const renderSectionHeader = ({
+    section,
+  }: {
+    section: { title: string; data: BottleView[] };
+  }) => (
+    <View style={styles.sectionHeaderContainer}>
+      <Tag size={16} color={theme.textSecondary} />
+      <Text
+        style={[styles.sectionHeaderText, { color: theme.text }]}
+        numberOfLines={1}
+      >
+        {section.title}
+      </Text>
+      <View style={styles.sectionHeaderBadge}>
+        <Text style={styles.sectionHeaderBadgeText}>{section.data.length}</Text>
+      </View>
+    </View>
+  );
   const renderItem = ({ item }: { item: BottleView }) => (
     <TouchableOpacity
       style={[
@@ -225,9 +280,9 @@ export default function InventoryScreen() {
           { borderColor: theme.accent },
         ],
       ]}
-      onPress={() => toggleSelection(item.id)}
+      onPress={() => (isSelectionMode ? toggleSelection(item.id) : null)}
       onLongPress={() => {
-        setIsSelectionMode(true);
+        if (!isSelectionMode) setIsSelectionMode(true);
         toggleSelection(item.id);
       }}
     >
@@ -257,9 +312,11 @@ export default function InventoryScreen() {
             styles.statusBadge,
             {
               backgroundColor:
-                item.status === "received"
+                item.status === "received" || item.status === "incoming"
                   ? theme.accent + "20"
-                  : theme.secondary + "20",
+                  : item.status === "shelved"
+                    ? theme.secondary + "20"
+                    : theme.danger + "20",
             },
           ]}
         >
@@ -268,7 +325,11 @@ export default function InventoryScreen() {
               styles.statusText,
               {
                 color:
-                  item.status === "received" ? theme.accent : theme.secondary,
+                  item.status === "received" || item.status === "incoming"
+                    ? theme.accent
+                    : item.status === "shelved"
+                      ? theme.secondary
+                      : theme.danger,
               },
             ]}
           >
@@ -277,18 +338,52 @@ export default function InventoryScreen() {
         </View>
       </View>
 
-      <Text style={[styles.itemSubtitle, { color: theme.textSecondary }]}>
-        SKU: {item.sku} • {item.masterWineData?.vintage}
-        {item.masterWineData?.format ? ` • ${item.masterWineData.format}` : ""}
-      </Text>
-      <Text
-        style={[
-          styles.itemLocation,
-          { color: item.locationData ? theme.secondary : theme.accent },
-        ]}
-      >
-        {item.locationData ? `📍 ${item.locationData.name}` : "📦 Unshelved"}
-      </Text>
+      <View style={styles.detailsGrid}>
+        <View style={styles.detailItem}>
+          <Calendar size={14} color={theme.textSecondary} />
+          <Text style={[styles.detailText, { color: theme.textSecondary }]}>
+            {item.masterWineData?.vintage || "N/A"}
+          </Text>
+        </View>
+        <View style={styles.detailItem}>
+          <Layers size={14} color={theme.textSecondary} />
+          <Text style={[styles.detailText, { color: theme.textSecondary }]}>
+            {item.masterWineData?.format || "N/A"}
+          </Text>
+        </View>
+        <View style={[styles.detailItem, { flexBasis: "100%" }]}>
+          <Building2 size={14} color={theme.textSecondary} />
+          <Text
+            style={[styles.detailText, { color: theme.textSecondary }]}
+            numberOfLines={1}
+          >
+            {item.masterWineData?.producer || "N/A"}
+          </Text>
+        </View>
+        <View style={[styles.detailItem, { flexBasis: "100%" }]}>
+          <Globe size={14} color={theme.textSecondary} />
+          <Text
+            style={[styles.detailText, { color: theme.textSecondary }]}
+            numberOfLines={1}
+          >
+            {item.masterWineData?.region || "Unknown Origin"}
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.itemFooter}>
+        <Text style={[styles.itemSku, { color: theme.textSecondary }]}>
+          SKU: {item.sku}
+        </Text>
+        <Text
+          style={[
+            styles.itemLocation,
+            { color: item.locationData ? theme.secondary : theme.accent },
+          ]}
+        >
+          {item.locationData ? `📍 ${item.locationData.name}` : "📦 Unshelved"}
+        </Text>
+      </View>
     </TouchableOpacity>
   );
 
@@ -327,7 +422,7 @@ export default function InventoryScreen() {
           </Text>
           <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
             {isStore ? "Boutique View" : "Warehouse View"}
-          </Text> 
+          </Text>
         </View>
         <View style={styles.headerActions}>
           {isSelectionMode ? (
@@ -403,9 +498,10 @@ export default function InventoryScreen() {
       {loading ? (
         <ActivityIndicator size="large" color="#4f46e5" style={{ flex: 1 }} />
       ) : (
-        <FlatList
-          data={bottles}
+        <SectionList
+          sections={sections}
           renderItem={renderItem}
+          renderSectionHeader={renderSectionHeader}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
           onEndReached={() => fetchInventory(false)}
@@ -585,15 +681,65 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     flex: 1,
   },
-  itemSubtitle: {
+  detailsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginTop: 16,
+    marginBottom: 8,
+    marginHorizontal: -4,
+  },
+  detailItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexBasis: "50%",
+    paddingHorizontal: 4,
+    marginBottom: 12,
+  },
+  detailText: {
+    fontSize: 13,
+    fontWeight: "600",
+    flex: 1,
+  },
+  itemFooter: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    borderTopWidth: 1,
+    borderColor: "#334155",
+    paddingTop: 12,
+    marginTop: 4,
+  },
+  itemSku: {
+    fontSize: 12,
+    fontWeight: "700",
+    fontVariant: ["tabular-nums"],
+  },
+  sectionHeaderContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 8,
+    paddingVertical: 20,
+    gap: 12,
+  },
+  sectionHeaderText: {
     fontSize: 14,
-    color: "#94a3b8",
-    marginBottom: 6,
-    fontWeight: "500",
+    fontWeight: "800",
+    flex: 1,
+  },
+  sectionHeaderBadge: {
+    backgroundColor: "#334155",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  sectionHeaderBadgeText: {
+    color: "#cbd5e1",
+    fontSize: 12,
+    fontWeight: "700",
   },
   itemLocation: {
     fontSize: 13,
-    color: "#64748b",
     fontWeight: "600",
   },
   statusBadge: {

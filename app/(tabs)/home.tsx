@@ -403,7 +403,7 @@ export default function HomeScreen() {
             <View style={styles.buttonContent}>
               <Search size={42} color="#ffffff" strokeWidth={1.5} />
               <View style={styles.buttonTextContainer}>
-                <Text style={styles.buttonTitle}>Inventory Search</Text>
+                <Text style={styles.buttonTitle}>Bottle Management</Text>
                 <Text style={styles.buttonDesc}>
                   Search by SKU or Wine Name
                 </Text>
