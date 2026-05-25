@@ -48,6 +48,9 @@ export default function OnboardingDetailScreen() {
   const lastMismatchAlert = useRef<number>(0);
   const scanAnim = useRef(new Animated.Value(0)).current;
 
+  const [showFormatPicker, setShowFormatPicker] = useState(false);
+  const [selectedFormat, setSelectedFormat] = useState<string | null>(null);
+
   useEffect(() => {
     if (capturedImage) {
       Animated.loop(
@@ -115,7 +118,10 @@ export default function OnboardingDetailScreen() {
           aiResult.wineName.toLowerCase().includes(item.wineName.toLowerCase());
         const vintageMatch = item.vintage === aiResult.vintage;
 
-        return (wineNameMatch && vintageMatch) && item.onboardedQty < item.qty;
+        // If a specific format was selected, enforce it, otherwise default to any/75cl logic.
+        const formatMatch = selectedFormat ? item.format === selectedFormat : true;
+
+        return (wineNameMatch && vintageMatch && formatMatch) && item.onboardedQty < item.qty;
       });
 
       if (matchedItem) {
@@ -297,6 +303,38 @@ export default function OnboardingDetailScreen() {
                 <CameraView style={styles.camera} ref={cameraRef}>
                   <View style={styles.cameraOverlay}>
                     <View style={styles.scannerFrame} />
+
+                    {/* Format Selector */}
+                    <View style={styles.formatSelectorContainer}>
+                      <TouchableOpacity
+                        style={styles.formatToggleButton}
+                        onPress={() => setShowFormatPicker(!showFormatPicker)}
+                      >
+                        <Text style={styles.formatToggleText}>
+                          {selectedFormat ? `Format: ${selectedFormat}` : "Standard Format (75cl)? Tap to change"}
+                        </Text>
+                      </TouchableOpacity>
+
+                      {showFormatPicker && (
+                        <View style={styles.formatChipsWrapper}>
+                          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.formatChips}>
+                            {['37.5cl', '75cl', '150cl', '300cl', '600cl'].map(fmt => (
+                              <TouchableOpacity
+                                key={fmt}
+                                style={[styles.formatChip, selectedFormat === fmt && styles.formatChipSelected]}
+                                onPress={() => {
+                                  setSelectedFormat(fmt === '75cl' ? null : fmt);
+                                  setShowFormatPicker(false);
+                                }}
+                              >
+                                <Text style={[styles.formatChipText, selectedFormat === fmt && styles.formatChipTextSelected]}>{fmt}</Text>
+                              </TouchableOpacity>
+                            ))}
+                          </ScrollView>
+                        </View>
+                      )}
+                    </View>
+
                     <Text style={styles.scannerInstruction}>Scan bottle label to identify wine</Text>
                     <TouchableOpacity
                       style={styles.captureButton}
@@ -510,6 +548,54 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '900',
   },
+  formatSelectorContainer: {
+    position: 'absolute',
+    bottom: 40,
+    left: 20,
+    alignItems: 'flex-start',
+    zIndex: 10,
+  },
+  formatToggleButton: {
+    backgroundColor: 'rgba(15, 23, 42, 0.85)',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: '#334155',
+    marginBottom: 12,
+  },
+  formatToggleText: {
+    color: '#f8fafc',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  formatChipsWrapper: {
+    width: '100%',
+  },
+  formatChips: {
+    paddingHorizontal: 20,
+    gap: 12,
+  },
+  formatChip: {
+    backgroundColor: 'rgba(30, 41, 59, 0.85)',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#475569',
+  },
+  formatChipSelected: {
+    backgroundColor: '#4f46e5',
+    borderColor: '#6366f1',
+  },
+  formatChipText: {
+    color: '#cbd5e1',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  formatChipTextSelected: {
+    color: '#fff',
+  },
   mainButton: {
     flexDirection: 'row',
     backgroundColor: '#4f46e5',
@@ -549,11 +635,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   scannerInstruction: {
+    position: 'absolute',
+    bottom: 140,
     color: '#fff',
     fontSize: 16,
     fontWeight: '800',
-    marginTop: 40,
     textAlign: 'center',
+    width: '100%',
   },
   captureButton: {
     position: 'absolute',
