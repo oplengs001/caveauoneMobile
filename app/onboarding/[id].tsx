@@ -45,6 +45,7 @@ export default function OnboardingDetailScreen() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const cameraRef = useRef<CameraView>(null);
+  const lastMismatchAlert = useRef<number>(0);
   const scanAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -141,7 +142,11 @@ export default function OnboardingDetailScreen() {
     // Check if the scanned QR belongs to the active item's current pending bottle
     const expectedBottleId = activeItem.bottleIds[activeItem.onboardedQty];
     if (scannedData !== expectedBottleId) {
-      alert(`QR Code mismatch! Expected: ${expectedBottleId}`);
+      const now = Date.now();
+      if (now - lastMismatchAlert.current > 3000) {
+        lastMismatchAlert.current = now;
+        alert(`QR Code mismatch! Expected: ${expectedBottleId}`);
+      }
       return;
     }
 
