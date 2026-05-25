@@ -344,7 +344,7 @@ export default function HomeScreen() {
                 <LayoutList size={42} color="#ffffff" strokeWidth={1.5} />
                 <View style={styles.buttonTextContainer}>
                   <Text style={[styles.buttonTitle, { fontSize: 24 }]}>
-                    Master List
+                    Stock Management
                   </Text>
                   <Text style={styles.buttonDesc}>
                     PAR levels & stock management

@@ -176,4 +176,6 @@ export interface StoreWineSetting {
   discontinued: boolean;
   createdAt: any;
   updatedAt: any;
+  isFastMoving: boolean;
+  isReserve: boolean;
 }

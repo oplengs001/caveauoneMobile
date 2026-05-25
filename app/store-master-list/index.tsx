@@ -22,9 +22,11 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  Lock,
   RefreshCw,
   TrendingUp,
   X,
+  Zap,
 } from "lucide-react-native";
 import React, { useCallback, useEffect, useState } from "react";
 import {
@@ -155,6 +157,8 @@ export default function StoreMasterListScreen() {
   const [sheetPar, setSheetPar] = useState("");
   const [sheetSafety, setSheetSafety] = useState("");
   const [sheetDiscontinued, setSheetDiscontinued] = useState(false);
+  const [sheetIsFastMoving, setSheetIsFastMoving] = useState(false);
+  const [sheetIsReserve, setSheetIsReserve] = useState(false);
   const [saving, setSaving] = useState(false);
   const [requesting, setRequesting] = useState(false);
   const [isBatchConfirmVisible, setIsBatchConfirmVisible] = useState(false);
@@ -288,6 +292,8 @@ export default function StoreMasterListScreen() {
     setSheetPar(entry.setting?.parLevel?.toString() ?? "");
     setSheetSafety(entry.setting?.safetyStock?.toString() ?? "");
     setSheetDiscontinued(entry.setting?.discontinued ?? false);
+    setSheetIsFastMoving(entry.setting?.isFastMoving ?? false);
+    setSheetIsReserve(entry.setting?.isReserve ?? false);
   };
 
   const closeSheet = () => setSelected(null);
@@ -312,6 +318,8 @@ export default function StoreMasterListScreen() {
         parLevel: par,
         safetyStock: safety,
         discontinued: sheetDiscontinued,
+        isFastMoving: sheetIsFastMoving,
+        isReserve: sheetIsReserve,
         updatedAt: serverTimestamp(),
         createdAt: selected.setting?.createdAt ?? serverTimestamp(),
       });
@@ -508,6 +516,32 @@ export default function StoreMasterListScreen() {
                   {cfg.label}
                 </Text>
               </View>
+              {item.setting?.isFastMoving && (
+                <View
+                  style={[
+                    styles.indicatorBadge,
+                    { backgroundColor: "#f59e0b20" },
+                  ]}
+                >
+                  <Zap size={10} color="#d97706" strokeWidth={2.5} />
+                  <Text style={[styles.indicatorText, { color: "#d97706" }]}>
+                    Fast Moving
+                  </Text>
+                </View>
+              )}
+              {item.setting?.isReserve && (
+                <View
+                  style={[
+                    styles.indicatorBadge,
+                    { backgroundColor: "#6366f120" },
+                  ]}
+                >
+                  <Lock size={10} color="#4338ca" strokeWidth={2.5} />
+                  <Text style={[styles.indicatorText, { color: "#4338ca" }]}>
+                    Reserve
+                  </Text>
+                </View>
+              )}
               {item.setting && (
                 <>
                   <Text style={styles.inlineMetricText}>
@@ -949,6 +983,46 @@ export default function StoreMasterListScreen() {
                 </View>
               )}
 
+              {/* Stock Type Toggles */}
+              <View style={styles.switchSection}>
+                <View style={styles.switchRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.fieldLabel}>FAST MOVING</Text>
+                    <Text style={styles.fieldHint}>
+                      Identifies this wine as a high-turnover item.
+                    </Text>
+                  </View>
+                  <Switch
+                    value={sheetIsFastMoving}
+                    onValueChange={setSheetIsFastMoving}
+                    trackColor={{
+                      false: "#e2e8f0",
+                      true: theme.primary + "60",
+                    }}
+                    thumbColor={sheetIsFastMoving ? theme.primary : "#94a3b8"}
+                  />
+                </View>
+
+                <View style={styles.switchRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.fieldLabel}>RESERVE STOCK</Text>
+                    <Text style={styles.fieldHint}>
+                      Marks this as a special/private stock, not for regular
+                      sale.
+                    </Text>
+                  </View>
+                  <Switch
+                    value={sheetIsReserve}
+                    onValueChange={setSheetIsReserve}
+                    trackColor={{
+                      false: "#e2e8f0",
+                      true: theme.primary + "60",
+                    }}
+                    thumbColor={sheetIsReserve ? theme.primary : "#94a3b8"}
+                  />
+                </View>
+              </View>
+
               {/* Discontinued */}
               <View style={styles.discontinuedRow}>
                 <View style={{ flex: 1 }}>
@@ -1171,6 +1245,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexWrap: "wrap",
     gap: 6,
+  },
+  indicatorBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  indicatorText: {
+    fontSize: 9,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   requestedIndicator: {
     flexDirection: "row",
@@ -1449,6 +1537,17 @@ const styles = StyleSheet.create({
     color: theme.text,
     fontWeight: "600",
     lineHeight: 20,
+  },
+  switchSection: {
+    marginTop: 24,
+    paddingTop: 24,
+    borderTopWidth: 1,
+    borderTopColor: theme.border,
+  },
+  switchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
   },
   discontinuedRow: {
     flexDirection: "row",
