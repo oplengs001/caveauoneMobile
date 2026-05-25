@@ -7,6 +7,7 @@ import {
   addDoc,
   collection,
   doc,
+  getCountFromServer,
   getDoc,
   getDocs,
   orderBy,
@@ -20,9 +21,7 @@ import {
   Box,
   Camera,
   CheckCircle2,
-  Info,
   Map,
-  MapPin,
   Plus,
   RefreshCw,
   Save,
@@ -34,6 +33,7 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   FlatList,
   Modal,
   SafeAreaView,
@@ -79,6 +79,42 @@ export default function TaggingScreen() {
   const [newMinor, setNewMinor] = useState("");
   const [newCapacity, setNewCapacity] = useState("");
   const [savingLocation, setSavingLocation] = useState(false);
+
+  // Snackbar State
+  const [snackbarMessage, setSnackbarMessage] = useState<string | null>(null);
+  const snackbarOpacity = useRef(new Animated.Value(0)).current;
+  const snackbarTranslateY = useRef(new Animated.Value(-50)).current;
+
+  const showSnackbar = (message: string) => {
+    setSnackbarMessage(message);
+    Animated.parallel([
+      Animated.timing(snackbarOpacity, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+      Animated.timing(snackbarTranslateY, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      })
+    ]).start(() => {
+      setTimeout(() => {
+        Animated.parallel([
+          Animated.timing(snackbarOpacity, {
+            toValue: 0,
+            duration: 300,
+            useNativeDriver: true,
+          }),
+          Animated.timing(snackbarTranslateY, {
+            toValue: -50,
+            duration: 300,
+            useNativeDriver: true,
+          })
+        ]).start(() => setSnackbarMessage(null));
+      }, 10000);
+    });
+  };
 
   const isProcessing = useRef(false);
   const router = useRouter();
@@ -264,6 +300,91 @@ export default function TaggingScreen() {
         status: "consumed",
         updatedAt: new Date(),
       });
+
+      // Automatically request for needed stock if PAR alert is reached
+      if (isStore && profile?.locationId && bottle.masterWineRef && wine) {
+        const storeId = profile.locationId;
+        const wineRef = bottle.masterWineRef;
+
+        // Fetch store wine settings
+        const settingsSnap = await getDocs(
+          query(
+            collection(db, "store_wine_settings"),
+            where("storeId", "==", storeId),
+            where("masterWineId", "==", wineRef.id)
+          )
+        );
+
+        if (!settingsSnap.empty) {
+          const setting = settingsSnap.docs[0].data();
+
+          if (!setting.discontinued && setting.parLevel !== undefined && setting.safetyStock !== undefined) {
+            // Get current stock count
+            const countSnap = await getCountFromServer(
+              query(
+                collection(db, "inventory_bottles"),
+                where("storeRef", "==", doc(db, "stores", storeId)),
+                where("masterWineRef", "==", wineRef),
+                where("status", "in", ["received", "shelved"])
+              )
+            );
+            const stockCount = countSnap.data().count;
+
+            // Check if PAR alert reached
+            if (stockCount <= setting.parLevel) {
+              // Check if there's already a pending request for this wine
+              const pendingRequestsSnap = await getDocs(
+                query(
+                  collection(db, "wine_requests"),
+                  where("storeId", "==", storeId),
+                  where("status", "==", "pending")
+                )
+              );
+
+              let hasPending = false;
+              pendingRequestsSnap.docs.forEach((reqDoc) => {
+                reqDoc.data().items?.forEach((item: any) => {
+                  if (item.masterWineId === wineRef.id) {
+                    hasPending = true;
+                  }
+                });
+              });
+
+              if (!hasPending) {
+                const requestedQty = Math.max(0, setting.safetyStock - stockCount);
+                if (requestedQty > 0) {
+                  await addDoc(collection(db, "wine_requests"), {
+                    storeId,
+                    targetStoreId: "warehouse",
+                    createdBy: profile.email || "System",
+                    requesterId: profile.id || "system",
+                    status: "pending",
+                    items: [
+                      {
+                        masterWineId: wine.id,
+                        wineName: wine.name,
+                        vintage: wine.vintage || "",
+                        sku: wine.sku || "",
+                        format: wine.format || "",
+                        producer: wine.producer || "",
+                        qty: requestedQty,
+                        price: wine.price || 0,
+                        pulledQty: 0,
+                      },
+                    ],
+                    totalAmount: (wine.price || 0) * requestedQty,
+                    createdAt: serverTimestamp(),
+                    updatedAt: serverTimestamp(),
+                  });
+
+                  // Show the snackbar notification
+                  showSnackbar(`Par level reached! Automatically requested ${requestedQty} bottle${requestedQty > 1 ? 's' : ''} for restock.`);
+                }
+              }
+            }
+          }
+        }
+      }
 
       setSuccessAction("sold");
       setState("success");
@@ -682,6 +803,20 @@ export default function TaggingScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Snackbar */}
+      {snackbarMessage && (
+        <Animated.View style={[
+          styles.snackbar,
+          {
+            opacity: snackbarOpacity,
+            transform: [{ translateY: snackbarTranslateY }]
+          }
+        ]}>
+          <AlertTriangle size={20} color="#fff" style={{ marginRight: 8 }} />
+          <Text style={styles.snackbarText}>{snackbarMessage}</Text>
+        </Animated.View>
+      )}
     </SafeAreaView>
   );
 }
@@ -1206,6 +1341,29 @@ const styles = StyleSheet.create({
     color: '#64748b',
     fontSize: 16,
     fontWeight: '800',
+  },
+  snackbar: {
+    position: 'absolute',
+    top: 60,
+    left: 20,
+    right: 20,
+    backgroundColor: '#f97316',
+    padding: 16,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 6,
+    zIndex: 999,
+  },
+  snackbarText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+    flex: 1,
   },
 });
 

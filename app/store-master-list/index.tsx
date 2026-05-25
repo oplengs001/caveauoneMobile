@@ -548,15 +548,9 @@ export default function StoreMasterListScreen() {
                       router.push(`/wine-requests/${item.pendingRequestId}`);
                     }}
                   >
-                    <Clock
-                      size={11}
-                      color={STATUS_CONFIG.under_safety.accent}
-                    />
+                    <Clock size={11} color={cfg.accent} />
                     <Text
-                      style={[
-                        styles.inlineMetricText,
-                        { color: STATUS_CONFIG.under_safety.accent },
-                      ]}
+                      style={[styles.inlineMetricText, { color: cfg.accent }]}
                     >
                       Requested
                     </Text>
