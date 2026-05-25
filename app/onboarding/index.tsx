@@ -102,13 +102,26 @@ export default function OnboardingTasksScreen() {
 
         <View style={styles.itemsSummary}>
           <Text style={styles.summaryTitle}>Shipment Overview</Text>
-          {item.items.slice(0, 3).map((i, index) => (
-            <Text key={index} style={styles.summaryItem} numberOfLines={1}>
-              • {i.wineName} <Text style={styles.summaryQty}>({i.qty})</Text>
-            </Text>
-          ))}
+          <View style={styles.summaryList}>
+            {item.items.slice(0, 3).map((i, index) => (
+              <View key={index} style={styles.summaryItemRow}>
+                <View style={styles.summaryItemDot} />
+                <View style={styles.summaryItemContent}>
+                  <Text style={styles.summaryItemName} numberOfLines={1}>
+                    {i.wineName}
+                  </Text>
+                  <Text style={styles.summaryItemMeta} numberOfLines={1}>
+                    {i.producerName || 'Unknown Producer'} • {i.format || 'Standard'}
+                  </Text>
+                </View>
+                <View style={styles.summaryItemQtyBadge}>
+                  <Text style={styles.summaryItemQtyText}>{i.qty}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
           {item.items.length > 3 && (
-            <Text style={styles.summaryMore}>+ {item.items.length - 3} more wines</Text>
+            <Text style={styles.summaryMore}>+ {item.items.length - 3} more wines in this shipment</Text>
           )}
         </View>
 
@@ -343,15 +356,45 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     letterSpacing: 0.5,
   },
-  summaryItem: {
+  summaryList: {
+    gap: 12,
+  },
+  summaryItemRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  summaryItemDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#4f46e5",
+    marginRight: 10,
+  },
+  summaryItemContent: {
+    flex: 1,
+  },
+  summaryItemName: {
     color: "#f1f5f9",
     fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 4,
+    fontWeight: "700",
   },
-  summaryQty: {
-    color: "#64748b",
-    fontWeight: '800',
+  summaryItemMeta: {
+    color: "#94a3b8",
+    fontSize: 12,
+    fontWeight: "600",
+    marginTop: 2,
+  },
+  summaryItemQtyBadge: {
+    backgroundColor: "rgba(79, 70, 229, 0.15)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    marginLeft: 8,
+  },
+  summaryItemQtyText: {
+    color: "#818cf8",
+    fontSize: 12,
+    fontWeight: "900",
   },
   summaryMore: {
     color: "#64748b",
