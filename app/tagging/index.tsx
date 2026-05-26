@@ -803,8 +803,8 @@ export default function TaggingScreen() {
                     { textAlign: "center", fontSize: 15, marginTop: 8 },
                   ]}
                 >
-                  This bottle is active in your inventory. Tap the &quot;Mark
-                  as Sold&quot; button to complete the sale.
+                  This bottle is active in your inventory. Tap the &quot;Mark as
+                  Sold&quot; button to complete the sale.
                 </Text>
               </View>
             </View>
@@ -982,32 +982,6 @@ export default function TaggingScreen() {
                     </>
                   ) : (
                     <>
-                      {isStore && (
-                        <TouchableOpacity
-                          style={[
-                            styles.soldButton,
-                            {
-                              backgroundColor: theme.primary,
-                              marginBottom: 12,
-                            },
-                            state === "updating" && styles.buttonDisabled,
-                          ]}
-                          onPress={handleMarkAsSold}
-                          disabled={state === "updating"}
-                        >
-                          {state === "updating" ? (
-                            <ActivityIndicator color="#fff" size="small" />
-                          ) : (
-                            <>
-                              <Wine size={24} color="#fff" strokeWidth={2.5} />
-                              <Text style={styles.confirmButtonText}>
-                                MARK AS SOLD
-                              </Text>
-                            </>
-                          )}
-                        </TouchableOpacity>
-                      )}
-
                       {isIncoming ? (
                         <TouchableOpacity
                           style={[

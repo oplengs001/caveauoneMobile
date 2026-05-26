@@ -69,7 +69,9 @@ export default function InventoryScreen() {
     { title: string; masterWineData?: MasterWine; data: BottleView[] }[]
   >([]);
 
-  const [sortBy, setSortBy] = useState<"name_asc" | "name_desc" | "stock_desc" | "stock_asc">("name_asc");
+  const [sortBy, setSortBy] = useState<
+    "name_asc" | "name_desc" | "stock_desc" | "stock_asc"
+  >("name_asc");
   const [filterType, setFilterType] = useState<string | null>(null);
   const [isSortModalOpen, setIsSortModalOpen] = useState(false);
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
@@ -201,7 +203,7 @@ export default function InventoryScreen() {
   useEffect(() => {
     // 1. Filter by wine type
     const filteredBottles = filterType
-      ? bottles.filter(b => b.masterWineData?.type === filterType)
+      ? bottles.filter((b) => b.masterWineData?.type === filterType)
       : bottles;
 
     const grouped = filteredBottles.reduce(
@@ -399,7 +401,12 @@ export default function InventoryScreen() {
                 styles.headerActionChip,
                 { backgroundColor: theme.primary, borderColor: theme.primary },
               ]}
-              onPress={() => router.push("/tagging")}
+              onPress={() =>
+                router.push({
+                  pathname: "/tagging",
+                  params: { mode: "tagging" },
+                })
+              }
               activeOpacity={0.7}
             >
               <Scan size={16} color="#fff" strokeWidth={2.5} />
@@ -457,12 +464,23 @@ export default function InventoryScreen() {
           <TouchableOpacity
             style={[
               styles.filterSortBtn,
-              { backgroundColor: filterType ? theme.primary + '20' : theme.card, borderColor: filterType ? theme.primary : theme.border },
+              {
+                backgroundColor: filterType ? theme.primary + "20" : theme.card,
+                borderColor: filterType ? theme.primary : theme.border,
+              },
             ]}
             onPress={() => setIsFilterModalOpen(true)}
           >
-            <Filter size={16} color={filterType ? theme.primary : theme.textSecondary} />
-            <Text style={[styles.filterSortText, { color: filterType ? theme.primary : theme.text }]}>
+            <Filter
+              size={16}
+              color={filterType ? theme.primary : theme.textSecondary}
+            />
+            <Text
+              style={[
+                styles.filterSortText,
+                { color: filterType ? theme.primary : theme.text },
+              ]}
+            >
               {filterType ? filterType : "Filters"}
             </Text>
           </TouchableOpacity>
@@ -511,7 +529,9 @@ export default function InventoryScreen() {
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
             <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: theme.text }]}>Sort Inventory</Text>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>
+                Sort Inventory
+              </Text>
               <TouchableOpacity onPress={() => setIsSortModalOpen(false)}>
                 <X size={24} color={theme.textSecondary} />
               </TouchableOpacity>
@@ -527,14 +547,28 @@ export default function InventoryScreen() {
                 style={[
                   styles.modalOption,
                   { borderColor: theme.border },
-                  sortBy === option.id && { borderColor: theme.primary, backgroundColor: theme.primary + '10' }
+                  sortBy === option.id && {
+                    borderColor: theme.primary,
+                    backgroundColor: theme.primary + "10",
+                  },
                 ]}
-                onPress={() => { setSortBy(option.id as any); setIsSortModalOpen(false); }}
+                onPress={() => {
+                  setSortBy(option.id as any);
+                  setIsSortModalOpen(false);
+                }}
               >
-                <Text style={[styles.modalOptionText, { color: theme.text }, sortBy === option.id && { color: theme.primary }]}>
+                <Text
+                  style={[
+                    styles.modalOptionText,
+                    { color: theme.text },
+                    sortBy === option.id && { color: theme.primary },
+                  ]}
+                >
                   {option.label}
                 </Text>
-                {sortBy === option.id && <Check size={20} color={theme.primary} />}
+                {sortBy === option.id && (
+                  <Check size={20} color={theme.primary} />
+                )}
               </TouchableOpacity>
             ))}
           </View>
@@ -542,11 +576,17 @@ export default function InventoryScreen() {
       </Modal>
 
       {/* Filter Modal */}
-      <Modal visible={isFilterModalOpen} animationType="slide" transparent={true}>
+      <Modal
+        visible={isFilterModalOpen}
+        animationType="slide"
+        transparent={true}
+      >
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
             <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: theme.text }]}>Filter by Type</Text>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>
+                Filter by Type
+              </Text>
               <TouchableOpacity onPress={() => setIsFilterModalOpen(false)}>
                 <X size={24} color={theme.textSecondary} />
               </TouchableOpacity>
@@ -556,30 +596,64 @@ export default function InventoryScreen() {
                 style={[
                   styles.modalOption,
                   { borderColor: theme.border },
-                  filterType === null && { borderColor: theme.primary, backgroundColor: theme.primary + '10' }
+                  filterType === null && {
+                    borderColor: theme.primary,
+                    backgroundColor: theme.primary + "10",
+                  },
                 ]}
-                onPress={() => { setFilterType(null); setIsFilterModalOpen(false); }}
+                onPress={() => {
+                  setFilterType(null);
+                  setIsFilterModalOpen(false);
+                }}
               >
-                <Text style={[styles.modalOptionText, { color: theme.text }, filterType === null && { color: theme.primary }]}>
+                <Text
+                  style={[
+                    styles.modalOptionText,
+                    { color: theme.text },
+                    filterType === null && { color: theme.primary },
+                  ]}
+                >
                   All Types
                 </Text>
-                {filterType === null && <Check size={20} color={theme.primary} />}
+                {filterType === null && (
+                  <Check size={20} color={theme.primary} />
+                )}
               </TouchableOpacity>
 
-              {["Red Wine", "White wine", "Sweet Wine", "Sparkling wine", "Rose wine"].map((type) => (
+              {[
+                "Red Wine",
+                "White wine",
+                "Sweet Wine",
+                "Sparkling wine",
+                "Rose wine",
+              ].map((type) => (
                 <TouchableOpacity
                   key={type}
                   style={[
                     styles.modalOption,
                     { borderColor: theme.border },
-                    filterType === type && { borderColor: theme.primary, backgroundColor: theme.primary + '10' }
+                    filterType === type && {
+                      borderColor: theme.primary,
+                      backgroundColor: theme.primary + "10",
+                    },
                   ]}
-                  onPress={() => { setFilterType(type); setIsFilterModalOpen(false); }}
+                  onPress={() => {
+                    setFilterType(type);
+                    setIsFilterModalOpen(false);
+                  }}
                 >
-                  <Text style={[styles.modalOptionText, { color: theme.text }, filterType === type && { color: theme.primary }]}>
+                  <Text
+                    style={[
+                      styles.modalOptionText,
+                      { color: theme.text },
+                      filterType === type && { color: theme.primary },
+                    ]}
+                  >
                     {type}
                   </Text>
-                  {filterType === type && <Check size={20} color={theme.primary} />}
+                  {filterType === type && (
+                    <Check size={20} color={theme.primary} />
+                  )}
                 </TouchableOpacity>
               ))}
             </ScrollView>
