@@ -66,11 +66,13 @@ export default function TaggingScreen() {
     mode,
     source,
     fromRequestId,
+    fromOnboardingId,
   } = useLocalSearchParams<{
     bottleId?: string;
     mode?: "sell";
     source?: string;
     fromRequestId?: string;
+    fromOnboardingId?: string;
   }>();
 
   const [permission, requestPermission] = useCameraPermissions();
@@ -517,6 +519,11 @@ export default function TaggingScreen() {
               if (source === "wine-request" && fromRequestId) {
                 router.replace({
                   pathname: `/wine-requests/${fromRequestId}` as any,
+                  params: { openScanner: "true" },
+                });
+              } else if (source === "onboarding" && fromOnboardingId) {
+                router.replace({
+                  pathname: `/onboarding/${fromOnboardingId}` as any,
                   params: { openScanner: "true" },
                 });
               } else {
