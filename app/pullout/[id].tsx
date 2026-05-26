@@ -188,6 +188,13 @@ export default function PulloutDetailScreen() {
         status: allFulfilled ? "completed" : "in_progress",
         updatedAt: Timestamp.now(),
       });
+      const wineRequestRef = doc(db, "wine_requests", request.wineRequestId);
+      if (allFulfilled) {
+        await updateDoc(wineRequestRef, {
+          updatedAt: new Date(),
+          status: "receiving",
+        });
+      }
 
       Alert.alert("Success", `Pulled ${updatedItems[itemIndex].wineName}`, [
         {
@@ -303,6 +310,7 @@ export default function PulloutDetailScreen() {
                   await updateDoc(wineRequestRef, {
                     items: updatedWineRequestItems,
                     updatedAt: new Date(),
+                    status: "receiving",
                   });
                 }
               }

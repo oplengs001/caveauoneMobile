@@ -25,6 +25,7 @@ import {
   Lock,
   RefreshCw,
   TrendingUp,
+  Truck,
   X,
   Zap,
 } from "lucide-react-native";
@@ -53,7 +54,7 @@ interface WineEntry {
   setting: StoreWineSetting | null;
   status: StockStatus;
   requestedQty: number;
-  pendingRequestId?: string;
+  activeRequest?: { id: string; status: string };
 }
 
 function computeStatus(
@@ -141,12 +142,12 @@ export default function StoreMasterListScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const { filter: initialFilter } = useLocalSearchParams<{
     filter:
-      | "all"
-      | "alerts"
-      | "under_safety"
-      | "stockout"
-      | "overstock"
-      | "unset";
+    | "all"
+    | "alerts"
+    | "under_safety"
+    | "stockout"
+    | "overstock"
+    | "unset";
   }>();
   const [filter, setFilter] = useState<
     "all" | "alerts" | "under_safety" | "stockout" | "overstock" | "unset"
@@ -216,20 +217,20 @@ export default function StoreMasterListScreen() {
         }
       });
 
-      // 3. Fetch pending requests to link them to wines
+      // 3. Fetch active requests to link them to wines
       const pendingRequestsSnap = await getDocs(
         query(
           collection(db, "wine_requests"),
           where("storeId", "==", storeId),
-          where("status", "==", "pending"),
+          where("status", "in", ["pending", "converted", "outbound", "receiving"]),
         ),
       );
-      const pendingWineRequestMap = new Map<string, string>();
+      const pendingWineRequestMap = new Map<string, { id: string; status: string }>();
       pendingRequestsSnap.docs.forEach((reqDoc) => {
         const request = reqDoc.data();
         request.items?.forEach((item: { masterWineId: string }) => {
           if (item.masterWineId) {
-            pendingWineRequestMap.set(item.masterWineId, reqDoc.id);
+            pendingWineRequestMap.set(item.masterWineId, { id: reqDoc.id, status: request.status });
           }
         });
       });
@@ -251,18 +252,19 @@ export default function StoreMasterListScreen() {
 
           const masterWine: MasterWine = wineSnap.exists()
             ? ({
-                id: wineSnap.id,
-                ...(wineSnap.data() as object),
-              } as MasterWine)
+              id: wineSnap.id,
+              ...(wineSnap.data() as object),
+            } as MasterWine)
             : { id: wineId, name: "Unknown Wine", vintage: "", price: 0 };
 
           const stockCount = countSnap.data().count;
           const setting = settingsMap.get(wineId) ?? null;
-          const pendingRequestId = pendingWineRequestMap.get(wineId);
+          const activeRequest = pendingWineRequestMap.get(wineId);
+
           const { status, requestedQty } = computeStatus(
             stockCount,
             setting,
-            !!pendingRequestId,
+            !!activeRequest,
           );
 
           return {
@@ -271,7 +273,7 @@ export default function StoreMasterListScreen() {
             setting,
             status,
             requestedQty,
-            pendingRequestId,
+            activeRequest,
           };
         }),
       );
@@ -412,11 +414,6 @@ export default function StoreMasterListScreen() {
     if (!storeId || !profile) return;
 
     if (itemsToRequest.length === 0) return;
-
-    const totalBottles = itemsToRequest.reduce(
-      (sum, item) => sum + item.requestedQty,
-      0,
-    );
 
     setBatchRequesting(true);
     try {
@@ -592,21 +589,35 @@ export default function StoreMasterListScreen() {
                   </Text>
                 </>
               )}
-              {item.pendingRequestId && (
+              {item.activeRequest && (
                 <>
                   <Text style={styles.inlineMetricDot}>·</Text>
                   <TouchableOpacity
                     style={styles.requestedIndicator}
                     onPress={(e) => {
                       e.stopPropagation();
-                      router.push(`/wine-requests/${item.pendingRequestId}`);
+                      router.push(`/wine-requests/${item.activeRequest!.id}`);
                     }}
                   >
-                    <Clock size={11} color={cfg.accent} />
+                    {item.activeRequest.status === "outbound" || item.activeRequest.status === "converted" ? (
+                      <Truck size={11} color={cfg.accent} />
+                    ) : item.activeRequest.status === "receiving" ? (
+                      <CheckCircle2 size={11} color={cfg.accent} />
+                    ) : (
+                      <Clock size={11} color={cfg.accent} />
+                    )}
                     <Text
                       style={[styles.inlineMetricText, { color: cfg.accent }]}
                     >
-                      Requested
+                      {item.activeRequest.status === "pending"
+                        ? "Requested"
+                        : item.activeRequest.status === "converted"
+                          ? "Pulling Out"
+                          : item.activeRequest.status === "outbound"
+                            ? "Outbound"
+                            : item.activeRequest.status === "receiving"
+                              ? "Receiving"
+                              : "Requested"}
                     </Text>
                   </TouchableOpacity>
                 </>
@@ -1072,17 +1083,23 @@ export default function StoreMasterListScreen() {
                 )}
               </TouchableOpacity>
 
-              {selected?.pendingRequestId ? (
+              {selected?.activeRequest ? (
                 <TouchableOpacity
                   style={styles.requestBtn}
                   onPress={() => {
                     closeSheet();
-                    router.push(`/wine-requests/${selected.pendingRequestId}`);
+                    router.push(`/wine-requests/${selected.activeRequest!.id}`);
                   }}
                 >
-                  <Clock size={18} color={theme.primary} strokeWidth={2.5} />
+                  {selected.activeRequest.status === "outbound" || selected.activeRequest.status === "converted" ? (
+                    <Truck size={18} color={theme.primary} strokeWidth={2.5} />
+                  ) : selected.activeRequest.status === "receiving" ? (
+                    <CheckCircle2 size={18} color={theme.primary} strokeWidth={2.5} />
+                  ) : (
+                    <Clock size={18} color={theme.primary} strokeWidth={2.5} />
+                  )}
                   <Text style={styles.requestBtnText}>
-                    VIEW PENDING REQUEST
+                    VIEW ACTIVE REQUEST
                   </Text>
                 </TouchableOpacity>
               ) : (

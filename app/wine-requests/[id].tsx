@@ -11,6 +11,7 @@ import {
   Clock,
   Package,
   ScanQrCode,
+  Truck,
   Wine,
 } from "lucide-react-native";
 import React, { useEffect, useRef, useState } from "react";
@@ -173,12 +174,25 @@ export default function WineRequestDetail() {
           label: "Pending Review",
         };
       case "converted":
+        return {
+          color: "#eab308",
+          bg: "#fef08a",
+          icon: Truck,
+          label: "Pulling Out",
+        };
+      case "outbound":
+        return {
+          color: "#3b82f6",
+          bg: "#bfdbfe",
+          icon: Truck,
+          label: "Outbound",
+        };
       case "receiving":
         return {
           color: "#10b981",
           bg: "#d1fae5",
           icon: CheckCircle2,
-          label: "Authorized",
+          label: "Receiving",
         };
       case "ingress_complete":
         return {

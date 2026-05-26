@@ -736,6 +736,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#1e293b",
     borderRadius: 16,
+    marginTop: 15,
     borderWidth: 1,
     borderColor: "#334155",
     paddingHorizontal: 16,

@@ -93,10 +93,17 @@ export default function WineRequestsIndex() {
         };
       case "converted":
         return {
-          color: "#10b981",
-          bg: "#10b98115",
-          icon: CheckCircle2,
-          label: "AUTHORIZED",
+          color: "#eab308",
+          bg: "#eab30815",
+          icon: Truck,
+          label: "PULLING OUT",
+        };
+      case "outbound":
+        return {
+          color: "#3b82f6",
+          bg: "#3b82f615",
+          icon: Truck,
+          label: "OUTBOUND",
         };
       case "ingress_complete":
         return {
