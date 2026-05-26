@@ -61,9 +61,16 @@ export default function TaggingScreen() {
   const theme = profile?.role === "store" ? Colors.store : Colors.warehouse;
   const isStore = profile?.role === "store";
 
-  const { bottleId: initialBottleId, mode } = useLocalSearchParams<{
+  const {
+    bottleId: initialBottleId,
+    mode,
+    source,
+    fromRequestId,
+  } = useLocalSearchParams<{
     bottleId?: string;
     mode?: "sell";
+    source?: string;
+    fromRequestId?: string;
   }>();
 
   const [permission, requestPermission] = useCameraPermissions();
@@ -507,14 +514,21 @@ export default function TaggingScreen() {
               { backgroundColor: theme.primary, marginTop: 40 },
             ]}
             onPress={() => {
-              isProcessing.current = false;
-              setState("scanning");
-              setBottle(null);
-              setWine(null);
-              setScannedSku(null);
-              setSelectedLocationId(null);
-              setIsIncoming(false);
-              setSuccessAction(null);
+              if (source === "wine-request" && fromRequestId) {
+                router.replace({
+                  pathname: `/wine-requests/${fromRequestId}` as any,
+                  params: { openScanner: "true" },
+                });
+              } else {
+                isProcessing.current = false;
+                setState("scanning");
+                setBottle(null);
+                setWine(null);
+                setScannedSku(null);
+                setSelectedLocationId(null);
+                setIsIncoming(false);
+                setSuccessAction(null);
+              }
             }}
           >
             <ScanQrCode size={24} color="#fff" />

@@ -27,7 +27,10 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 const theme = Colors.store;
 export default function WineRequestDetail() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, openScanner } = useLocalSearchParams<{
+    id: string;
+    openScanner?: string;
+  }>();
   const router = useRouter();
 
   const [scanning, setScanning] = useState(false);
@@ -39,6 +42,12 @@ export default function WineRequestDetail() {
   useEffect(() => {
     if (id) fetchRequest();
   }, [id]);
+
+  useEffect(() => {
+    if (openScanner === "true") {
+      setScanning(true);
+    }
+  }, [openScanner]);
 
   const fetchRequest = async () => {
     if (!id) return;
@@ -160,7 +169,12 @@ export default function WineRequestDetail() {
             onPress: () => {
               router.push({
                 pathname: "/tagging",
-                params: { bottleId: scannedBottleId, mode: "tagging" },
+                params: {
+                  bottleId: scannedBottleId,
+                  mode: "tagging",
+                  source: "wine-request",
+                  fromRequestId: id,
+                },
               });
             },
           },
@@ -421,13 +435,13 @@ export default function WineRequestDetail() {
               {(request.status === "converted" ||
                 request.status === "receiving" ||
                 request.status === "ingress_complete") && (
-                  <View style={styles.progressContainer}>
-                    <Text style={styles.progressText}>
-                      {wine.ingressedQty || 0} / {wine.qty}
-                    </Text>
-                    <Text style={styles.progressLabel}>RECEIVED</Text>
-                  </View>
-                )}
+                <View style={styles.progressContainer}>
+                  <Text style={styles.progressText}>
+                    {wine.ingressedQty || 0} / {wine.qty}
+                  </Text>
+                  <Text style={styles.progressLabel}>RECEIVED</Text>
+                </View>
+              )}
             </View>
           ))}
         </View>
@@ -463,16 +477,16 @@ export default function WineRequestDetail() {
         request.status === "receiving" ||
         (request.status === "ingress_complete" &&
           !request.items.every((i) => (i.ingressedQty || 0) >= i.qty))) && (
-          <View style={styles.footer}>
-            <TouchableOpacity
-              style={styles.scanButton}
-              onPress={() => setScanning(true)}
-            >
-              <ScanQrCode size={24} color="#fff" strokeWidth={2.5} />
-              <Text style={styles.scanButtonText}>Receive Items</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+        <View style={styles.footer}>
+          <TouchableOpacity
+            style={styles.scanButton}
+            onPress={() => setScanning(true)}
+          >
+            <ScanQrCode size={24} color="#fff" strokeWidth={2.5} />
+            <Text style={styles.scanButtonText}>Receive Items</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
