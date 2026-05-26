@@ -61,8 +61,18 @@ export default function TaggingScreen() {
   const theme = profile?.role === "store" ? Colors.store : Colors.warehouse;
   const isStore = profile?.role === "store";
 
+  const { bottleId: initialBottleId, mode } = useLocalSearchParams<{
+    bottleId?: string;
+    mode?: "sell";
+  }>();
+
   const [permission, requestPermission] = useCameraPermissions();
-  const [state, setState] = useState<TaggingState>("scanning");
+  // If a bottleId is pre-supplied (e.g. from wine-requests flow), skip the
+  // camera scanner and go straight to "displaying" to avoid a glitchy flash.
+  const [state, setState] = useState<TaggingState>(
+    initialBottleId ? "displaying" : "scanning",
+  );
+  const [loading, setLoading] = useState(false);
   const [scannedSku, setScannedSku] = useState<string | null>(null);
   const [bottle, setBottle] = useState<InventoryBottle | null>(null);
   const [wine, setWine] = useState<MasterWine | null>(null);
@@ -70,7 +80,6 @@ export default function TaggingScreen() {
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(
     null,
   );
-  const [loading, setLoading] = useState(false);
   const [isIncoming, setIsIncoming] = useState(false);
   const [successAction, setSuccessAction] = useState<
     "sold" | "received" | "tagged" | null
@@ -122,10 +131,6 @@ export default function TaggingScreen() {
 
   const isProcessing = useRef(false);
   const router = useRouter();
-  const { bottleId: initialBottleId, mode } = useLocalSearchParams<{
-    bottleId?: string;
-    mode?: "sell";
-  }>();
 
   useEffect(() => {
     fetchLocations();

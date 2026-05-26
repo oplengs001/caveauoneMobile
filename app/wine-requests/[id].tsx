@@ -149,9 +149,33 @@ export default function WineRequestDetail() {
         updatedAt: serverTimestamp(),
       });
 
-      Alert.alert("Success", `${item.wineName} received.`, [
-        { text: "Scan Next", onPress: () => setScanning(true) },
-      ]);
+      const scannedBottleId = data;
+
+      Alert.alert(
+        "✓ Received",
+        `${item.wineName} has been received.\n\nWould you like to tag a storage location for this bottle?`,
+        [
+          {
+            text: "Tag Location",
+            onPress: () => {
+              router.push({
+                pathname: "/tagging",
+                params: { bottleId: scannedBottleId, mode: "tagging" },
+              });
+            },
+          },
+          {
+            text: "Scan Next",
+            onPress: () => {
+              setScanning(true);
+            },
+          },
+          {
+            text: "Done",
+            style: "cancel",
+          },
+        ],
+      );
 
       fetchRequest();
     } catch (error) {
@@ -397,13 +421,13 @@ export default function WineRequestDetail() {
               {(request.status === "converted" ||
                 request.status === "receiving" ||
                 request.status === "ingress_complete") && (
-                <View style={styles.progressContainer}>
-                  <Text style={styles.progressText}>
-                    {wine.ingressedQty || 0} / {wine.qty}
-                  </Text>
-                  <Text style={styles.progressLabel}>RECEIVED</Text>
-                </View>
-              )}
+                  <View style={styles.progressContainer}>
+                    <Text style={styles.progressText}>
+                      {wine.ingressedQty || 0} / {wine.qty}
+                    </Text>
+                    <Text style={styles.progressLabel}>RECEIVED</Text>
+                  </View>
+                )}
             </View>
           ))}
         </View>
@@ -439,16 +463,16 @@ export default function WineRequestDetail() {
         request.status === "receiving" ||
         (request.status === "ingress_complete" &&
           !request.items.every((i) => (i.ingressedQty || 0) >= i.qty))) && (
-        <View style={styles.footer}>
-          <TouchableOpacity
-            style={styles.scanButton}
-            onPress={() => setScanning(true)}
-          >
-            <ScanQrCode size={24} color="#fff" strokeWidth={2.5} />
-            <Text style={styles.scanButtonText}>Receive Items</Text>
-          </TouchableOpacity>
-        </View>
-      )}
+          <View style={styles.footer}>
+            <TouchableOpacity
+              style={styles.scanButton}
+              onPress={() => setScanning(true)}
+            >
+              <ScanQrCode size={24} color="#fff" strokeWidth={2.5} />
+              <Text style={styles.scanButtonText}>Receive Items</Text>
+            </TouchableOpacity>
+          </View>
+        )}
     </SafeAreaView>
   );
 }
