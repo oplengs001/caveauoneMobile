@@ -167,6 +167,7 @@ export default function PulloutDetailScreen() {
       // 3. Update Bottle
       await updateDoc(doc(db, "inventory_bottles", bottleData.id), {
         status: "outbound",
+        storeRef: null,
         outboundLocationRef: doc(db, "stores", request.outBoundStoreId),
         updatedAt: Timestamp.now(),
       });
