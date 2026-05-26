@@ -15,23 +15,27 @@ import {
   where,
 } from "firebase/firestore";
 import {
+  ArrowUpDown,
   Box,
-  Building2,
   Calendar,
   Check,
   ChevronLeft,
+  Filter,
   Globe,
   Layers,
-  PackageOpen,
+  Scan,
   Search as SearchIcon,
   Tag,
+  X,
 } from "lucide-react-native";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  FlatList,
+  Modal,
   RefreshControl,
   SafeAreaView,
-  SectionList,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -60,13 +64,15 @@ export default function InventoryScreen() {
   const [hasMore, setHasMore] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [isSelectionMode, setIsSelectionMode] = useState(false);
-  const [showUnshelvedOnly, setShowUnshelvedOnly] = useState(false);
   const router = useRouter();
   const [sections, setSections] = useState<
     { title: string; masterWineData?: MasterWine; data: BottleView[] }[]
   >([]);
+
+  const [sortBy, setSortBy] = useState<"name_asc" | "name_desc" | "stock_desc" | "stock_asc">("name_asc");
+  const [filterType, setFilterType] = useState<string | null>(null);
+  const [isSortModalOpen, setIsSortModalOpen] = useState(false);
+  const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
 
   const [wineCache] = useState(new Map<string, MasterWine>());
   const [locationCache] = useState(new Map<string, Location>());
@@ -84,12 +90,7 @@ export default function InventoryScreen() {
 
     try {
       const bottlesRef = collection(db, "inventory_bottles");
-      let q;
-
       const baseQueries = [];
-      if (showUnshelvedOnly) {
-        baseQueries.push(where("status", "==", "received"));
-      }
 
       // Boutique Scoping: If store user, only show their node's inventory
       if (isStore && profile?.locationId) {
@@ -98,30 +99,24 @@ export default function InventoryScreen() {
         );
       }
 
-      if (searchQuery.trim()) {
-        q = query(
-          bottlesRef,
-          ...baseQueries,
-          where("sku", "==", searchQuery.trim()),
-          limit(PAGE_SIZE),
-        );
-      } else {
+      const isSearching = searchQuery.trim().length > 0;
+      const fetchLimit = isSearching ? 200 : PAGE_SIZE;
+
+      let q = query(
+        bottlesRef,
+        ...baseQueries,
+        orderBy("createdAt", "desc"),
+        limit(fetchLimit),
+      );
+
+      if (!isRefresh && lastDoc && !isSearching) {
         q = query(
           bottlesRef,
           ...baseQueries,
           orderBy("createdAt", "desc"),
+          startAfter(lastDoc),
           limit(PAGE_SIZE),
         );
-
-        if (!isRefresh && lastDoc) {
-          q = query(
-            bottlesRef,
-            ...baseQueries,
-            orderBy("createdAt", "desc"),
-            startAfter(lastDoc),
-            limit(PAGE_SIZE),
-          );
-        }
       }
 
       const snap = await getDocs(q);
@@ -165,6 +160,17 @@ export default function InventoryScreen() {
         }),
       );
 
+      if (isSearching) {
+        const queryLower = searchQuery.toLowerCase();
+        resolved.filter((b) => {
+          return (
+            b.sku?.toLowerCase().includes(queryLower) ||
+            b.masterWineData?.name?.toLowerCase().includes(queryLower) ||
+            b.masterWineData?.producer?.toLowerCase().includes(queryLower)
+          );
+        });
+      }
+
       if (isRefresh) {
         setBottles(resolved);
         setLastDoc(snap.docs[snap.docs.length - 1]);
@@ -190,10 +196,15 @@ export default function InventoryScreen() {
       fetchInventory(true);
     }, 500);
     return () => clearTimeout(delayDebounce);
-  }, [searchQuery, showUnshelvedOnly]);
+  }, [searchQuery]);
 
   useEffect(() => {
-    const grouped = bottles.reduce(
+    // 1. Filter by wine type
+    const filteredBottles = filterType
+      ? bottles.filter(b => b.masterWineData?.type === filterType)
+      : bottles;
+
+    const grouped = filteredBottles.reduce(
       (
         acc,
         bottle,
@@ -215,177 +226,141 @@ export default function InventoryScreen() {
       {},
     );
 
-    const sortedGroups = Object.values(grouped).sort((a, b) =>
-      a.title.localeCompare(b.title),
-    );
-    setSections(sortedGroups);
-  }, [bottles]);
+    const groupsArray = Object.values(grouped);
 
-  const toggleSelection = (id: string) => {
-    const next = new Set(selectedIds);
-    if (next.has(id)) {
-      next.delete(id);
-    } else {
-      next.add(id);
+    // 2. Sort
+    if (sortBy === "name_asc") {
+      groupsArray.sort((a, b) => a.title.localeCompare(b.title));
+    } else if (sortBy === "name_desc") {
+      groupsArray.sort((a, b) => b.title.localeCompare(a.title));
+    } else if (sortBy === "stock_desc") {
+      groupsArray.sort((a, b) => b.data.length - a.data.length);
+    } else if (sortBy === "stock_asc") {
+      groupsArray.sort((a, b) => a.data.length - b.data.length);
     }
-    setSelectedIds(next);
-    if (next.size === 0) setIsSelectionMode(false);
-  };
+
+    setSections(groupsArray);
+  }, [bottles, sortBy, filterType]);
 
   const onRefresh = useCallback(() => {
     fetchInventory(true);
   }, [searchQuery]);
 
-  const getStatusBadgeStyle = (status: string) => {
-    switch (status) {
-      case "received":
-        return { backgroundColor: "#fef3c7", color: "#92400e" };
-      case "shelved":
-        return { backgroundColor: "#d1fae5", color: "#065f46" };
-      case "consumed":
-        return { backgroundColor: "#dbeafe", color: "#1e40af" };
-      case "damaged":
-      case "lost":
-        return { backgroundColor: "#fee2e2", color: "#991b1b" };
-      default:
-        return { backgroundColor: "#f3f4f6", color: "#4b5563" };
-    }
-  };
-
-  const renderSectionHeader = ({
-    section,
+  const renderItem = ({
+    item,
   }: {
-    section: { title: string; data: BottleView[] };
-  }) => (
-    <View style={styles.sectionHeaderContainer}>
-      <Tag size={16} color={theme.textSecondary} />
-      <Text
-        style={[styles.sectionHeaderText, { color: theme.text }]}
-        numberOfLines={1}
+    item: { title: string; masterWineData?: MasterWine; data: BottleView[] };
+  }) => {
+    const { masterWineData, data: bottles } = item;
+    const stockCount = bottles.length;
+
+    if (!masterWineData) {
+      return null; // Or a placeholder
+    }
+
+    const locationCounts = bottles.reduce(
+      (acc, bottle) => {
+        const locName = bottle.locationData?.name || "Unassigned";
+        acc[locName] = (acc[locName] || 0) + 1;
+        return acc;
+      },
+      {} as Record<string, number>,
+    );
+
+    return (
+      <View
+        style={[
+          styles.itemContainer,
+          { backgroundColor: theme.card, borderColor: theme.border },
+        ]}
       >
-        {section.title}
-      </Text>
-      <View style={styles.sectionHeaderBadge}>
-        <Text style={styles.sectionHeaderBadgeText}>{section.data.length}</Text>
-      </View>
-    </View>
-  );
-  const renderItem = ({ item }: { item: BottleView }) => (
-    <TouchableOpacity
-      style={[
-        styles.itemContainer,
-        { backgroundColor: theme.card, borderColor: theme.border },
-        selectedIds.has(item.id) && [
-          styles.itemSelected,
-          { borderColor: theme.accent },
-        ],
-      ]}
-      onPress={() => (isSelectionMode ? toggleSelection(item.id) : null)}
-      onLongPress={() => {
-        if (!isSelectionMode) setIsSelectionMode(true);
-        toggleSelection(item.id);
-      }}
-    >
-      <View style={styles.itemHeader}>
-        <View style={styles.titleContainer}>
-          {isSelectionMode && (
-            <View
-              style={[
-                styles.checkbox,
-                selectedIds.has(item.id) && [
-                  styles.checkboxSelected,
-                  { backgroundColor: theme.accent, borderColor: theme.accent },
-                ],
-              ]}
+        <View style={styles.cardBody}>
+          <View style={styles.stockInfo}>
+            <Text style={[styles.stockCount, { color: theme.text }]}>
+              {stockCount}
+            </Text>
+            <Text style={[styles.stockLabel, { color: theme.textSecondary }]}>
+              in stock
+            </Text>
+          </View>
+          <View style={styles.wineInfo}>
+            <Text style={[styles.wineName, { color: theme.text }]}>
+              {masterWineData.name}
+            </Text>
+            <Text
+              style={[styles.wineProducer, { color: theme.textSecondary }]}
+              numberOfLines={1}
             >
-              {selectedIds.has(item.id) && (
-                <Check size={14} color="#fff" strokeWidth={3} />
-              )}
+              {masterWineData.producer || "Unknown Producer"}
+            </Text>
+
+            <View style={styles.detailsGrid}>
+              <View style={styles.detailItem}>
+                <Calendar size={14} color={theme.textSecondary} />
+                <Text style={[styles.detailText, { color: theme.text }]}>
+                  {masterWineData.vintage || "N/A"}
+                </Text>
+              </View>
+              <View style={styles.detailItem}>
+                <Layers size={14} color={theme.textSecondary} />
+                <Text style={[styles.detailText, { color: theme.text }]}>
+                  {masterWineData.format || "N/A"}
+                </Text>
+              </View>
+              <View style={styles.detailItem}>
+                <Tag size={14} color={theme.textSecondary} />
+                <Text style={[styles.detailText, { color: theme.text }]}>
+                  {masterWineData.type || "N/A"}
+                </Text>
+              </View>
+              <View style={styles.detailItem}>
+                <Globe size={14} color={theme.textSecondary} />
+                <Text
+                  style={[styles.detailText, { color: theme.text }]}
+                  numberOfLines={1}
+                >
+                  {[(masterWineData as any).country, masterWineData.region]
+                    .filter(Boolean)
+                    .join(", ") || "N/A"}
+                </Text>
+              </View>
             </View>
-          )}
-          <Text style={[styles.itemTitle, { color: theme.text }]}>
-            {item.masterWineData?.name || "Loading..."}
-          </Text>
-        </View>
-        <View
-          style={[
-            styles.statusBadge,
-            {
-              backgroundColor:
-                item.status === "received" || item.status === "incoming"
-                  ? theme.accent + "20"
-                  : item.status === "shelved"
-                    ? theme.secondary + "20"
-                    : theme.danger + "20",
-            },
-          ]}
-        >
-          <Text
-            style={[
-              styles.statusText,
-              {
-                color:
-                  item.status === "received" || item.status === "incoming"
-                    ? theme.accent
-                    : item.status === "shelved"
-                      ? theme.secondary
-                      : theme.danger,
-              },
-            ]}
-          >
-            {item.status}
-          </Text>
-        </View>
-      </View>
 
-      <View style={styles.detailsGrid}>
-        <View style={styles.detailItem}>
-          <Calendar size={14} color={theme.textSecondary} />
-          <Text style={[styles.detailText, { color: theme.textSecondary }]}>
-            {item.masterWineData?.vintage || "N/A"}
-          </Text>
-        </View>
-        <View style={styles.detailItem}>
-          <Layers size={14} color={theme.textSecondary} />
-          <Text style={[styles.detailText, { color: theme.textSecondary }]}>
-            {item.masterWineData?.format || "N/A"}
-          </Text>
-        </View>
-        <View style={[styles.detailItem, { flexBasis: "100%" }]}>
-          <Building2 size={14} color={theme.textSecondary} />
-          <Text
-            style={[styles.detailText, { color: theme.textSecondary }]}
-            numberOfLines={1}
-          >
-            {item.masterWineData?.producer || "N/A"}
-          </Text>
-        </View>
-        <View style={[styles.detailItem, { flexBasis: "100%" }]}>
-          <Globe size={14} color={theme.textSecondary} />
-          <Text
-            style={[styles.detailText, { color: theme.textSecondary }]}
-            numberOfLines={1}
-          >
-            {item.masterWineData?.region || "Unknown Origin"}
-          </Text>
+            {Object.keys(locationCounts).length > 0 && (
+              <View style={styles.locationsContainer}>
+                {Object.entries(locationCounts).map(([locName, count]) => (
+                  <View
+                    key={locName}
+                    style={[
+                      styles.locationPill,
+                      { backgroundColor: theme.primary + "15" },
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.locationCountBadge,
+                        { backgroundColor: theme.primary },
+                      ]}
+                    >
+                      <Text style={styles.locationCountText}>{count}</Text>
+                    </View>
+                    <Text
+                      style={[
+                        styles.locationNameText,
+                        { color: theme.primary },
+                      ]}
+                    >
+                      {locName}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
         </View>
       </View>
-
-      <View style={styles.itemFooter}>
-        <Text style={[styles.itemSku, { color: theme.textSecondary }]}>
-          SKU: {item.sku}
-        </Text>
-        <Text
-          style={[
-            styles.itemLocation,
-            { color: item.locationData ? theme.secondary : theme.accent },
-          ]}
-        >
-          {item.locationData ? `📍 ${item.locationData.name}` : "📦 Unshelved"}
-        </Text>
-      </View>
-    </TouchableOpacity>
-  );
+    );
+  };
 
   return (
     <SafeAreaView
@@ -403,14 +378,7 @@ export default function InventoryScreen() {
         ]}
       >
         <TouchableOpacity
-          onPress={() => {
-            if (isSelectionMode) {
-              setIsSelectionMode(false);
-              setSelectedIds(new Set());
-            } else {
-              router.back();
-            }
-          }}
+          onPress={() => router.back()}
           style={styles.backButton}
         >
           <ChevronLeft size={28} color={theme.primary} strokeWidth={2.5} />
@@ -418,63 +386,40 @@ export default function InventoryScreen() {
 
         <View style={{ flex: 1 }}>
           <Text style={[styles.title, { color: theme.primary }]}>
-            {isSelectionMode ? `${selectedIds.size} Selected` : "Inventory"}
+            Inventory
           </Text>
           <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
             {isStore ? "Boutique View" : "Warehouse View"}
           </Text>
         </View>
         <View style={styles.headerActions}>
-          {isSelectionMode ? (
+          <View style={styles.actionRow}>
             <TouchableOpacity
-              onPress={() => {
-                setIsSelectionMode(false);
-                setSelectedIds(new Set());
-              }}
-              style={styles.cancelButton}
+              style={[
+                styles.headerActionChip,
+                { backgroundColor: theme.primary, borderColor: theme.primary },
+              ]}
+              onPress={() => router.push("/tagging")}
+              activeOpacity={0.7}
             >
-              <Text style={styles.cancelText}>Cancel</Text>
+              <Scan size={16} color="#fff" strokeWidth={2.5} />
+              <Text style={[styles.headerActionText, { color: "#fff" }]}>
+                Scan to Update
+              </Text>
             </TouchableOpacity>
-          ) : (
-            <View style={styles.actionRow}>
-              <TouchableOpacity
-                style={[
-                  styles.headerActionChip,
-                  showUnshelvedOnly && styles.headerActionChipActive,
-                ]}
-                onPress={() => setShowUnshelvedOnly(!showUnshelvedOnly)}
-                activeOpacity={0.7}
-              >
-                <PackageOpen
-                  size={16}
-                  color={showUnshelvedOnly ? "#000" : "#fff"}
-                  strokeWidth={2.5}
-                />
-                <Text
-                  style={[
-                    styles.headerActionText,
-                    showUnshelvedOnly && styles.headerActionTextActive,
-                  ]}
-                >
-                  Unshelved
-                </Text>
-              </TouchableOpacity>
-            </View>
-          )}
+          </View>
         </View>
       </View>
 
       <View style={styles.topControls}>
-        <View
-          style={[styles.searchContainer, { marginBottom: isStore ? 16 : 4 }]}
-        >
+        <View style={styles.searchContainer}>
           <View
             style={[
               styles.searchWrapper,
               {
                 backgroundColor: theme.card,
                 borderColor: theme.border,
-                borderRadius: isStore ? 16 : 16,
+                borderRadius: 16,
               },
             ]}
           >
@@ -485,7 +430,7 @@ export default function InventoryScreen() {
             />
             <TextInput
               style={[styles.searchInput, { color: theme.text }]}
-              placeholder="Search SKU..."
+              placeholder="Omni Search (SKU, Wine, Producer)..."
               placeholderTextColor="#9ca3af"
               value={searchQuery}
               onChangeText={setSearchQuery}
@@ -493,16 +438,44 @@ export default function InventoryScreen() {
             />
           </View>
         </View>
+
+        <View
+          style={[styles.filterSortRow, { marginBottom: isStore ? 16 : 4 }]}
+        >
+          <TouchableOpacity
+            style={[
+              styles.filterSortBtn,
+              { backgroundColor: theme.card, borderColor: theme.border },
+            ]}
+            onPress={() => setIsSortModalOpen(true)}
+          >
+            <ArrowUpDown size={16} color={theme.textSecondary} />
+            <Text style={[styles.filterSortText, { color: theme.text }]}>
+              Sort By
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.filterSortBtn,
+              { backgroundColor: filterType ? theme.primary + '20' : theme.card, borderColor: filterType ? theme.primary : theme.border },
+            ]}
+            onPress={() => setIsFilterModalOpen(true)}
+          >
+            <Filter size={16} color={filterType ? theme.primary : theme.textSecondary} />
+            <Text style={[styles.filterSortText, { color: filterType ? theme.primary : theme.text }]}>
+              {filterType ? filterType : "Filters"}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {loading ? (
         <ActivityIndicator size="large" color="#4f46e5" style={{ flex: 1 }} />
       ) : (
-        <SectionList
-          sections={sections}
+        <FlatList
+          data={sections}
           renderItem={renderItem}
-          renderSectionHeader={renderSectionHeader}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item) => item.masterWineData?.id || item.title}
           contentContainerStyle={styles.listContent}
           onEndReached={() => fetchInventory(false)}
           onEndReachedThreshold={0.5}
@@ -532,6 +505,87 @@ export default function InventoryScreen() {
           }
         />
       )}
+
+      {/* Sort Modal */}
+      <Modal visible={isSortModalOpen} animationType="slide" transparent={true}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>Sort Inventory</Text>
+              <TouchableOpacity onPress={() => setIsSortModalOpen(false)}>
+                <X size={24} color={theme.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            {[
+              { id: "name_asc", label: "Name (A to Z)" },
+              { id: "name_desc", label: "Name (Z to A)" },
+              { id: "stock_desc", label: "Highest Stock First" },
+              { id: "stock_asc", label: "Lowest Stock First" },
+            ].map((option) => (
+              <TouchableOpacity
+                key={option.id}
+                style={[
+                  styles.modalOption,
+                  { borderColor: theme.border },
+                  sortBy === option.id && { borderColor: theme.primary, backgroundColor: theme.primary + '10' }
+                ]}
+                onPress={() => { setSortBy(option.id as any); setIsSortModalOpen(false); }}
+              >
+                <Text style={[styles.modalOptionText, { color: theme.text }, sortBy === option.id && { color: theme.primary }]}>
+                  {option.label}
+                </Text>
+                {sortBy === option.id && <Check size={20} color={theme.primary} />}
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Filter Modal */}
+      <Modal visible={isFilterModalOpen} animationType="slide" transparent={true}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>Filter by Type</Text>
+              <TouchableOpacity onPress={() => setIsFilterModalOpen(false)}>
+                <X size={24} color={theme.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <TouchableOpacity
+                style={[
+                  styles.modalOption,
+                  { borderColor: theme.border },
+                  filterType === null && { borderColor: theme.primary, backgroundColor: theme.primary + '10' }
+                ]}
+                onPress={() => { setFilterType(null); setIsFilterModalOpen(false); }}
+              >
+                <Text style={[styles.modalOptionText, { color: theme.text }, filterType === null && { color: theme.primary }]}>
+                  All Types
+                </Text>
+                {filterType === null && <Check size={20} color={theme.primary} />}
+              </TouchableOpacity>
+
+              {["Red Wine", "White wine", "Sweet Wine", "Sparkling wine", "Rose wine"].map((type) => (
+                <TouchableOpacity
+                  key={type}
+                  style={[
+                    styles.modalOption,
+                    { borderColor: theme.border },
+                    filterType === type && { borderColor: theme.primary, backgroundColor: theme.primary + '10' }
+                  ]}
+                  onPress={() => { setFilterType(type); setIsFilterModalOpen(false); }}
+                >
+                  <Text style={[styles.modalOptionText, { color: theme.text }, filterType === type && { color: theme.primary }]}>
+                    {type}
+                  </Text>
+                  {filterType === type && <Check size={20} color={theme.primary} />}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -596,17 +650,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#f59e0b",
     borderColor: "#f59e0b",
   },
-  cancelButton: {
-    backgroundColor: "#334155",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
-  },
-  cancelText: {
-    color: "#fff",
-    fontSize: 12,
-    fontWeight: "800",
-  },
   topControls: {
     paddingHorizontal: 24,
     paddingBottom: 16,
@@ -633,6 +676,25 @@ const styles = StyleSheet.create({
     height: 60,
     fontWeight: "600",
   },
+  filterSortRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 12,
+  },
+  filterSortBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 8,
+  },
+  filterSortText: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
   listContent: {
     paddingHorizontal: 16,
     paddingTop: 8,
@@ -641,116 +703,94 @@ const styles = StyleSheet.create({
   itemContainer: {
     backgroundColor: "#1e293b",
     borderRadius: 20,
-    padding: 20,
     marginBottom: 16,
     borderWidth: 1,
     borderColor: "#334155",
+    overflow: "hidden",
   },
-  itemSelected: {
-    borderColor: "#f59e0b",
-    backgroundColor: "#f59e0b10",
-  },
-  titleContainer: {
+  cardBody: {
     flexDirection: "row",
+    padding: 16,
+    gap: 16,
     alignItems: "center",
-    flex: 1,
-    gap: 12,
   },
-  checkbox: {
-    width: 24,
-    height: 24,
-    borderRadius: 8,
-    borderWidth: 2,
-    borderColor: "#334155",
+  stockInfo: {
+    alignItems: "center",
     justifyContent: "center",
-    alignItems: "center",
+    padding: 8,
+    width: 90,
   },
-  checkboxSelected: {
-    backgroundColor: "#f59e0b",
-    borderColor: "#f59e0b",
+  stockCount: {
+    fontSize: 42,
+    fontWeight: "900",
+    letterSpacing: -2,
   },
-  itemHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  itemTitle: {
-    fontSize: 18,
+  stockLabel: {
+    fontSize: 11,
     fontWeight: "700",
-    color: "#ffffff",
+    textTransform: "uppercase",
+    marginTop: -4,
+  },
+  wineInfo: {
     flex: 1,
+  },
+  wineName: {
+    fontSize: 16,
+    fontWeight: "800",
+    marginBottom: 2,
+  },
+  wineProducer: {
+    fontSize: 12,
+    fontWeight: "600",
+    marginBottom: 12,
   },
   detailsGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    marginTop: 16,
-    marginBottom: 8,
-    marginHorizontal: -4,
   },
   detailItem: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
     flexBasis: "50%",
-    paddingHorizontal: 4,
-    marginBottom: 12,
+    marginBottom: 8,
   },
   detailText: {
     fontSize: 13,
     fontWeight: "600",
     flex: 1,
   },
-  itemFooter: {
+  locationsContainer: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    borderTopWidth: 1,
-    borderColor: "#334155",
-    paddingTop: 12,
-    marginTop: 4,
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 12,
   },
-  itemSku: {
-    fontSize: 12,
-    fontWeight: "700",
-    fontVariant: ["tabular-nums"],
-  },
-  sectionHeaderContainer: {
+  locationPill: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 8,
-    paddingVertical: 20,
-    gap: 12,
-  },
-  sectionHeaderText: {
-    fontSize: 14,
-    fontWeight: "800",
-    flex: 1,
-  },
-  sectionHeaderBadge: {
-    backgroundColor: "#334155",
-    paddingHorizontal: 8,
+    borderRadius: 12,
+    paddingRight: 10,
     paddingVertical: 4,
-    borderRadius: 8,
+    paddingLeft: 4,
   },
-  sectionHeaderBadgeText: {
-    color: "#cbd5e1",
-    fontSize: 12,
-    fontWeight: "700",
+  locationCountBadge: {
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginRight: 6,
+    minWidth: 20,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  itemLocation: {
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  statusText: {
+  locationCountText: {
+    color: "#fff",
     fontSize: 11,
     fontWeight: "800",
-    textTransform: "uppercase",
+  },
+  locationNameText: {
+    fontSize: 12,
+    fontWeight: "700",
   },
   emptyContainer: {
     alignItems: "center",
@@ -814,5 +854,40 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 15,
     fontWeight: "900",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "flex-end",
+  },
+  modalContent: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    minHeight: "40%",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "900",
+  },
+  modalOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 12,
+  },
+  modalOptionText: {
+    fontSize: 16,
+    fontWeight: "700",
   },
 });
