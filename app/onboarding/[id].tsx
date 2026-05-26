@@ -1,3 +1,4 @@
+import { useAuth } from "@/context/AuthContext";
 import { db } from "@/lib/firebase";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
@@ -40,6 +41,7 @@ export default function OnboardingDetailScreen() {
     openScanner?: string;
   }>();
   const router = useRouter();
+  const { profile } = useAuth();
   const [task, setTask] = useState<OnboardingTask | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentStep, setCurrentStep] = useState<Step>("overview");
@@ -168,7 +170,7 @@ export default function OnboardingDetailScreen() {
   };
 
   const handleVerifyQR = async (scannedData: string) => {
-    if (!activeItem || !task || isProcessing) return;
+    if (!activeItem || !task || isProcessing || !profile?.locationId) return;
 
     // Check if the scanned QR belongs to the active item's current pending bottle
     const expectedBottleId = activeItem.bottleIds[activeItem.onboardedQty];
@@ -187,10 +189,12 @@ export default function OnboardingDetailScreen() {
       // 1. Update the existing Inventory Bottle
       // These bottles were already created as "incoming" in the admin dashboard
       const bottleRef = doc(db, "inventory_bottles", scannedData);
+      const storeRef = doc(db, "stores", profile.locationId);
 
       await updateDoc(bottleRef, {
         status: "received",
         updatedAt: serverTimestamp(),
+        storeRef: storeRef,
       });
 
       // 2. Update Task Progress
@@ -529,7 +533,7 @@ export default function OnboardingDetailScreen() {
               router.push({
                 pathname: "/tagging",
                 params: {
-                  bottleId: activeItem.bottleIds[activeItem.onboardedQty - 1],
+                  bottleId: activeItem.bottleIds[activeItem.onboardedQty],
                   source: "onboarding",
                   fromOnboardingId: id,
                 },
