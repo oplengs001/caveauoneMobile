@@ -18,6 +18,7 @@ export interface MasterWine {
   type?: string;
   sku?: string;
   format?: string;
+  grapeVariety?: string;
 }
 
 export interface InventoryBottle {

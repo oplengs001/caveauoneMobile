@@ -16,16 +16,17 @@ import {
 } from "firebase/firestore";
 import {
   ArrowUpDown,
+  BottleWine,
   Box,
   Calendar,
   Check,
   ChevronLeft,
   Filter,
   Globe,
-  Layers,
+  Grape,
   Scan,
   Search as SearchIcon,
-  Tag,
+  WineIcon,
   X,
 } from "lucide-react-native";
 import { useCallback, useEffect, useState } from "react";
@@ -50,7 +51,7 @@ type BottleView = InventoryBottle & {
   locationData?: Location;
 };
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 20;
 
 export default function InventoryScreen() {
   const { profile } = useAuth();
@@ -304,15 +305,21 @@ export default function InventoryScreen() {
                 </Text>
               </View>
               <View style={styles.detailItem}>
-                <Layers size={14} color={theme.textSecondary} />
+                <BottleWine size={14} color={theme.textSecondary} />
                 <Text style={[styles.detailText, { color: theme.text }]}>
                   {masterWineData.format || "N/A"}
                 </Text>
               </View>
               <View style={styles.detailItem}>
-                <Tag size={14} color={theme.textSecondary} />
+                <WineIcon size={14} color={theme.textSecondary} />
                 <Text style={[styles.detailText, { color: theme.text }]}>
                   {masterWineData.type || "N/A"}
+                </Text>
+              </View>
+              <View style={styles.detailItem}>
+                <Grape size={14} color={theme.textSecondary} />
+                <Text style={[styles.detailText, { color: theme.text }]}>
+                  {masterWineData.grapeVariety || "N/A"}
                 </Text>
               </View>
               <View style={styles.detailItem}>
@@ -388,7 +395,7 @@ export default function InventoryScreen() {
 
         <View style={{ flex: 1 }}>
           <Text style={[styles.title, { color: theme.primary }]}>
-            Inventory
+            Bottle Management
           </Text>
           <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
             {isStore ? "Boutique View" : "Warehouse View"}
