@@ -29,6 +29,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  RefreshControl,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -48,6 +49,7 @@ export default function HomeScreen() {
   const [loadingMetrics, setLoadingMetrics] = useState(true);
   const [outboundRequests, setOutboundRequests] = useState<WineRequest[]>([]);
   const [loadingRequests, setLoadingRequests] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   const [salesDashboardMetrics, setSalesDashboardMetrics] = useState({
     soldCount: 0,
@@ -58,7 +60,7 @@ export default function HomeScreen() {
     "today",
   );
 
-  const fetchMetrics = async () => {
+  const fetchMetrics = useCallback(async () => {
     const storeId = profile?.locationId;
     if (profile?.role !== "store" || !storeId) {
       setLoadingMetrics(false);
@@ -130,100 +132,116 @@ export default function HomeScreen() {
     } finally {
       setLoadingMetrics(false);
     }
-  };
+  }, [profile]);
+
+  const fetchOutboundRequests = useCallback(async () => {
+    if (profile?.role !== "store" || !profile.locationId) {
+      setLoadingRequests(false);
+      return;
+    }
+    try {
+      setLoadingRequests(true);
+      const q = query(
+        collection(db, "wine_requests"),
+        where("storeId", "==", profile.locationId),
+        where("status", "==", "receiving"),
+      );
+      const snapshot = await getDocs(q);
+      const requests = snapshot.docs.map(
+        (doc) => ({ id: doc.id, ...doc.data() }) as WineRequest,
+      );
+      setOutboundRequests(requests);
+    } catch (error) {
+      console.error("Error fetching outbound requests:", error);
+    } finally {
+      setLoadingRequests(false);
+    }
+  }, [profile]);
+
+  const fetchSalesMetrics = useCallback(async () => {
+    const storeId = profile?.locationId;
+    if (profile?.role !== "store" || !storeId) return;
+
+    try {
+      const activeBottlesSnap = await getCountFromServer(
+        query(
+          collection(db, "inventory_bottles"),
+          where("storeRef", "==", doc(db, "stores", storeId)),
+          where("status", "in", ["received", "shelved"]),
+        ),
+      );
+      const activeBottles = activeBottlesSnap.data().count;
+
+      let startDate;
+      if (salesPeriod === "today") {
+        startDate = new Date();
+        startDate.setHours(0, 0, 0, 0);
+      } else if (salesPeriod === "week") {
+        startDate = new Date();
+        startDate.setDate(startDate.getDate() - startDate.getDay());
+        startDate.setHours(0, 0, 0, 0);
+      } else {
+        startDate = new Date(0); // for 'all'
+      }
+
+      const salesQuery =
+        salesPeriod === "all"
+          ? query(collection(db, "sales"), where("storeId", "==", storeId))
+          : query(
+              collection(db, "sales"),
+              where("storeId", "==", storeId),
+              where("soldAt", ">=", startDate),
+            );
+
+      const salesSnap = await getDocs(salesQuery);
+
+      const soldCount = salesSnap.size;
+      const totalRevenue = salesSnap.docs.reduce(
+        (sum, doc) => sum + (doc.data().price || 0),
+        0,
+      );
+
+      setSalesDashboardMetrics({
+        soldCount,
+        totalRevenue,
+        activeBottles,
+      });
+    } catch (err) {
+      console.error("Failed to fetch sales metrics:", err);
+    }
+  }, [profile, salesPeriod]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      if (profile?.role === "store") {
+        await Promise.all([
+          fetchMetrics(),
+          fetchOutboundRequests(),
+          fetchSalesMetrics(),
+        ]);
+      }
+    } catch (e) {
+      console.error("Failed to refresh:", e);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [profile, fetchMetrics, fetchOutboundRequests, fetchSalesMetrics]);
 
   useFocusEffect(
     useCallback(() => {
-      if (!loading) fetchMetrics();
-    }, [profile, loading]),
+      if (!loading) {
+        fetchMetrics();
+        fetchOutboundRequests();
+      }
+    }, [loading, profile, fetchMetrics, fetchOutboundRequests]),
   );
 
   useEffect(() => {
-    const fetchOutboundRequests = async () => {
-      if (profile?.role !== "store" || !profile.locationId) {
-        setLoadingRequests(false);
-        return;
-      }
-      try {
-        setLoadingRequests(true);
-        const q = query(
-          collection(db, "wine_requests"),
-          where("storeId", "==", profile.locationId),
-          where("status", "==", "receiving"),
-        );
-        const snapshot = await getDocs(q);
-        const requests = snapshot.docs.map(
-          (doc) => ({ id: doc.id, ...doc.data() }) as WineRequest,
-        );
-        setOutboundRequests(requests);
-      } catch (error) {
-        console.error("Error fetching outbound requests:", error);
-      } finally {
-        setLoadingRequests(false);
-      }
-    };
-
     if (!loading) {
-      fetchOutboundRequests();
+      fetchSalesMetrics();
     }
-  }, [profile, loading]);
-
-  useEffect(() => {
-    const fetchSalesMetrics = async () => {
-      const storeId = profile?.locationId;
-      if (profile?.role !== "store" || !storeId) return;
-
-      try {
-        const activeBottlesSnap = await getCountFromServer(
-          query(
-            collection(db, "inventory_bottles"),
-            where("storeRef", "==", doc(db, "stores", storeId)),
-            where("status", "in", ["received", "shelved"]),
-          ),
-        );
-        const activeBottles = activeBottlesSnap.data().count;
-
-        let startDate;
-        if (salesPeriod === "today") {
-          startDate = new Date();
-          startDate.setHours(0, 0, 0, 0);
-        } else if (salesPeriod === "week") {
-          startDate = new Date();
-          startDate.setDate(startDate.getDate() - startDate.getDay());
-          startDate.setHours(0, 0, 0, 0);
-        } else {
-          startDate = new Date(0); // for 'all'
-        }
-
-        const salesQuery =
-          salesPeriod === "all"
-            ? query(collection(db, "sales"), where("storeId", "==", storeId))
-            : query(
-                collection(db, "sales"),
-                where("storeId", "==", storeId),
-                where("soldAt", ">=", startDate),
-              );
-
-        const salesSnap = await getDocs(salesQuery);
-
-        const soldCount = salesSnap.size;
-        const totalRevenue = salesSnap.docs.reduce(
-          (sum, doc) => sum + (doc.data().price || 0),
-          0,
-        );
-
-        setSalesDashboardMetrics({
-          soldCount,
-          totalRevenue,
-          activeBottles,
-        });
-      } catch (err) {
-        console.error("Failed to fetch sales metrics:", err);
-      }
-    };
-
-    if (!loading) fetchSalesMetrics();
-  }, [profile, loading, salesPeriod]);
+  }, [loading, profile, salesPeriod, fetchSalesMetrics]);
 
   const handleSignOut = () => {
     Alert.alert("Sign Out", "Are you sure you want to exit the system?", [
@@ -272,7 +290,17 @@ export default function HomeScreen() {
       style={[styles.container, { backgroundColor: theme.background }]}
     >
       <Stack.Screen options={{ headerShown: false }} />
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[theme.primary]}
+            tintColor={theme.primary}
+          />
+        }
+      >
         <View style={styles.header}>
           <View style={styles.headerTop}>
             <View style={styles.logoContainer}>
