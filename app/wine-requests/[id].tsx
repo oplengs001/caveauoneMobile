@@ -167,7 +167,7 @@ export default function WineRequestDetail() {
           {
             text: "Tag Location",
             onPress: () => {
-              router.push({
+              router.replace({
                 pathname: "/tagging",
                 params: {
                   bottleId: scannedBottleId,
@@ -176,8 +176,7 @@ export default function WineRequestDetail() {
                   fromRequestId: id,
                 },
               });
-            },
-          },
+            },          },
           {
             text: "Scan Next",
             onPress: () => {

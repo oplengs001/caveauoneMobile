@@ -229,7 +229,9 @@ export default function WineRequestsIndex() {
     <SafeAreaView
       style={[styles.container, { backgroundColor: theme.background }]}
     >
-      <Stack.Screen options={{ headerShown: false }} />
+      <Stack.Screen
+        options={{ headerShown: false, animation: "slide_from_left" }}
+      />
 
       <View style={styles.header}>
         <TouchableOpacity
