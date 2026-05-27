@@ -1,7 +1,8 @@
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { auth, db } from "@/lib/firebase";
-import { Stack, useRouter } from "expo-router";
+import { WineRequest } from "@/types";
+import { Stack, useFocusEffect, useRouter } from "expo-router";
 import { signOut } from "firebase/auth";
 import {
   collection,
@@ -15,6 +16,7 @@ import {
   AlertOctagon,
   AlertTriangle,
   Banknote,
+  Check,
   ClipboardList,
   FileDown,
   LayoutList,
@@ -24,8 +26,9 @@ import {
   Truck,
   Wine,
 } from "lucide-react-native";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   SafeAreaView,
   ScrollView,
@@ -43,6 +46,10 @@ export default function HomeScreen() {
     parAlert: { wines: 0, bottles: 0 },
     underSafety: { wines: 0, bottles: 0 },
   });
+  const [loadingMetrics, setLoadingMetrics] = useState(true);
+  const [outboundRequests, setOutboundRequests] = useState<WineRequest[]>([]);
+  const [loadingRequests, setLoadingRequests] = useState(true);
+
   const [salesDashboardMetrics, setSalesDashboardMetrics] = useState({
     soldCount: 0,
     totalRevenue: 0,
@@ -52,79 +59,118 @@ export default function HomeScreen() {
     "today",
   );
 
-  useEffect(() => {
-    const fetchMetrics = async () => {
-      const storeId = profile?.locationId;
-      if (profile?.role !== "store" || !storeId) return;
+  const fetchMetrics = async () => {
+    const storeId = profile?.locationId;
+    if (profile?.role !== "store" || !storeId) {
+      setLoadingMetrics(false);
+      return;
+    }
 
-      try {
-        // Fetch pending requests to exclude them from metrics
-        const pendingRequestsSnap = await getDocs(
-          query(
-            collection(db, "wine_requests"),
-            where("storeId", "==", storeId),
-            where("status", "==", "pending"),
-          ),
-        );
-        const pendingWineIds = new Set<string>();
-        pendingRequestsSnap.docs.forEach((reqDoc) => {
-          reqDoc.data().items?.forEach((item: { masterWineId: string }) => {
-            if (item.masterWineId) {
-              pendingWineIds.add(item.masterWineId);
-            }
-          });
+    try {
+      setLoadingMetrics(true);
+      // Fetch pending requests to exclude them from metrics
+      const pendingRequestsSnap = await getDocs(
+        query(
+          collection(db, "wine_requests"),
+          where("storeId", "==", storeId),
+          where("status", "==", "pending"),
+        ),
+      );
+      const pendingWineIds = new Set<string>();
+      pendingRequestsSnap.docs.forEach((reqDoc) => {
+        reqDoc.data().items?.forEach((item: { masterWineId: string }) => {
+          if (item.masterWineId) {
+            pendingWineIds.add(item.masterWineId);
+          }
         });
+      });
 
-        const settingsSnap = await getDocs(
-          query(
-            collection(db, "store_wine_settings"),
-            where("storeId", "==", storeId),
-            where("discontinued", "==", false),
-          ),
+      const settingsSnap = await getDocs(
+        query(
+          collection(db, "store_wine_settings"),
+          where("storeId", "==", storeId),
+          where("discontinued", "==", false),
+        ),
+      );
+
+      const metrics = {
+        stockout: { wines: 0, bottles: 0 },
+        parAlert: { wines: 0, bottles: 0 },
+        underSafety: { wines: 0, bottles: 0 },
+      };
+
+      await Promise.all(
+        settingsSnap.docs.map(async (d) => {
+          const { masterWineId, parLevel = 0, safetyStock = 0 } = d.data();
+
+          if (pendingWineIds.has(masterWineId)) {
+            return;
+          }
+
+          const wineRef = doc(db, "master_wines", masterWineId);
+          const snap = await getCountFromServer(
+            query(
+              collection(db, "inventory_bottles"),
+              where("storeRef", "==", doc(db, "stores", storeId)),
+              where("masterWineRef", "==", wineRef),
+              where("status", "in", ["received", "shelved"]),
+            ),
+          );
+          const count = snap.data().count;
+          if (count === 0) {
+            metrics.stockout.wines++;
+            metrics.stockout.bottles += safetyStock;
+          } else if (count <= parLevel) {
+            metrics.parAlert.wines++;
+            metrics.parAlert.bottles += parLevel - count;
+          } else if (count < safetyStock) {
+            metrics.underSafety.wines++;
+            metrics.underSafety.bottles += safetyStock - count;
+          }
+        }),
+      );
+      setDashboardMetrics(metrics);
+    } catch (err) {
+      console.error("Failed to fetch dashboard metrics:", err);
+    } finally {
+      setLoadingMetrics(false);
+    }
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!loading) fetchMetrics();
+    }, [profile, loading]),
+  );
+
+  useEffect(() => {
+    const fetchOutboundRequests = async () => {
+      if (profile?.role !== "store" || !profile.locationId) {
+        setLoadingRequests(false);
+        return;
+      }
+      try {
+        setLoadingRequests(true);
+        const q = query(
+          collection(db, "wine_requests"),
+          where("targetStoreId", "==", profile.locationId),
+          where("status", "==", "outbound"),
         );
-
-        const metrics = {
-          stockout: { wines: 0, bottles: 0 },
-          parAlert: { wines: 0, bottles: 0 },
-          underSafety: { wines: 0, bottles: 0 },
-        };
-
-        await Promise.all(
-          settingsSnap.docs.map(async (d) => {
-            const { masterWineId, parLevel = 0, safetyStock = 0 } = d.data();
-
-            if (pendingWineIds.has(masterWineId)) {
-              return;
-            }
-
-            const wineRef = doc(db, "master_wines", masterWineId);
-            const snap = await getCountFromServer(
-              query(
-                collection(db, "inventory_bottles"),
-                where("storeRef", "==", doc(db, "stores", storeId)),
-                where("masterWineRef", "==", wineRef),
-                where("status", "in", ["received", "shelved"]),
-              ),
-            );
-            const count = snap.data().count;
-            if (count === 0) {
-              metrics.stockout.wines++;
-              metrics.stockout.bottles += safetyStock;
-            } else if (count <= parLevel) {
-              metrics.parAlert.wines++;
-              metrics.parAlert.bottles += safetyStock - count;
-            } else if (count < safetyStock) {
-              metrics.underSafety.wines++;
-              metrics.underSafety.bottles += safetyStock - count;
-            }
-          }),
+        const snapshot = await getDocs(q);
+        const requests = snapshot.docs.map(
+          (doc) => ({ id: doc.id, ...doc.data() }) as WineRequest,
         );
-        setDashboardMetrics(metrics);
-      } catch (err) {
-        console.error("Failed to fetch dashboard metrics:", err);
+        setOutboundRequests(requests);
+      } catch (error) {
+        console.error("Error fetching outbound requests:", error);
+      } finally {
+        setLoadingRequests(false);
       }
     };
-    if (!loading) fetchMetrics();
+
+    if (!loading) {
+      fetchOutboundRequests();
+    }
   }, [profile, loading]);
 
   useEffect(() => {
@@ -283,74 +329,155 @@ export default function HomeScreen() {
         {isStore && (
           <View style={styles.metricsDashboard}>
             <Text style={styles.metricsTitle}>Inventory Alerts</Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.metricsGrid}
-            >
-              {dashboardMetrics.stockout.wines > 0 && (
-                <TouchableOpacity
-                  style={[styles.metricCard, { backgroundColor: "#ef4444" }]}
-                  onPress={() =>
-                    router.push({
-                      pathname: "/store-master-list",
-                      params: { filter: "stockout" },
-                    })
-                  }
-                >
-                  <AlertOctagon size={24} color="#ffffff" strokeWidth={2.5} />
-                  <Text style={[styles.metricCount, { color: "#ffffff" }]}>
-                    {dashboardMetrics.stockout.wines}
-                  </Text>
-                  <Text style={styles.metricLabel}>Stockout Wines</Text>
-                  <Text style={styles.metricSubLabel}>
-                    {dashboardMetrics.stockout.bottles} bottles needed
-                  </Text>
-                </TouchableOpacity>
-              )}
+            {loadingMetrics ? (
+              <ActivityIndicator color={theme.primary} />
+            ) : dashboardMetrics.stockout.wines === 0 &&
+              dashboardMetrics.parAlert.wines === 0 &&
+              dashboardMetrics.underSafety.wines === 0 ? (
+              <View style={styles.allCaughtUpContainer}>
+                <Check
+                  size={24}
+                  color={theme.primary}
+                  style={{ opacity: 0.8 }}
+                />
+                <Text style={styles.allCaughtUpText}>
+                  You&apos;re all caught up!
+                </Text>
+              </View>
+            ) : (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.metricsGrid}
+              >
+                {dashboardMetrics.stockout.wines > 0 && (
+                  <TouchableOpacity
+                    style={[styles.metricCard, { backgroundColor: "#ef4444" }]}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/store-master-list",
+                        params: { filter: "stockout" },
+                      })
+                    }
+                  >
+                    <AlertOctagon size={24} color="#ffffff" strokeWidth={2.5} />
+                    <Text style={[styles.metricCount, { color: "#ffffff" }]}>
+                      {dashboardMetrics.stockout.wines}
+                    </Text>
+                    <Text style={styles.metricLabel}>Stockout Wines</Text>
+                    <Text style={styles.metricSubLabel}>
+                      {dashboardMetrics.stockout.bottles} bottles needed
+                    </Text>
+                  </TouchableOpacity>
+                )}
 
-              {dashboardMetrics.parAlert.wines > 0 && (
-                <TouchableOpacity
-                  style={[styles.metricCard, { backgroundColor: "#f97316" }]}
-                  onPress={() =>
-                    router.push({
-                      pathname: "/store-master-list",
-                      params: { filter: "alerts" },
-                    })
-                  }
-                >
-                  <AlertTriangle size={24} color="#ffffff" strokeWidth={2.5} />
-                  <Text style={[styles.metricCount, { color: "#ffffff" }]}>
-                    {dashboardMetrics.parAlert.wines}
-                  </Text>
-                  <Text style={styles.metricLabel}>PAR Alert Wines</Text>
-                  <Text style={styles.metricSubLabel}>
-                    {dashboardMetrics.parAlert.bottles} bottles needed
-                  </Text>
-                </TouchableOpacity>
-              )}
+                {dashboardMetrics.parAlert.wines > 0 && (
+                  <TouchableOpacity
+                    style={[styles.metricCard, { backgroundColor: "#f97316" }]}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/store-master-list",
+                        params: { filter: "alerts" },
+                      })
+                    }
+                  >
+                    <AlertTriangle
+                      size={24}
+                      color="#ffffff"
+                      strokeWidth={2.5}
+                    />
+                    <Text style={[styles.metricCount, { color: "#ffffff" }]}>
+                      {dashboardMetrics.parAlert.wines}
+                    </Text>
+                    <Text style={styles.metricLabel}>PAR Alert Wines</Text>
+                    <Text style={styles.metricSubLabel}>
+                      {dashboardMetrics.parAlert.bottles} bottles needed
+                    </Text>
+                  </TouchableOpacity>
+                )}
 
-              {dashboardMetrics.underSafety.wines > 0 && (
-                <TouchableOpacity
-                  style={[styles.metricCard, { backgroundColor: "#eab308" }]}
-                  onPress={() =>
-                    router.push({
-                      pathname: "/store-master-list",
-                      params: { filter: "under_safety" },
-                    })
-                  }
-                >
-                  <AlertTriangle size={24} color="#ffffff" strokeWidth={2.5} />
-                  <Text style={[styles.metricCount, { color: "#ffffff" }]}>
-                    {dashboardMetrics.underSafety.wines}
-                  </Text>
-                  <Text style={styles.metricLabel}>Under Safety</Text>
-                  <Text style={styles.metricSubLabel}>
-                    {dashboardMetrics.underSafety.bottles} bottles needed
-                  </Text>
-                </TouchableOpacity>
-              )}
-            </ScrollView>
+                {dashboardMetrics.underSafety.wines > 0 && (
+                  <TouchableOpacity
+                    style={[styles.metricCard, { backgroundColor: "#eab308" }]}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/store-master-list",
+                        params: { filter: "under_safety" },
+                      })
+                    }
+                  >
+                    <AlertTriangle
+                      size={24}
+                      color="#ffffff"
+                      strokeWidth={2.5}
+                    />
+                    <Text style={[styles.metricCount, { color: "#ffffff" }]}>
+                      {dashboardMetrics.underSafety.wines}
+                    </Text>
+                    <Text style={styles.metricLabel}>Under Safety</Text>
+                    <Text style={styles.metricSubLabel}>
+                      {dashboardMetrics.underSafety.bottles} bottles needed
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </ScrollView>
+            )}
+          </View>
+        )}
+
+        {isStore && (
+          <View style={styles.metricsDashboard}>
+            <Text style={styles.metricsTitle}>Incoming Deliveries</Text>
+            {loadingRequests ? (
+              <ActivityIndicator color={theme.primary} />
+            ) : outboundRequests.length === 0 ? (
+              <View style={styles.allCaughtUpContainer}>
+                <Check
+                  size={24}
+                  color={theme.primary}
+                  style={{ opacity: 0.8 }}
+                />
+                <Text style={styles.allCaughtUpText}>
+                  No incoming deliveries.
+                </Text>
+              </View>
+            ) : (
+              <View style={{ gap: 12 }}>
+                {outboundRequests.map((req) => (
+                  <TouchableOpacity
+                    key={req.id}
+                    style={[
+                      styles.requestCard,
+                      {
+                        backgroundColor: theme.card,
+                        borderColor: theme.border,
+                      },
+                    ]}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/wine-requests/[id]",
+                        params: { id: req.id },
+                      })
+                    }
+                  >
+                    <View style={styles.requestCardIcon}>
+                      <Truck size={20} color={theme.primary} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={[styles.requestCardTitle, { color: theme.text }]}
+                      >
+                        Transfer from Warehouse
+                      </Text>
+                      <Text style={styles.requestCardSubtitle}>
+                        {req.items.reduce((acc, i) => acc + (i.qty || 0), 0)}{" "}
+                        items • REQ: {req.id.slice(0, 4).toUpperCase()}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
           </View>
         )}
 
@@ -454,23 +581,22 @@ export default function HomeScreen() {
                   numberOfLines={1}
                   adjustsFontSizeToFit
                 >
-               const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat("en-PH", {
-    style: "currency",
-    currency: "PHP",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount);
-};
-
+                  ₱
+                  {salesDashboardMetrics.totalRevenue.toLocaleString(
+                    undefined,
+                    {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    },
+                  )}
                 </Text>
                 <Text style={styles.metricLabel}>Total Revenue</Text>
                 <Text style={styles.metricSubLabel}>
                   {salesPeriod === "today"
                     ? "Today"
                     : salesPeriod === "week"
-                    ? "This Week"
-                    : "All Time"}
+                      ? "This Week"
+                      : "All Time"}
                 </Text>
               </View>
               <View
@@ -488,13 +614,11 @@ export default function HomeScreen() {
                   {salesPeriod === "today"
                     ? "Today"
                     : salesPeriod === "week"
-                    ? "This Week"
-                    : "All Time"}
+                      ? "This Week"
+                      : "All Time"}
                 </Text>
               </View>
-              <View
-                style={[styles.metricCard, { backgroundColor: "#64748b" }]}
-              >
+              <View style={[styles.metricCard, { backgroundColor: "#64748b" }]}>
                 <LayoutList size={24} color="#ffffff" strokeWidth={2.5} />
                 <Text style={[styles.metricCount, { color: "#ffffff" }]}>
                   {salesDashboardMetrics.activeBottles}
@@ -857,5 +981,42 @@ const styles = StyleSheet.create({
   viewAllButtonText: {
     fontWeight: "700",
     fontSize: 14,
+  },
+  allCaughtUpContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 24,
+    gap: 12,
+  },
+  allCaughtUpText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#475569",
+  },
+  requestCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 16,
+  },
+  requestCardIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.store.primary + "15",
+  },
+  requestCardTitle: {
+    fontWeight: "700",
+    fontSize: 14,
+  },
+  requestCardSubtitle: {
+    fontSize: 12,
+    color: "#64748b",
+    marginTop: 2,
   },
 });

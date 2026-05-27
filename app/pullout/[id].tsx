@@ -1,3 +1,4 @@
+import { Collapsible } from "@/components/ui/collapsible";
 import { useAuth } from "@/context/AuthContext";
 import { db } from "@/lib/firebase";
 import { CameraView, useCameraPermissions } from "expo-camera";
@@ -7,7 +8,9 @@ import {
   doc,
   getDoc,
   getDocs,
+  limit,
   query,
+  startAfter,
   Timestamp,
   updateDoc,
   where,
@@ -40,6 +43,8 @@ import {
   PulloutRequest,
 } from "../../types";
 
+const SEARCH_PAGE_SIZE = 20;
+
 export default function PulloutDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { profile } = useAuth();
@@ -54,9 +59,16 @@ export default function PulloutDetailScreen() {
       vintage: string;
       producer: string;
       format: string;
+      readableId?: string;
     })[]
   >([]);
+  const [groupedResults, setGroupedResults] = useState<Record<string, any[]>>(
+    {},
+  );
   const [searchLoading, setSearchLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [lastVisible, setLastVisible] = useState<any>(null);
+
   const isProcessing = useRef(false);
   const [permission, requestPermission] = useCameraPermissions();
   const router = useRouter();
@@ -78,6 +90,18 @@ export default function PulloutDetailScreen() {
   useEffect(() => {
     fetchRequest();
   }, [id]);
+
+  useEffect(() => {
+    const groups: Record<string, any[]> = {};
+    searchResults.forEach((bottle) => {
+      const location = bottle.locationName || "Unshelved";
+      if (!groups[location]) {
+        groups[location] = [];
+      }
+      groups[location].push(bottle);
+    });
+    setGroupedResults(groups);
+  }, [searchResults]);
 
   const handleBarcodeScanned = async ({ data }: { data: string }) => {
     if (!scanning || !request || isProcessing.current) return;
@@ -327,21 +351,17 @@ export default function PulloutDetailScreen() {
     );
   };
 
-  const handleSearch = async (specificSku?: string) => {
-    const term = specificSku || searchQuery.trim();
-    if (!term) {
-      setSearchResults([]);
-      return;
-    }
+  const handleLoadMore = async () => {
+    if (!lastVisible || loadingMore) return;
 
-    if (specificSku) setSearchQuery(specificSku);
-
-    setSearchLoading(true);
+    setLoadingMore(true);
     try {
       const bottlesRef = collection(db, "inventory_bottles");
       const constraints: any[] = [
-        where("sku", "==", term),
+        where("sku", "==", searchQuery.trim()),
         where("status", "in", ["received", "shelved"]),
+        startAfter(lastVisible),
+        limit(SEARCH_PAGE_SIZE),
       ];
 
       if (profile?.locationId) {
@@ -387,11 +407,99 @@ export default function PulloutDetailScreen() {
             producer,
             format,
             locationName,
+            readableId: data.readableId,
+          } as any;
+        }),
+      );
+
+      setSearchResults((prev) => [...prev, ...results]);
+      if (snap.docs.length > 0) {
+        setLastVisible(snap.docs[snap.docs.length - 1]);
+      } else {
+        setLastVisible(null);
+      }
+    } catch (error) {
+      console.error("Search error:", error);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
+  const handleSearch = async (specificSku?: string) => {
+    const term = specificSku || searchQuery.trim();
+    if (!term) {
+      setSearchResults([]);
+      return;
+    }
+
+    if (specificSku) setSearchQuery(specificSku);
+
+    setSearchLoading(true);
+    setSearchResults([]);
+    setLastVisible(null);
+
+    try {
+      const bottlesRef = collection(db, "inventory_bottles");
+      const constraints: any[] = [
+        where("sku", "==", term),
+        where("status", "in", ["received", "shelved"]),
+        limit(SEARCH_PAGE_SIZE),
+      ];
+
+      if (profile?.locationId) {
+        constraints.push(
+          where("storeRef", "==", doc(db, "stores", profile.locationId)),
+        );
+      }
+
+      const q = query(bottlesRef, ...constraints);
+      const snap = await getDocs(q);
+
+      const results = await Promise.all(
+        snap.docs.map(async (doc) => {
+          const data = doc.data();
+          let wineName = "Unknown Wine";
+          let locationName = "No Location";
+          let vintage = "NV";
+          let producer = "";
+          let format = "75cl";
+
+          if (data.masterWineRef) {
+            const wineSnap = await getDoc(data.masterWineRef);
+            if (wineSnap.exists()) {
+              const mw = wineSnap.data() as MasterWine;
+              wineName = mw.name;
+              vintage = mw.vintage || "NV";
+              producer = mw.producer || "";
+              format = mw.format || "75cl";
+            }
+          }
+
+          if (data.locationRef) {
+            const locSnap = await getDoc(data.locationRef);
+            if (locSnap.exists())
+              locationName = (locSnap.data() as Location).name;
+          }
+
+          return {
+            id: doc.id,
+            ...data,
+            wineName,
+            vintage,
+            producer,
+            format,
+            locationName,
+            readableId: data.readableId,
           } as any;
         }),
       );
 
       setSearchResults(results);
+      if (snap.docs.length > 0) {
+        setLastVisible(snap.docs[snap.docs.length - 1]);
+      } else {
+        setLastVisible(null);
+      }
     } catch (error) {
       console.error("Search error:", error);
     } finally {
@@ -489,35 +597,57 @@ export default function PulloutDetailScreen() {
                 </TouchableOpacity>
               </View>
 
-              {searchResults.length > 0 && (
+              {Object.keys(groupedResults).length > 0 && (
                 <View style={styles.searchResults}>
-                  {searchResults.map((res) => (
-                    <View key={res.id} style={styles.searchResultItem}>
-                      <View style={styles.resultInfo}>
-                        <Text style={styles.resultWineName}>
-                          {res.wineName}
-                        </Text>
-                        <Text
-                          style={{
-                            fontSize: 12,
-                            color: "#64748b",
-                            fontWeight: "500",
-                            marginBottom: 4,
-                          }}
-                        >
-                          {res.vintage} • {res.producer} • {res.format}
-                        </Text>
-                        <Text style={styles.resultLocation}>
-                          Located at: {res.locationName}
-                        </Text>
-                      </View>
-                      <View style={styles.resultBadge}>
-                        <Text style={styles.resultStatus}>
-                          {res.status.toUpperCase()}
-                        </Text>
-                      </View>
-                    </View>
-                  ))}
+                  {Object.entries(groupedResults).map(
+                    ([locationName, bottles]) => (
+                      <Collapsible
+                        key={locationName}
+                        title={`${locationName} (${bottles.length} bottles)`}
+                      >
+                        {bottles.map((res) => (
+                          <View key={res.id} style={styles.searchResultItem}>
+                            <View style={styles.resultInfo}>
+                              <Text style={styles.resultWineName}>
+                                {res.wineName}
+                              </Text>
+                              <Text
+                                style={{
+                                  fontSize: 12,
+                                  color: "#64748b",
+                                  fontWeight: "500",
+                                  marginBottom: 4,
+                                }}
+                              >
+                                {res.vintage} • {res.producer} • {res.format}
+                              </Text>
+                              <Text style={styles.resultId}>
+                                Bottle ID: {res.readableId || res.id}
+                              </Text>
+                            </View>
+                            <View style={styles.resultBadge}>
+                              <Text style={styles.resultStatus}>
+                                {res.status.toUpperCase()}
+                              </Text>
+                            </View>
+                          </View>
+                        ))}
+                      </Collapsible>
+                    ),
+                  )}
+                  {lastVisible && (
+                    <TouchableOpacity
+                      style={styles.loadMoreButton}
+                      onPress={handleLoadMore}
+                      disabled={loadingMore}
+                    >
+                      {loadingMore ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <Text style={styles.loadMoreButtonText}>Load More</Text>
+                      )}
+                    </TouchableOpacity>
+                  )}
                 </View>
               )}
             </View>
@@ -1009,6 +1139,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#0f172a",
     padding: 16,
+    marginVertical: 5,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: "#334155",
@@ -1021,13 +1152,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "800",
   },
-  resultLocation: {
-    color: "#10b981",
-    fontSize: 12,
-    fontWeight: "900",
-    marginTop: 4,
-    textTransform: "uppercase",
-  },
   resultBadge: {
     backgroundColor: "#1e293b",
     paddingHorizontal: 12,
@@ -1039,5 +1163,22 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: "900",
     letterSpacing: 1,
+  },
+
+  resultId: {
+    color: "#64748b",
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  loadMoreButton: {
+    backgroundColor: "#4f46e5",
+    borderRadius: 12,
+    padding: 12,
+    alignItems: "center",
+    marginTop: 10,
+  },
+  loadMoreButtonText: {
+    color: "#fff",
+    fontWeight: "700",
   },
 });
