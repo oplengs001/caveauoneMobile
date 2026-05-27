@@ -40,7 +40,8 @@ type Step =
   | "scan_label"
   | "verify_qr"
   | "success"
-  | "select_item_for_report";
+  | "select_item_for_report"
+  | "select_bottle_for_report";
 
 export default function OnboardingDetailScreen() {
   const { id, openScanner } = useLocalSearchParams<{
@@ -230,26 +231,29 @@ export default function OnboardingDetailScreen() {
   };
 
   const handleReportIssueForItem = (item: OnboardingItem) => {
-    Alert.alert(
-      "Report an Issue",
-      `What's wrong with the next bottle of ${item.wineName}?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "QR Label is Missing",
-          onPress: () => processReport("missing_qr_label", item),
-        },
-        {
-          text: "Physical Bottle is Missing",
-          onPress: () => processReport("missing_bottle", item),
-        },
-      ],
-    );
+    setActiveItem(item);
+    setCurrentStep("select_bottle_for_report");
+  };
+
+  const handleSelectBottleToReport = (bottleId: string) => {
+    if (!activeItem) return;
+    Alert.alert("Report an Issue", `What's wrong with bottle ${bottleId}?`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "QR Label is Missing",
+        onPress: () => processReport("missing_qr_label", activeItem, bottleId),
+      },
+      {
+        text: "Physical Bottle is Missing",
+        onPress: () => processReport("missing_bottle", activeItem, bottleId),
+      },
+    ]);
   };
 
   const processReport = async (
     reason: "missing_bottle" | "missing_qr_label",
     item: OnboardingItem,
+    bottleId: string,
   ) => {
     if (!item || !task || !profile) return;
     setIsProcessing(true);
@@ -261,12 +265,33 @@ export default function OnboardingDetailScreen() {
         reportedBy: profile.email,
         reportedAt: Timestamp.now(),
         reason: reason,
-        bottleId: item.bottleIds[item.onboardedQty],
+        bottleId: bottleId,
       };
 
-      const updatedItems = task.items.map((i) =>
-        i.id === item.id ? { ...i, onboardedQty: i.onboardedQty + 1 } : i,
-      );
+      const updatedItems = task.items.map((i) => {
+        if (i.id !== item.id) return i;
+
+        // Reorder bottleIds to move the reported one to the current position
+        const newBottleIds = [...i.bottleIds];
+        const reportedBottleIndex = newBottleIds.indexOf(bottleId);
+        const nextOnboardIndex = i.onboardedQty;
+
+        if (
+          reportedBottleIndex !== -1 &&
+          reportedBottleIndex !== nextOnboardIndex
+        ) {
+          // Swap
+          const temp = newBottleIds[nextOnboardIndex];
+          newBottleIds[nextOnboardIndex] = newBottleIds[reportedBottleIndex];
+          newBottleIds[reportedBottleIndex] = temp;
+        }
+
+        return {
+          ...i,
+          onboardedQty: i.onboardedQty + 1,
+          bottleIds: newBottleIds,
+        };
+      });
 
       const isFullyDone = updatedItems.every((i) => i.onboardedQty === i.qty);
 
@@ -418,6 +443,26 @@ export default function OnboardingDetailScreen() {
                     {item.onboardedQty}/{item.qty}
                   </Text>
                 </View>
+              </TouchableOpacity>
+            ))}
+        </ScrollView>
+      )}
+
+      {currentStep === "select_bottle_for_report" && activeItem && (
+        <ScrollView style={styles.content}>
+          <Text style={styles.sectionTitle}>
+            Which bottle of {activeItem.wineName} has an issue?
+          </Text>
+          {activeItem.bottleIds
+            .slice(activeItem.onboardedQty)
+            .map((bottleId) => (
+              <TouchableOpacity
+                key={bottleId}
+                style={styles.bottleIdCard}
+                onPress={() => handleSelectBottleToReport(bottleId)}
+              >
+                <QrCode size={24} color="#94a3b8" />
+                <Text style={styles.bottleIdText}>{bottleId}</Text>
               </TouchableOpacity>
             ))}
         </ScrollView>
@@ -1148,5 +1193,22 @@ const styles = StyleSheet.create({
     color: "#ef4444",
     fontSize: 16,
     fontWeight: "800",
+  },
+  bottleIdCard: {
+    backgroundColor: "#1e293b",
+    borderRadius: 20,
+    padding: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
+    gap: 16,
+    borderWidth: 1,
+    borderColor: "#334155",
+  },
+  bottleIdText: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "800",
+    fontFamily: "System",
   },
 });
