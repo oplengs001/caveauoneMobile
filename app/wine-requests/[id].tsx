@@ -176,7 +176,8 @@ export default function WineRequestDetail() {
                   fromRequestId: id,
                 },
               });
-            },          },
+            },
+          },
           {
             text: "Scan Next",
             onPress: () => {

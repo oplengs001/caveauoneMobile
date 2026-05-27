@@ -82,7 +82,6 @@ export default function TaggingScreen() {
     initialBottleId ? "displaying" : "scanning",
   );
   const [loading, setLoading] = useState(false);
-  const [scannedSku, setScannedSku] = useState<string | null>(null);
   const [bottle, setBottle] = useState<InventoryBottle | null>(null);
   const [wine, setWine] = useState<MasterWine | null>(null);
   const [locations, setLocations] = useState<Location[]>([]);
@@ -187,7 +186,6 @@ export default function TaggingScreen() {
 
     isProcessing.current = true;
     setLoading(true);
-    setScannedSku(bottleId);
 
     try {
       const bottleRef = doc(db, "inventory_bottles", bottleId);
@@ -340,6 +338,14 @@ export default function TaggingScreen() {
       Alert.alert(
         "Missing Price",
         "Please provide a sale price to continue.",
+      );
+      return;
+    }
+
+    if (bottle.status === "consumed") {
+      Alert.alert(
+        "Already Sold",
+        "This bottle has already been marked as sold.",
       );
       return;
     }
@@ -569,7 +575,6 @@ export default function TaggingScreen() {
                 setState("scanning");
                 setBottle(null);
                 setWine(null);
-                setScannedSku(null);
                 setSelectedLocationId(null);
                 setIsIncoming(false);
                 setSuccessAction(null);
@@ -730,7 +735,40 @@ export default function TaggingScreen() {
             </View>
           </View>
 
-          {bottle?.status === "incoming" ? (
+          {bottle?.status === "consumed" ? (
+            <View style={styles.incomingWarningContainer}>
+              <AlertTriangle size={48} color="#f59e0b" strokeWidth={1.5} />
+              <Text style={styles.incomingWarningTitle}>
+                Bottle Already {mode === "sell" ? "Sold" : "Consumed"}
+              </Text>
+              <Text style={styles.incomingWarningText}>
+                This bottle is already marked as &apos;consumed&apos; and cannot be
+                processed again.
+              </Text>
+              <TouchableOpacity
+                style={[
+                  styles.onboardingButton,
+                  { backgroundColor: theme.primary },
+                ]}
+                onPress={() => {
+                  isProcessing.current = false;
+                  setState("scanning");
+                  setBottle(null);
+                  setWine(null);
+                  setScannedSku(null);
+                  setSelectedLocationId(null);
+                  setIsIncoming(false);
+                  setSuccessAction(null);
+                  setSalePrice("");
+                  setBuyerName("");
+                }}
+              >
+                <Text style={styles.onboardingButtonText}>
+                  SCAN ANOTHER BOTTLE
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : bottle?.status === "incoming" ? (
             <View style={styles.incomingWarningContainer}>
               <AlertTriangle size={48} color="#f59e0b" strokeWidth={1.5} />
               <Text style={styles.incomingWarningTitle}>
@@ -1023,6 +1061,7 @@ export default function TaggingScreen() {
 
           <View style={styles.footer}>
             {bottle?.status !== "incoming" &&
+              bottle?.status !== "consumed" &&
               !(isStore && isIncoming && bottle?.status !== "outbound") && (
                 <>
                   {mode === "sell" ? (
