@@ -16,7 +16,6 @@ import {
   AlertOctagon,
   AlertTriangle,
   Banknote,
-  Check,
   ClipboardList,
   FileDown,
   LayoutList,
@@ -153,8 +152,8 @@ export default function HomeScreen() {
         setLoadingRequests(true);
         const q = query(
           collection(db, "wine_requests"),
-          where("targetStoreId", "==", profile.locationId),
-          where("status", "==", "outbound"),
+          where("storeId", "==", profile.locationId),
+          where("status", "==", "receiving"),
         );
         const snapshot = await getDocs(q);
         const requests = snapshot.docs.map(
@@ -266,6 +265,11 @@ export default function HomeScreen() {
   const role = profile?.role || "warehouse";
   const theme = role === "store" ? Colors.store : Colors.warehouse;
   const isStore = role === "store";
+  const hasAlerts =
+    dashboardMetrics.stockout.wines > 0 ||
+    dashboardMetrics.parAlert.wines > 0 ||
+    dashboardMetrics.underSafety.wines > 0;
+  const hasDeliveries = outboundRequests.length > 0;
 
   return (
     <SafeAreaView
@@ -326,24 +330,11 @@ export default function HomeScreen() {
           </Text>
         </View>
 
-        {isStore && (
+        {isStore && hasAlerts && (
           <View style={styles.metricsDashboard}>
             <Text style={styles.metricsTitle}>Inventory Alerts</Text>
             {loadingMetrics ? (
               <ActivityIndicator color={theme.primary} />
-            ) : dashboardMetrics.stockout.wines === 0 &&
-              dashboardMetrics.parAlert.wines === 0 &&
-              dashboardMetrics.underSafety.wines === 0 ? (
-              <View style={styles.allCaughtUpContainer}>
-                <Check
-                  size={24}
-                  color={theme.primary}
-                  style={{ opacity: 0.8 }}
-                />
-                <Text style={styles.allCaughtUpText}>
-                  You&apos;re all caught up!
-                </Text>
-              </View>
             ) : (
               <ScrollView
                 horizontal
@@ -425,22 +416,11 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {isStore && (
+        {isStore && hasDeliveries && (
           <View style={styles.metricsDashboard}>
             <Text style={styles.metricsTitle}>Incoming Deliveries</Text>
             {loadingRequests ? (
               <ActivityIndicator color={theme.primary} />
-            ) : outboundRequests.length === 0 ? (
-              <View style={styles.allCaughtUpContainer}>
-                <Check
-                  size={24}
-                  color={theme.primary}
-                  style={{ opacity: 0.8 }}
-                />
-                <Text style={styles.allCaughtUpText}>
-                  No incoming deliveries.
-                </Text>
-              </View>
             ) : (
               <View style={{ gap: 12 }}>
                 {outboundRequests.map((req) => (
