@@ -69,11 +69,7 @@ export default function HomeScreen() {
       setLoadingMetrics(true);
       // Fetch pending requests to exclude them from metrics
       const pendingRequestsSnap = await getDocs(
-        query(
-          collection(db, "wine_requests"),
-          where("storeId", "==", storeId),
-          where("status", "==", "pending"),
-        ),
+        query(collection(db, "wine_requests"), where("storeId", "==", storeId)),
       );
       const pendingWineIds = new Set<string>();
       pendingRequestsSnap.docs.forEach((reqDoc) => {
