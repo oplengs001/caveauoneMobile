@@ -43,6 +43,14 @@ export default function HomeScreen() {
     parAlert: { wines: 0, bottles: 0 },
     underSafety: { wines: 0, bottles: 0 },
   });
+  const [salesDashboardMetrics, setSalesDashboardMetrics] = useState({
+    soldCount: 0,
+    totalRevenue: 0,
+    activeBottles: 0,
+  });
+  const [salesPeriod, setSalesPeriod] = useState<"today" | "week" | "all">(
+    "today",
+  );
 
   useEffect(() => {
     const fetchMetrics = async () => {
@@ -118,6 +126,63 @@ export default function HomeScreen() {
     };
     if (!loading) fetchMetrics();
   }, [profile, loading]);
+
+  useEffect(() => {
+    const fetchSalesMetrics = async () => {
+      const storeId = profile?.locationId;
+      if (profile?.role !== "store" || !storeId) return;
+
+      try {
+        const activeBottlesSnap = await getCountFromServer(
+          query(
+            collection(db, "inventory_bottles"),
+            where("storeRef", "==", doc(db, "stores", storeId)),
+            where("status", "in", ["received", "shelved"]),
+          ),
+        );
+        const activeBottles = activeBottlesSnap.data().count;
+
+        let startDate;
+        if (salesPeriod === "today") {
+          startDate = new Date();
+          startDate.setHours(0, 0, 0, 0);
+        } else if (salesPeriod === "week") {
+          startDate = new Date();
+          startDate.setDate(startDate.getDate() - startDate.getDay());
+          startDate.setHours(0, 0, 0, 0);
+        } else {
+          startDate = new Date(0); // for 'all'
+        }
+
+        const salesQuery =
+          salesPeriod === "all"
+            ? query(collection(db, "sales"), where("storeId", "==", storeId))
+            : query(
+                collection(db, "sales"),
+                where("storeId", "==", storeId),
+                where("soldAt", ">=", startDate),
+              );
+
+        const salesSnap = await getDocs(salesQuery);
+
+        const soldCount = salesSnap.size;
+        const totalRevenue = salesSnap.docs.reduce(
+          (sum, doc) => sum + (doc.data().price || 0),
+          0,
+        );
+
+        setSalesDashboardMetrics({
+          soldCount,
+          totalRevenue,
+          activeBottles,
+        });
+      } catch (err) {
+        console.error("Failed to fetch sales metrics:", err);
+      }
+    };
+
+    if (!loading) fetchSalesMetrics();
+  }, [profile, loading, salesPeriod]);
 
   const handleSignOut = () => {
     Alert.alert("Sign Out", "Are you sure you want to exit the system?", [
@@ -217,7 +282,7 @@ export default function HomeScreen() {
 
         {isStore && (
           <View style={styles.metricsDashboard}>
-            <Text style={styles.metricsTitle}>Inventory Health</Text>
+            <Text style={styles.metricsTitle}>Inventory Alerts</Text>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -286,6 +351,171 @@ export default function HomeScreen() {
                 </TouchableOpacity>
               )}
             </ScrollView>
+          </View>
+        )}
+
+        {isStore && (
+          <View style={styles.metricsDashboard}>
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: 16,
+              }}
+            >
+              <Text style={styles.metricsTitle}>Sales Dashboard</Text>
+              <View style={{ flexDirection: "row", gap: 8 }}>
+                <TouchableOpacity
+                  onPress={() => setSalesPeriod("today")}
+                  style={[
+                    styles.filterButton,
+                    {
+                      backgroundColor: theme.card,
+                      borderColor: theme.border,
+                    },
+                    salesPeriod === "today" && {
+                      backgroundColor: theme.primary,
+                      borderColor: theme.primary,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.filterButtonText,
+                      { color: theme.textSecondary },
+                      salesPeriod === "today" && { color: "#fff" },
+                    ]}
+                  >
+                    Today
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => setSalesPeriod("week")}
+                  style={[
+                    styles.filterButton,
+                    {
+                      backgroundColor: theme.card,
+                      borderColor: theme.border,
+                    },
+                    salesPeriod === "week" && {
+                      backgroundColor: theme.primary,
+                      borderColor: theme.primary,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.filterButtonText,
+                      { color: theme.textSecondary },
+                      salesPeriod === "week" && { color: "#fff" },
+                    ]}
+                  >
+                    Week
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => setSalesPeriod("all")}
+                  style={[
+                    styles.filterButton,
+                    {
+                      backgroundColor: theme.card,
+                      borderColor: theme.border,
+                    },
+                    salesPeriod === "all" && {
+                      backgroundColor: theme.primary,
+                      borderColor: theme.primary,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.filterButtonText,
+                      { color: theme.textSecondary },
+                      salesPeriod === "all" && { color: "#fff" },
+                    ]}
+                  >
+                    All
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.metricsGrid}
+            >
+              <View
+                style={[styles.metricCard, { backgroundColor: theme.primary }]}
+              >
+                <Banknote size={24} color="#ffffff" strokeWidth={2.5} />
+                <Text
+                  style={[styles.metricCount, { color: "#ffffff" }]}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                >
+               const formatCurrency = (amount: number) => {
+  return new Intl.NumberFormat("en-PH", {
+    style: "currency",
+    currency: "PHP",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount);
+};
+
+                </Text>
+                <Text style={styles.metricLabel}>Total Revenue</Text>
+                <Text style={styles.metricSubLabel}>
+                  {salesPeriod === "today"
+                    ? "Today"
+                    : salesPeriod === "week"
+                    ? "This Week"
+                    : "All Time"}
+                </Text>
+              </View>
+              <View
+                style={[
+                  styles.metricCard,
+                  { backgroundColor: theme.secondary },
+                ]}
+              >
+                <Wine size={24} color="#ffffff" strokeWidth={2.5} />
+                <Text style={[styles.metricCount, { color: "#ffffff" }]}>
+                  {salesDashboardMetrics.soldCount}
+                </Text>
+                <Text style={styles.metricLabel}>Bottles Sold</Text>
+                <Text style={styles.metricSubLabel}>
+                  {salesPeriod === "today"
+                    ? "Today"
+                    : salesPeriod === "week"
+                    ? "This Week"
+                    : "All Time"}
+                </Text>
+              </View>
+              <View
+                style={[styles.metricCard, { backgroundColor: "#64748b" }]}
+              >
+                <LayoutList size={24} color="#ffffff" strokeWidth={2.5} />
+                <Text style={[styles.metricCount, { color: "#ffffff" }]}>
+                  {salesDashboardMetrics.activeBottles}
+                </Text>
+                <Text style={styles.metricLabel}>Active Inventory</Text>
+                <Text style={styles.metricSubLabel}>Current Stock</Text>
+              </View>
+            </ScrollView>
+            <TouchableOpacity
+              style={[
+                styles.viewAllButton,
+                { backgroundColor: theme.card, marginTop: 16 },
+              ]}
+              onPress={() => router.push("/sales")}
+            >
+              <Text
+                style={[styles.viewAllButtonText, { color: theme.primary }]}
+              >
+                View All Sales
+              </Text>
+            </TouchableOpacity>
           </View>
         )}
 
@@ -608,5 +838,24 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "rgba(255, 255, 255, 0.8)",
     fontWeight: "500",
+  },
+  filterButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  filterButtonText: {
+    fontWeight: "700",
+    fontSize: 12,
+  },
+  viewAllButton: {
+    padding: 12,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  viewAllButtonText: {
+    fontWeight: "700",
+    fontSize: 14,
   },
 });
