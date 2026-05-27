@@ -102,6 +102,10 @@ export default function TaggingScreen() {
   const [newCapacity, setNewCapacity] = useState("");
   const [savingLocation, setSavingLocation] = useState(false);
 
+  // For the new "Sell Bottle" feature
+  const [salePrice, setSalePrice] = useState("");
+  const [buyerName, setBuyerName] = useState("");
+
   // Snackbar State
   const [snackbarMessage, setSnackbarMessage] = useState<string | null>(null);
   const snackbarOpacity = useRef(new Animated.Value(0)).current;
@@ -148,6 +152,15 @@ export default function TaggingScreen() {
       loadBottleData(initialBottleId as string);
     }
   }, [initialBottleId, profile?.locationId]);
+
+  useEffect(() => {
+    // Pre-fill price when wine data is available in sell mode
+    if (mode === "sell" && wine?.price) {
+      setSalePrice(String(wine.price));
+    } else if (mode === "sell") {
+      setSalePrice(""); // Clear if no price
+    }
+  }, [wine, mode]);
 
   const fetchLocations = async () => {
     if (!profile?.locationId) return;
@@ -323,15 +336,38 @@ export default function TaggingScreen() {
   };
 
   const handleMarkAsSold = async () => {
-    if (!bottle) return;
+    if (!bottle || !salePrice) {
+      Alert.alert(
+        "Missing Price",
+        "Please provide a sale price to continue.",
+      );
+      return;
+    }
 
     setState("updating");
     try {
-      const bottleRef = doc(db, "inventory_bottles", bottle.id);
+      // Log the sale in the new 'sales' collection
+      await addDoc(collection(db, "sales"), {
+        bottleId: bottle.id,
+        masterWineId: bottle.masterWineRef?.id || null,
+        wineName: wine?.name,
+        vintage: wine?.vintage,
+        producer: wine?.producer,
+        format: wine?.format,
+        storeId: profile?.locationId,
+        soldById: profile?.id,
+        soldByEmail: profile?.email,
+        soldAt: serverTimestamp(),
+        price: parseFloat(salePrice),
+        buyerName: buyerName || null,
+      });
 
+      const bottleRef = doc(db, "inventory_bottles", bottle.id);
       await updateDoc(bottleRef, {
         status: "consumed",
-        updatedAt: new Date(),
+        soldAt: serverTimestamp(),
+        locationRef: null, // No longer in a physical location
+        updatedAt: serverTimestamp(),
       });
 
       // Automatically request for needed stock if PAR alert is reached
@@ -419,7 +455,9 @@ export default function TaggingScreen() {
 
                   // Show the snackbar notification
                   showSnackbar(
-                    `Par level reached! Automatically requested ${requestedQty} bottle${requestedQty > 1 ? "s" : ""} for restock.`,
+                    `Par level reached! Automatically requested ${requestedQty} bottle${
+                      requestedQty > 1 ? "s" : ""
+                    } for restock.`,
                   );
                 }
               }
@@ -535,6 +573,8 @@ export default function TaggingScreen() {
                 setSelectedLocationId(null);
                 setIsIncoming(false);
                 setSuccessAction(null);
+                setSalePrice("");
+                setBuyerName("");
               }
             }}
           >
@@ -788,52 +828,56 @@ export default function TaggingScreen() {
               </View>
             </View>
           ) : mode === "sell" ? (
-            <View style={{ flex: 1, justifyContent: "center" }}>
-              <View
-                style={[
-                  styles.infoBanner,
-                  {
-                    flexDirection: "column",
-                    alignItems: "center",
-                    backgroundColor: "rgba(16, 185, 129, 0.05)",
-                    borderColor: "rgba(16, 185, 129, 0.2)",
-                    padding: 32,
-                    borderRadius: 24,
-                  },
-                ]}
-              >
-                <View
-                  style={{
-                    width: 64,
-                    height: 64,
-                    borderRadius: 32,
-                    backgroundColor: "rgba(16, 185, 129, 0.1)",
-                    justifyContent: "center",
-                    alignItems: "center",
-                    marginBottom: 16,
-                  }}
-                >
-                  <Wine size={32} color="#10b981" />
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <View style={{ paddingTop: 16, paddingBottom: 120 }}>
+                <View style={[styles.sectionHeader, { paddingHorizontal: 24 }]}>
+                  <View
+                    style={{
+                      flex: 1,
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 10,
+                    }}
+                  >
+                    <Wine size={18} color="#64748b" />
+                    <Text style={styles.sectionTitle}>
+                      Confirm Sale Details
+                    </Text>
+                  </View>
                 </View>
-                <Text
-                  style={[
-                    styles.infoBannerTitle,
-                    { color: "#10b981", fontSize: 20, textAlign: "center" },
-                  ]}
-                >
-                  Ready to Sell
-                </Text>
-                <Text
-                  style={[
-                    styles.infoBannerText,
-                    { textAlign: "center", fontSize: 15, marginTop: 8 },
-                  ]}
-                >
-                  This bottle is active in your inventory. Tap the &quot;Mark as
-                  Sold&quot; button to complete the sale.
-                </Text>
+
+                <View style={{ paddingHorizontal: 24 }}>
+                  <Text style={[styles.modalLabel, { marginBottom: 8 }]}>
+                    SALE PRICE ($)
+                  </Text>
+                  <TextInput
+                    style={[
+                      styles.modalInput,
+                      { color: theme.text, borderColor: theme.border },
+                    ]}
+                    placeholder="e.g. 120.00"
+                    placeholderTextColor="#475569"
+                    keyboardType="decimal-pad"
+                    value={salePrice}
+                    onChangeText={setSalePrice}
+                  />
+                  <Text style={[styles.modalLabel, { marginBottom: 8 }]}>
+                    BUYER NAME (OPTIONAL)
+                  </Text>
+                  <TextInput
+                    style={[
+                      styles.modalInput,
+                      { color: theme.text, borderColor: theme.border },
+                    ]}
+                    placeholder="e.g. John Doe"
+                    placeholderTextColor="#475569"
+                    value={buyerName}
+                    onChangeText={setBuyerName}
+                    autoCapitalize="words"
+                  />
+                </View>
               </View>
-            </View>
+            </ScrollView>
           ) : (
             <>
               {isStore && (
