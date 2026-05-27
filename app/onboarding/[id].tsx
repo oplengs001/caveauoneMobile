@@ -6,6 +6,7 @@ import {
   doc,
   onSnapshot,
   serverTimestamp,
+  Timestamp,
   updateDoc,
 } from "firebase/firestore";
 import {
@@ -19,6 +20,7 @@ import {
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Animated,
   Dimensions,
   Image,
@@ -33,7 +35,12 @@ import { OnboardingItem, OnboardingTask } from "../../types";
 const NEXT_JS_API_URL = "https://caveauone.vercel.app";
 const { width } = Dimensions.get("window");
 
-type Step = "overview" | "scan_label" | "verify_qr" | "success";
+type Step =
+  | "overview"
+  | "scan_label"
+  | "verify_qr"
+  | "success"
+  | "select_item_for_report";
 
 export default function OnboardingDetailScreen() {
   const { id, openScanner } = useLocalSearchParams<{
@@ -222,6 +229,64 @@ export default function OnboardingDetailScreen() {
     }
   };
 
+  const handleReportIssueForItem = (item: OnboardingItem) => {
+    Alert.alert(
+      "Report an Issue",
+      `What's wrong with the next bottle of ${item.wineName}?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "QR Label is Missing",
+          onPress: () => processReport("missing_qr_label", item),
+        },
+        {
+          text: "Physical Bottle is Missing",
+          onPress: () => processReport("missing_bottle", item),
+        },
+      ],
+    );
+  };
+
+  const processReport = async (
+    reason: "missing_bottle" | "missing_qr_label",
+    item: OnboardingItem,
+  ) => {
+    if (!item || !task || !profile) return;
+    setIsProcessing(true);
+    try {
+      const newReport = {
+        itemId: item.id,
+        wineName: item.wineName,
+        sku: item.sku,
+        reportedBy: profile.email,
+        reportedAt: Timestamp.now(),
+        reason: reason,
+        bottleId: item.bottleIds[item.onboardedQty],
+      };
+
+      const updatedItems = task.items.map((i) =>
+        i.id === item.id ? { ...i, onboardedQty: i.onboardedQty + 1 } : i,
+      );
+
+      const isFullyDone = updatedItems.every((i) => i.onboardedQty === i.qty);
+
+      await updateDoc(doc(db, "onboarding_tasks", task.id), {
+        items: updatedItems,
+        reports: [...(task.reports || []), newReport],
+        status: isFullyDone ? "completed" : "warehouse",
+        updatedAt: serverTimestamp(),
+      });
+
+      alert("Issue reported. You can now scan the next bottle.");
+      setCurrentStep("overview");
+    } catch (err: any) {
+      console.error(err);
+      alert("Error reporting issue: " + err.message);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   if (loading) {
     return (
       <View style={styles.centerContainer}>
@@ -316,6 +381,45 @@ export default function OnboardingDetailScreen() {
             <Camera size={24} color="#fff" />
             <Text style={styles.mainButtonText}>Scan Bottle Label</Text>
           </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.secondaryButton}
+            onPress={() => setCurrentStep("select_item_for_report")}
+          >
+            <Text style={styles.secondaryButtonText}>Report an Issue</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      )}
+
+      {currentStep === "select_item_for_report" && (
+        <ScrollView style={styles.content}>
+          <Text style={styles.sectionTitle}>Which item has an issue?</Text>
+          {task.items
+            .filter((item) => item.onboardedQty < item.qty)
+            .map((item) => (
+              <TouchableOpacity
+                key={item.id}
+                style={styles.itemCard}
+                onPress={() => handleReportIssueForItem(item)}
+              >
+                <View style={styles.itemIcon}>
+                  <Wine size={24} color={"#4f46e5"} />
+                </View>
+                <View style={styles.itemInfo}>
+                  <Text style={styles.producerText}>{item.producerName}</Text>
+                  <Text style={styles.wineNameText}>{item.wineName}</Text>
+                  <View style={styles.itemMeta}>
+                    <Text style={styles.metaBadge}>{item.vintage}</Text>
+                    <Text style={styles.metaBadge}>{item.format}</Text>
+                  </View>
+                </View>
+                <View style={styles.itemProgress}>
+                  <Text style={styles.qtyText}>
+                    {item.onboardedQty}/{item.qty}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            ))}
         </ScrollView>
       )}
 
@@ -1029,5 +1133,20 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     textTransform: "uppercase",
     letterSpacing: 2,
+  },
+  reportButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    marginTop: 16,
+    padding: 16,
+    backgroundColor: "rgba(239, 68, 68, 0.1)",
+    borderRadius: 16,
+  },
+  reportButtonText: {
+    color: "#ef4444",
+    fontSize: 16,
+    fontWeight: "800",
   },
 });

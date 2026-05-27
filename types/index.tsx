@@ -158,6 +158,7 @@ export interface OnboardingItem {
 export interface OnboardingTask {
   id: string;
   invoiceUrl?: string;
+  reports: any[];
   status: "pending_review" | "warehouse" | "completed";
   items: OnboardingItem[];
   uploadedBy: string;
