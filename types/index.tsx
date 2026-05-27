@@ -117,6 +117,7 @@ export interface WineRequest {
   totalAmount: number;
   createdAt: any;
   updatedAt: any;
+  rejectionReason?: string;
 }
 
 export type WineFormat =

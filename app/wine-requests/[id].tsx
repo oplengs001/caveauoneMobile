@@ -361,6 +361,16 @@ export default function WineRequestDetail() {
             <Text style={[styles.statusLabel, { color: statusConfig.color }]}>
               {statusConfig.label}
             </Text>
+            {request.status === "rejected" && request.rejectionReason && (
+              <Text
+                style={[
+                  styles.statusDate,
+                  { color: statusConfig.color + "AA", marginTop: 6 },
+                ]}
+              >
+                Reason: {request.rejectionReason}
+              </Text>
+            )}
             <Text
               style={[styles.statusDate, { color: statusConfig.color + "AA" }]}
             >
