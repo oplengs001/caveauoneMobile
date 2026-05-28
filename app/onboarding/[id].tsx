@@ -10,6 +10,7 @@ import {
   updateDoc,
 } from "firebase/firestore";
 import {
+  AlertCircle,
   Camera,
   CheckCircle2,
   ChevronLeft,
@@ -290,6 +291,7 @@ export default function OnboardingDetailScreen() {
           ...i,
           onboardedQty: i.onboardedQty + 1,
           bottleIds: newBottleIds,
+          issues: [...(i.issues || []), bottleId], // Keep track of issues
         };
       });
 
@@ -367,37 +369,54 @@ export default function OnboardingDetailScreen() {
           </View>
 
           <Text style={styles.sectionTitle}>Wine Items</Text>
-          {task.items.map((item) => (
-            <View key={item.id} style={styles.itemCard}>
-              <View style={styles.itemIcon}>
-                <Wine
-                  size={24}
-                  color={item.onboardedQty === item.qty ? "#10b981" : "#4f46e5"}
-                />
-              </View>
-              <View style={styles.itemInfo}>
-                <Text style={styles.producerText}>{item.producerName}</Text>
-                <Text style={styles.wineNameText}>{item.wineName}</Text>
-                <View style={styles.itemMeta}>
-                  <Text style={styles.metaBadge}>{item.vintage}</Text>
-                  <Text style={styles.metaBadge}>{item.format}</Text>
+          {task.items.map((item) => {
+            const successfullyOnboardedQty =
+              item.onboardedQty - (item.issues?.length || 0);
+            const hasIssues = (item.issues?.length || 0) > 0;
+            const isItemComplete = item.onboardedQty === item.qty;
+
+            let iconColor = "#4f46e5"; // Default In-Progress
+            if (isItemComplete) {
+              iconColor = hasIssues ? "#ef4444" : "#10b981"; // Warning or Success
+            }
+
+            return (
+              <View key={item.id} style={styles.itemCard}>
+                <View style={styles.itemIcon}>
+                  <Wine size={24} color={iconColor} />
+                </View>
+                <View style={styles.itemInfo}>
+                  <Text style={styles.producerText}>{item.producerName}</Text>
+                  <Text style={styles.wineNameText}>{item.wineName}</Text>
+                  <View style={styles.itemMeta}>
+                    <Text style={styles.metaBadge}>{item.vintage}</Text>
+                    <Text style={styles.metaBadge}>{item.format}</Text>
+                  </View>
+                </View>
+                <View style={styles.itemProgress}>
+                  <Text style={[styles.qtyText, { color: iconColor }]}>
+                    {successfullyOnboardedQty}/{item.qty}
+                  </Text>
+                  {isItemComplete ? (
+                    hasIssues ? (
+                      <AlertCircle size={16} color={iconColor} />
+                    ) : (
+                      <CheckCircle2 size={16} color={iconColor} />
+                    )
+                  ) : null}
+                  {hasIssues && !isItemComplete && (
+                    <Text style={styles.issuesText}>
+                      ({item.issues?.length} issue
+                      {item.issues?.length && item.issues?.length > 1
+                        ? "s"
+                        : ""}
+                      )
+                    </Text>
+                  )}
                 </View>
               </View>
-              <View style={styles.itemProgress}>
-                <Text
-                  style={[
-                    styles.qtyText,
-                    item.onboardedQty === item.qty && { color: "#10b981" },
-                  ]}
-                >
-                  {item.onboardedQty}/{item.qty}
-                </Text>
-                {item.onboardedQty === item.qty && (
-                  <CheckCircle2 size={16} color="#10b981" />
-                )}
-              </View>
-            </View>
-          ))}
+            );
+          })}
 
           <TouchableOpacity
             style={styles.mainButton}
@@ -407,11 +426,12 @@ export default function OnboardingDetailScreen() {
             <Text style={styles.mainButtonText}>Scan Bottle Label</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.secondaryButton}
+          <TouchableOpacity // Changed to reportIssueButton
+            style={styles.reportIssueButton}
             onPress={() => setCurrentStep("select_item_for_report")}
           >
-            <Text style={styles.secondaryButtonText}>Report an Issue</Text>
+            <AlertCircle size={20} color="#ef4444" />
+            <Text style={styles.reportIssueButtonText}>Report an Issue</Text>
           </TouchableOpacity>
         </ScrollView>
       )}
@@ -1134,6 +1154,25 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "800",
   },
+  reportIssueButton: {
+    flexDirection: "row",
+    backgroundColor: "rgba(239, 68, 68, 0.1)", // Light red background
+    paddingHorizontal: 30,
+    paddingVertical: 20,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    marginTop: 20,
+    marginBottom: 40,
+    borderWidth: 1,
+    borderColor: "rgba(239, 68, 68, 0.2)", // Red border
+  },
+  reportIssueButtonText: {
+    color: "#ef4444", // Red text
+    fontSize: 18,
+    fontWeight: "900",
+  },
   permissionText: {
     color: "#fff",
     fontSize: 18,
@@ -1210,5 +1249,11 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "800",
     fontFamily: "System",
+  },
+  issuesText: {
+    color: "#ef4444",
+    fontSize: 10,
+    fontWeight: "700",
+    marginTop: 2,
   },
 });

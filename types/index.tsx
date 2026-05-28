@@ -150,6 +150,7 @@ export interface OnboardingItem {
   classification?: string;
   grapeVariety: string;
   wineType: WineType;
+  issues?: string[];
 
   // Progress tracking
   onboardedQty: number;
