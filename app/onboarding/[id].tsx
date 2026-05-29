@@ -33,16 +33,216 @@ import {
   View,
 } from "react-native";
 import { OnboardingItem, OnboardingTask } from "../../types";
+
 const NEXT_JS_API_URL = "https://caveauone.vercel.app";
 const { width } = Dimensions.get("window");
+
+// ─── Wine Matching Logic ─────────────────────────────────────────────────────
+
+function normalizeStr(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(
+      /\b(chateau|château|domaine|maison|estate|winery|cellars?|vinery)\b/g,
+      "",
+    )
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeVintage(v: string | number | undefined): string {
+  if (!v) return "";
+  const match = String(v).match(/\b(19|20)\d{2}\b/);
+  return match ? match[0] : "";
+}
+
+// Normalize bottle formats to a common unit (ml as number)
+// Handles both "75cl"/"150cl" (your UI) and "750ml"/"1.5L" (AI output)
+function normalizeFormatToMl(f: string | undefined): number {
+  if (!f) return 750;
+  const lower = f.toLowerCase().replace(/\s/g, "");
+  if (lower === "magnum") return 1500;
+  if (lower === "half" || lower === "halfbottle") return 375;
+  if (lower === "jeroboam") return 3000;
+  if (lower === "rehoboam") return 4500;
+  if (lower === "methuselah" || lower === "imperial") return 6000;
+  // e.g. "75cl", "37.5cl", "150cl", "300cl"
+  const clMatch = lower.match(/^(\d+\.?\d*)cl$/);
+  if (clMatch) return Math.round(parseFloat(clMatch[1]) * 10);
+  // e.g. "750ml", "375ml", "1500ml"
+  const mlMatch = lower.match(/^(\d+)ml$/);
+  if (mlMatch) return parseInt(mlMatch[1]);
+  // e.g. "1.5l", "3l"
+  const literMatch = lower.match(/^(\d+\.?\d*)l$/);
+  if (literMatch) return Math.round(parseFloat(literMatch[1]) * 1000);
+  return 750; // default
+}
+
+function tokenOverlapScore(a: string, b: string): number {
+  const tokensA = new Set(
+    normalizeStr(a)
+      .split(" ")
+      .filter((t) => t.length > 2),
+  );
+  const tokensB = new Set(
+    normalizeStr(b)
+      .split(" ")
+      .filter((t) => t.length > 2),
+  );
+  if (tokensA.size === 0 || tokensB.size === 0) return 0;
+  let overlap = 0;
+  for (const token of tokensA) {
+    if (tokensB.has(token)) overlap++;
+  }
+  return overlap / new Set([...tokensA, ...tokensB]).size;
+}
+
+function levenshtein(a: string, b: string): number {
+  const dp = Array.from({ length: a.length + 1 }, (_, i) =>
+    Array.from({ length: b.length + 1 }, (_, j) =>
+      i === 0 ? j : j === 0 ? i : 0,
+    ),
+  );
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      dp[i][j] =
+        a[i - 1] === b[j - 1]
+          ? dp[i - 1][j - 1]
+          : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+    }
+  }
+  return dp[a.length][b.length];
+}
+
+function similarityScore(a: string, b: string): number {
+  const na = normalizeStr(a);
+  const nb = normalizeStr(b);
+  const maxLen = Math.max(na.length, nb.length);
+  if (maxLen === 0) return 1;
+  return 1 - levenshtein(na, nb) / maxLen;
+}
+
+type AiLabelResult = {
+  wineName: string;
+  vintage?: string | number;
+  producer?: string;
+  producerName?: string;
+  bottleSize?: string;
+  confidence?: string;
+};
+
+type MatchResult = {
+  item: OnboardingItem;
+  score: number;
+  breakdown: Record<string, number>;
+};
+
+const MATCH_THRESHOLD = 0.52;
+const WEIGHTS = { wineName: 0.5, vintage: 0.25, format: 0.15, producer: 0.1 };
+
+function scoreMatch(
+  item: OnboardingItem,
+  ai: AiLabelResult,
+  selectedFormat: string | null,
+): MatchResult {
+  const breakdown: Record<string, number> = {};
+
+  // Wine name: blend token overlap + fuzzy similarity
+  const tokenScore = tokenOverlapScore(item.wineName, ai.wineName);
+  const fuzzyScore = similarityScore(item.wineName, ai.wineName);
+  breakdown.wineName = tokenScore * 0.6 + fuzzyScore * 0.4;
+
+  // Vintage
+  const itemVintage = normalizeVintage(item.vintage);
+  const aiVintage = normalizeVintage(ai.vintage);
+  if (!itemVintage || !aiVintage) {
+    breakdown.vintage = 0.5; // unknown — neutral
+  } else if (itemVintage === aiVintage) {
+    breakdown.vintage = 1.0;
+  } else {
+    const diff = Math.abs(Number(itemVintage) - Number(aiVintage));
+    breakdown.vintage = diff === 1 ? 0.3 : 0; // 1-yr OCR typo gets partial credit
+  }
+
+  // Format — normalize both sides to ml for reliable comparison
+  const targetFormat = selectedFormat ?? item.format;
+  if (!targetFormat) {
+    breakdown.format = 1.0;
+  } else {
+    const itemMl = normalizeFormatToMl(targetFormat);
+    const aiMl = normalizeFormatToMl(ai.bottleSize);
+    breakdown.format = itemMl === aiMl ? 1.0 : 0.0;
+  }
+
+  // Producer (tiebreaker)
+  const producerStr = ai.producerName ?? ai.producer ?? "";
+  breakdown.producer = producerStr
+    ? tokenOverlapScore(item.wineName, producerStr)
+    : 0.5;
+
+  const score =
+    breakdown.wineName * WEIGHTS.wineName +
+    breakdown.vintage * WEIGHTS.vintage +
+    breakdown.format * WEIGHTS.format +
+    breakdown.producer * WEIGHTS.producer;
+
+  return { item, score, breakdown };
+}
+
+function findBestMatch(
+  taskItems: OnboardingItem[],
+  ai: AiLabelResult,
+  selectedFormat: string | null,
+): {
+  match: OnboardingItem | null;
+  score: number;
+  breakdown: Record<string, number>;
+} {
+  // Only consider items that still need bottles onboarded
+  const candidates = taskItems.filter((i) => i.onboardedQty < i.qty);
+  if (candidates.length === 0) return { match: null, score: 0, breakdown: {} };
+
+  const scored: MatchResult[] = candidates
+    .map((item) => scoreMatch(item, ai, selectedFormat))
+    .sort((a, b) => b.score - a.score);
+
+  // Log scoring table to help tune the threshold during development
+  console.table(
+    scored.map((r) => ({
+      wine: r.item.wineName,
+      score: r.score.toFixed(3),
+      wineName: r.breakdown.wineName?.toFixed(2),
+      vintage: r.breakdown.vintage?.toFixed(2),
+      format: r.breakdown.format?.toFixed(2),
+      producer: r.breakdown.producer?.toFixed(2),
+    })),
+  );
+
+  const best = scored[0];
+  if (best.score < MATCH_THRESHOLD) {
+    console.warn(
+      `Best match "${best.item.wineName}" scored ${best.score.toFixed(3)} — below threshold ${MATCH_THRESHOLD}`,
+    );
+    return { match: null, score: best.score, breakdown: best.breakdown };
+  }
+
+  return { match: best.item, score: best.score, breakdown: best.breakdown };
+}
+
+// ─── Types ───────────────────────────────────────────────────────────────────
 
 type Step =
   | "overview"
   | "scan_label"
   | "verify_qr"
   | "success"
+  | "no_match"
+  | "manual_select" // ← add this
   | "select_item_for_report"
   | "select_bottle_for_report";
+
+// ─── Component ───────────────────────────────────────────────────────────────
 
 export default function OnboardingDetailScreen() {
   const { id, openScanner } = useLocalSearchParams<{
@@ -55,16 +255,20 @@ export default function OnboardingDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [currentStep, setCurrentStep] = useState<Step>("overview");
   const [activeItem, setActiveItem] = useState<OnboardingItem | null>(null);
+  // Store the verified bottle ID separately so success screen always shows the right one
+  const [verifiedBottleId, setVerifiedBottleId] = useState<string | null>(null);
   const [permission, requestPermission] = useCameraPermissions();
   const [isProcessing, setIsProcessing] = useState(false);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const cameraRef = useRef<CameraView>(null);
   const lastMismatchAlert = useRef<number>(0);
   const scanAnim = useRef(new Animated.Value(0)).current;
-
   const [showFormatPicker, setShowFormatPicker] = useState(false);
   const [selectedFormat, setSelectedFormat] = useState<string | null>(null);
   const [sizeConfirmed, setSizeConfirmed] = useState(false);
+  // Keep AI result for "no match" screen so user can see what was detected
+  const [lastAiResult, setLastAiResult] = useState<AiLabelResult | null>(null);
+  const [lastMatchScore, setLastMatchScore] = useState<number>(0);
 
   useEffect(() => {
     if (capturedImage) {
@@ -88,9 +292,7 @@ export default function OnboardingDetailScreen() {
   }, [capturedImage, scanAnim]);
 
   useEffect(() => {
-    if (openScanner === "true") {
-      setCurrentStep("scan_label");
-    }
+    if (openScanner === "true") setCurrentStep("scan_label");
   }, [openScanner]);
 
   useEffect(() => {
@@ -117,13 +319,11 @@ export default function OnboardingDetailScreen() {
         quality: 0.5,
       });
 
-      if (!photo?.uri || !photo?.base64) {
+      if (!photo?.uri || !photo?.base64)
         throw new Error("Failed to capture photo");
-      }
 
       setCapturedImage(photo.uri);
 
-      // 1. Send to AI Analysis
       const response = await fetch(`${NEXT_JS_API_URL}/api/analyze-label`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -132,42 +332,29 @@ export default function OnboardingDetailScreen() {
 
       if (!response.ok) throw new Error("AI Analysis failed");
 
-      const aiResult = await response.json();
+      const aiResult: AiLabelResult = await response.json();
       console.log("AI Scanned Label:", aiResult);
 
-      // 2. Match with Task Items
-      // We look for the best match based on wine name and vintage
-      const matchedItem = task?.items.find((item) => {
-        const wineNameMatch =
-          item.wineName
-            .toLowerCase()
-            .includes(aiResult.wineName.toLowerCase()) ||
-          aiResult.wineName.toLowerCase().includes(item.wineName.toLowerCase());
-        const vintageMatch = item.vintage === aiResult.vintage;
+      setLastAiResult(aiResult);
 
-        // If a specific format was selected, enforce it, otherwise default to any/75cl logic.
-        const formatMatch = selectedFormat
-          ? item.format === selectedFormat
-          : true;
+      // Use scored matching instead of brittle string includes
+      const { match, score, breakdown } = findBestMatch(
+        task?.items ?? [],
+        aiResult,
+        selectedFormat,
+      );
 
-        return (
-          wineNameMatch &&
-          vintageMatch &&
-          formatMatch &&
-          item.onboardedQty < item.qty
-        );
-      });
+      setLastMatchScore(score);
 
-      if (matchedItem) {
-        setActiveItem(matchedItem);
-        setSizeConfirmed(matchedItem.format === "75cl");
+      if (match) {
+        setActiveItem(match);
+        setSizeConfirmed(match.format === "75cl");
         setCurrentStep("verify_qr");
         setCapturedImage(null);
       } else {
-        alert(
-          `Could not find a matching item: ${aiResult.producerName} ${aiResult.vintage}`,
-        );
+        // Show no-match screen with AI result so user can decide next step
         setCapturedImage(null);
+        setCurrentStep("no_match");
       }
     } catch (err) {
       console.error("Scanner Error:", err);
@@ -181,7 +368,6 @@ export default function OnboardingDetailScreen() {
   const handleVerifyQR = async (scannedData: string) => {
     if (!activeItem || !task || isProcessing || !profile?.locationId) return;
 
-    // Check if the scanned QR belongs to the active item's current pending bottle
     const expectedBottleId = activeItem.bottleIds[activeItem.onboardedQty];
     if (scannedData !== expectedBottleId) {
       const now = Date.now();
@@ -195,8 +381,10 @@ export default function OnboardingDetailScreen() {
     setIsProcessing(true);
 
     try {
-      // 1. Update the existing Inventory Bottle
-      // These bottles were already created as "incoming" in the admin dashboard
+      // Capture the bottle ID before incrementing onboardedQty
+      const bottleId = activeItem.bottleIds[activeItem.onboardedQty];
+      setVerifiedBottleId(bottleId);
+
       const bottleRef = doc(db, "inventory_bottles", scannedData);
       const storeRef = doc(db, "stores", profile.locationId);
 
@@ -206,7 +394,6 @@ export default function OnboardingDetailScreen() {
         storeRef: storeRef,
       });
 
-      // 2. Update Task Progress
       const updatedItems = task.items.map((i) => {
         if (i.id === activeItem.id) {
           return { ...i, onboardedQty: i.onboardedQty + 1 };
@@ -265,33 +452,28 @@ export default function OnboardingDetailScreen() {
         sku: item.sku,
         reportedBy: profile.email,
         reportedAt: Timestamp.now(),
-        reason: reason,
-        bottleId: bottleId,
+        reason,
+        bottleId,
       };
 
       const updatedItems = task.items.map((i) => {
         if (i.id !== item.id) return i;
-
-        // Reorder bottleIds to move the reported one to the current position
         const newBottleIds = [...i.bottleIds];
         const reportedBottleIndex = newBottleIds.indexOf(bottleId);
         const nextOnboardIndex = i.onboardedQty;
-
         if (
           reportedBottleIndex !== -1 &&
           reportedBottleIndex !== nextOnboardIndex
         ) {
-          // Swap
           const temp = newBottleIds[nextOnboardIndex];
           newBottleIds[nextOnboardIndex] = newBottleIds[reportedBottleIndex];
           newBottleIds[reportedBottleIndex] = temp;
         }
-
         return {
           ...i,
           onboardedQty: i.onboardedQty + 1,
           bottleIds: newBottleIds,
-          issues: [...(i.issues || []), bottleId], // Keep track of issues
+          issues: [...(i.issues || []), bottleId],
         };
       });
 
@@ -348,6 +530,7 @@ export default function OnboardingDetailScreen() {
         </View>
       </View>
 
+      {/* OVERVIEW */}
       {currentStep === "overview" && (
         <ScrollView style={styles.content}>
           <View style={styles.statsCard}>
@@ -357,7 +540,11 @@ export default function OnboardingDetailScreen() {
                 style={[
                   styles.progressBarFill,
                   {
-                    width: `${(task.items.reduce((s, i) => s + i.onboardedQty, 0) / task.items.reduce((s, i) => s + i.qty, 0)) * 100}%`,
+                    width: `${
+                      (task.items.reduce((s, i) => s + i.onboardedQty, 0) /
+                        task.items.reduce((s, i) => s + i.qty, 0)) *
+                      100
+                    }%`,
                   },
                 ]}
               />
@@ -374,11 +561,8 @@ export default function OnboardingDetailScreen() {
               item.onboardedQty - (item.issues?.length || 0);
             const hasIssues = (item.issues?.length || 0) > 0;
             const isItemComplete = item.onboardedQty === item.qty;
-
-            let iconColor = "#4f46e5"; // Default In-Progress
-            if (isItemComplete) {
-              iconColor = hasIssues ? "#ef4444" : "#10b981"; // Warning or Success
-            }
+            let iconColor = "#4f46e5";
+            if (isItemComplete) iconColor = hasIssues ? "#ef4444" : "#10b981";
 
             return (
               <View key={item.id} style={styles.itemCard}>
@@ -407,10 +591,7 @@ export default function OnboardingDetailScreen() {
                   {hasIssues && !isItemComplete && (
                     <Text style={styles.issuesText}>
                       ({item.issues?.length} issue
-                      {item.issues?.length && item.issues?.length > 1
-                        ? "s"
-                        : ""}
-                      )
+                      {item.issues!.length > 1 ? "s" : ""})
                     </Text>
                   )}
                 </View>
@@ -426,7 +607,7 @@ export default function OnboardingDetailScreen() {
             <Text style={styles.mainButtonText}>Scan Bottle Label</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity // Changed to reportIssueButton
+          <TouchableOpacity
             style={styles.reportIssueButton}
             onPress={() => setCurrentStep("select_item_for_report")}
           >
@@ -436,6 +617,7 @@ export default function OnboardingDetailScreen() {
         </ScrollView>
       )}
 
+      {/* SELECT ITEM FOR REPORT */}
       {currentStep === "select_item_for_report" && (
         <ScrollView style={styles.content}>
           <Text style={styles.sectionTitle}>Which item has an issue?</Text>
@@ -448,7 +630,7 @@ export default function OnboardingDetailScreen() {
                 onPress={() => handleReportIssueForItem(item)}
               >
                 <View style={styles.itemIcon}>
-                  <Wine size={24} color={"#4f46e5"} />
+                  <Wine size={24} color="#4f46e5" />
                 </View>
                 <View style={styles.itemInfo}>
                   <Text style={styles.producerText}>{item.producerName}</Text>
@@ -468,6 +650,7 @@ export default function OnboardingDetailScreen() {
         </ScrollView>
       )}
 
+      {/* SELECT BOTTLE FOR REPORT */}
       {currentStep === "select_bottle_for_report" && activeItem && (
         <ScrollView style={styles.content}>
           <Text style={styles.sectionTitle}>
@@ -488,6 +671,7 @@ export default function OnboardingDetailScreen() {
         </ScrollView>
       )}
 
+      {/* SCAN LABEL */}
       {currentStep === "scan_label" && (
         <View style={styles.cameraContainer}>
           {!permission?.granted ? (
@@ -510,7 +694,6 @@ export default function OnboardingDetailScreen() {
                     source={{ uri: capturedImage }}
                     style={styles.capturedImage}
                   />
-
                   <Animated.View
                     style={[
                       styles.laserScanner,
@@ -529,7 +712,6 @@ export default function OnboardingDetailScreen() {
                       },
                     ]}
                   />
-
                   <View style={styles.analyzingOverlay}>
                     <ActivityIndicator size="large" color="#fff" />
                     <Text style={styles.analyzingText}>
@@ -542,7 +724,6 @@ export default function OnboardingDetailScreen() {
                   <View style={styles.cameraOverlay}>
                     <View style={styles.scannerFrame} />
 
-                    {/* Format Selector */}
                     <View style={styles.formatSelectorContainer}>
                       <TouchableOpacity
                         style={styles.formatToggleButton}
@@ -554,7 +735,6 @@ export default function OnboardingDetailScreen() {
                             : "Standard Format (75cl)? Tap to change"}
                         </Text>
                       </TouchableOpacity>
-
                       {showFormatPicker && (
                         <View style={styles.formatChipsWrapper}>
                           <ScrollView
@@ -613,19 +793,18 @@ export default function OnboardingDetailScreen() {
         </View>
       )}
 
+      {/* VERIFY QR */}
       {currentStep === "verify_qr" && activeItem && (
         <View style={styles.verifyContainer}>
           <View style={styles.matchCard}>
             <Text style={styles.matchLabel}>Bottle Recognized</Text>
             <Text style={styles.matchProducer}>{activeItem.producerName}</Text>
             <Text style={styles.matchName}>{activeItem.wineName}</Text>
-
             <View style={styles.matchMeta}>
               <Text style={styles.matchMetaText}>{activeItem.vintage}</Text>
               <View style={styles.metaDot} />
               <Text style={styles.matchMetaText}>{activeItem.format}</Text>
             </View>
-
             <View style={styles.qrInstructionCard}>
               <QrCode size={48} color="#4f46e5" />
               <Text style={styles.qrIdText}>
@@ -683,6 +862,162 @@ export default function OnboardingDetailScreen() {
         </View>
       )}
 
+      {/* NO MATCH */}
+      {currentStep === "no_match" && (
+        <View style={styles.noMatchContainer}>
+          <View style={styles.noMatchIconCircle}>
+            <AlertCircle size={56} color="#f59e0b" strokeWidth={2} />
+          </View>
+          <Text style={styles.noMatchTitle}>No Match Found</Text>
+          <Text style={styles.noMatchDesc}>
+            The AI detected a wine but it didn't match anything in this task
+            with enough confidence.
+          </Text>
+
+          {lastAiResult && (
+            <View style={styles.noMatchDetectedCard}>
+              <Text style={styles.noMatchDetectedLabel}>What was detected</Text>
+              <Text style={styles.noMatchDetectedWine}>
+                {lastAiResult.producerName ??
+                  lastAiResult.producer ??
+                  "Unknown Producer"}
+              </Text>
+              <Text style={styles.noMatchDetectedName}>
+                {lastAiResult.wineName ?? "Unknown Wine"}
+              </Text>
+              <View style={styles.noMatchMeta}>
+                {lastAiResult.vintage ? (
+                  <Text style={styles.metaBadge}>
+                    {String(lastAiResult.vintage)}
+                  </Text>
+                ) : null}
+                {lastAiResult.bottleSize ? (
+                  <Text style={styles.metaBadge}>
+                    {lastAiResult.bottleSize}
+                  </Text>
+                ) : null}
+                <Text style={[styles.metaBadge, { color: "#f59e0b" }]}>
+                  Score: {(lastMatchScore * 100).toFixed(0)}%
+                </Text>
+              </View>
+            </View>
+          )}
+
+          <TouchableOpacity
+            style={styles.mainButton}
+            onPress={() => setCurrentStep("scan_label")}
+          >
+            <Camera size={20} color="#fff" />
+            <Text style={styles.mainButtonText}>Try Again</Text>
+          </TouchableOpacity>
+
+          {/* Manual override — let user pick the item themselves */}
+          <TouchableOpacity
+            style={styles.manualSelectButton}
+            onPress={() => setCurrentStep("manual_select")} // ← was "select_item_for_report"
+          >
+            <Text style={styles.manualSelectButtonText}>
+              Select Wine Manually
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+      {/* MANUAL SELECT */}
+      {currentStep === "manual_select" && lastAiResult && (
+        <ScrollView style={styles.content}>
+          <Text style={styles.sectionTitle}>Select the correct wine</Text>
+          <Text style={styles.manualSelectHint}>
+            Showing all pending items ranked by how closely they matched the
+            scanned label.
+          </Text>
+
+          {task.items
+            .filter((item) => item.onboardedQty < item.qty)
+            .map((item) => {
+              const { score, breakdown } = scoreMatch(
+                item,
+                lastAiResult,
+                selectedFormat,
+              );
+              const pct = Math.round(score * 100);
+              const isGood = pct >= 52;
+
+              return (
+                <TouchableOpacity
+                  key={item.id}
+                  style={[
+                    styles.manualItemCard,
+                    isGood && styles.manualItemCardHighlighted,
+                  ]}
+                  onPress={() => {
+                    setActiveItem(item);
+                    setSizeConfirmed(item.format === "75cl");
+                    setCurrentStep("verify_qr");
+                  }}
+                >
+                  {/* Score badge */}
+                  <View
+                    style={[
+                      styles.scoreBadge,
+                      { backgroundColor: isGood ? "#4f46e5" : "#334155" },
+                    ]}
+                  >
+                    <Text style={styles.scoreBadgeText}>{pct}%</Text>
+                  </View>
+
+                  <View style={styles.itemInfo}>
+                    <Text style={styles.producerText}>{item.producerName}</Text>
+                    <Text style={styles.wineNameText}>{item.wineName}</Text>
+                    <View style={styles.itemMeta}>
+                      <Text style={styles.metaBadge}>{item.vintage}</Text>
+                      <Text style={styles.metaBadge}>{item.format}</Text>
+                      <Text style={styles.metaBadge}>
+                        {item.onboardedQty}/{item.qty} done
+                      </Text>
+                    </View>
+
+                    {/* Score breakdown bar */}
+                    <View style={styles.scoreBreakdownRow}>
+                      {[
+                        { label: "Name", value: breakdown.wineName },
+                        { label: "Vintage", value: breakdown.vintage },
+                        { label: "Format", value: breakdown.format },
+                        { label: "Producer", value: breakdown.producer },
+                      ].map(({ label, value }) => (
+                        <View key={label} style={styles.scoreBreakdownItem}>
+                          <View style={styles.scoreBarBg}>
+                            <View
+                              style={[
+                                styles.scoreBarFill,
+                                { width: `${Math.round((value ?? 0) * 100)}%` },
+                              ]}
+                            />
+                          </View>
+                          <Text style={styles.scoreBarLabel}>{label}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              );
+            })
+            // Sort by score descending so best matches appear first
+            .sort((a, b) => {
+              const scoreA = scoreMatch(
+                task.items.find((i) => i.id === (a as any).key)!,
+                lastAiResult,
+                selectedFormat,
+              ).score;
+              const scoreB = scoreMatch(
+                task.items.find((i) => i.id === (b as any).key)!,
+                lastAiResult,
+                selectedFormat,
+              ).score;
+              return scoreB - scoreA;
+            })}
+        </ScrollView>
+      )}
+      {/* SUCCESS */}
       {currentStep === "success" && activeItem && (
         <View style={styles.successContainer}>
           <View style={styles.successCircle}>
@@ -702,7 +1037,8 @@ export default function OnboardingDetailScreen() {
               router.push({
                 pathname: "/tagging",
                 params: {
-                  bottleId: activeItem.bottleIds[activeItem.onboardedQty],
+                  // Use the captured bottleId, not the live index which has already incremented
+                  bottleId: verifiedBottleId,
                   source: "onboarding",
                   fromOnboardingId: id,
                 },
@@ -726,22 +1062,15 @@ export default function OnboardingDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#0f172a",
-  },
+  // ... all your existing styles unchanged ...
+  container: { flex: 1, backgroundColor: "#0f172a" },
   centerContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     padding: 40,
   },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 24,
-    gap: 16,
-  },
+  header: { flexDirection: "row", alignItems: "center", padding: 24, gap: 16 },
   backButton: {
     width: 44,
     height: 44,
@@ -757,15 +1086,8 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 1,
   },
-  headerTitle: {
-    color: "#fff",
-    fontSize: 20,
-    fontWeight: "900",
-  },
-  content: {
-    flex: 1,
-    padding: 24,
-  },
+  headerTitle: { color: "#fff", fontSize: 20, fontWeight: "900" },
+  content: { flex: 1, padding: 24 },
   statsCard: {
     backgroundColor: "#1e293b",
     borderRadius: 24,
@@ -790,11 +1112,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#4f46e5",
     borderRadius: 6,
   },
-  statsValue: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "900",
-  },
+  statsValue: { color: "#fff", fontSize: 14, fontWeight: "900" },
   sectionTitle: {
     color: "#475569",
     fontSize: 12,
@@ -820,9 +1138,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  itemInfo: {
-    flex: 1,
-  },
+  itemInfo: { flex: 1 },
   producerText: {
     color: "#64748b",
     fontSize: 10,
@@ -835,10 +1151,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     marginBottom: 4,
   },
-  itemMeta: {
-    flexDirection: "row",
-    gap: 8,
-  },
+  itemMeta: { flexDirection: "row", gap: 8 },
   metaBadge: {
     color: "#94a3b8",
     fontSize: 10,
@@ -848,15 +1161,8 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 4,
   },
-  itemProgress: {
-    alignItems: "center",
-    gap: 4,
-  },
-  qtyText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "900",
-  },
+  itemProgress: { alignItems: "center", gap: 4 },
+  qtyText: { color: "#fff", fontSize: 16, fontWeight: "900" },
   formatSelectorContainer: {
     position: "absolute",
     bottom: 40,
@@ -873,18 +1179,9 @@ const styles = StyleSheet.create({
     borderColor: "#334155",
     marginBottom: 12,
   },
-  formatToggleText: {
-    color: "#f8fafc",
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  formatChipsWrapper: {
-    width: "100%",
-  },
-  formatChips: {
-    paddingHorizontal: 20,
-    gap: 12,
-  },
+  formatToggleText: { color: "#f8fafc", fontSize: 14, fontWeight: "700" },
+  formatChipsWrapper: { width: "100%" },
+  formatChips: { paddingHorizontal: 20, gap: 12 },
   formatChip: {
     backgroundColor: "rgba(30, 41, 59, 0.85)",
     paddingHorizontal: 16,
@@ -893,18 +1190,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#475569",
   },
-  formatChipSelected: {
-    backgroundColor: "#4f46e5",
-    borderColor: "#6366f1",
-  },
-  formatChipText: {
-    color: "#cbd5e1",
-    fontSize: 14,
-    fontWeight: "800",
-  },
-  formatChipTextSelected: {
-    color: "#fff",
-  },
+  formatChipSelected: { backgroundColor: "#4f46e5", borderColor: "#6366f1" },
+  formatChipText: { color: "#cbd5e1", fontSize: 14, fontWeight: "800" },
+  formatChipTextSelected: { color: "#fff" },
   mainButton: {
     flexDirection: "row",
     backgroundColor: "#4f46e5",
@@ -917,18 +1205,9 @@ const styles = StyleSheet.create({
     marginTop: 20,
     marginBottom: 40,
   },
-  mainButtonText: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "900",
-  },
-  cameraContainer: {
-    flex: 1,
-    backgroundColor: "#000",
-  },
-  camera: {
-    flex: 1,
-  },
+  mainButtonText: { color: "#fff", fontSize: 18, fontWeight: "900" },
+  cameraContainer: { flex: 1, backgroundColor: "#000" },
+  camera: { flex: 1 },
   cameraOverlay: {
     flex: 1,
     justifyContent: "center",
@@ -969,10 +1248,7 @@ const styles = StyleSheet.create({
     borderRadius: 32,
     backgroundColor: "#fff",
   },
-  verifyContainer: {
-    flex: 1,
-    padding: 24,
-  },
+  verifyContainer: { flex: 1, padding: 24 },
   matchCard: {
     backgroundColor: "#fff",
     borderRadius: 32,
@@ -986,11 +1262,7 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     marginBottom: 8,
   },
-  matchProducer: {
-    color: "#64748b",
-    fontSize: 14,
-    fontWeight: "800",
-  },
+  matchProducer: { color: "#64748b", fontSize: 14, fontWeight: "800" },
   matchName: {
     color: "#0f172a",
     fontSize: 24,
@@ -1003,17 +1275,8 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 24,
   },
-  matchMetaText: {
-    color: "#64748b",
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  metaDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: "#cbd5e1",
-  },
+  matchMetaText: { color: "#64748b", fontSize: 14, fontWeight: "700" },
+  metaDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: "#cbd5e1" },
   qrInstructionCard: {
     backgroundColor: "#f8fafc",
     borderRadius: 20,
@@ -1027,15 +1290,8 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     color: "#0f172a",
     marginTop: 12,
-    fontFamily: "System",
   },
-  skuLabel: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#64748b",
-    marginTop: 4,
-    fontFamily: "System",
-  },
+  skuLabel: { fontSize: 14, fontWeight: "700", color: "#64748b", marginTop: 4 },
   qrDesc: {
     fontSize: 12,
     color: "#64748b",
@@ -1049,9 +1305,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     backgroundColor: "#000",
   },
-  qrCamera: {
-    flex: 1,
-  },
+  qrCamera: { flex: 1 },
   qrOverlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: "center",
@@ -1099,11 +1353,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: "center",
   },
-  confirmFormatButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "800",
-  },
+  confirmFormatButtonText: { color: "#fff", fontSize: 16, fontWeight: "800" },
   cancelFormatButton: {
     marginTop: 12,
     width: "100%",
@@ -1112,11 +1362,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#334155",
   },
-  cancelFormatButtonText: {
-    color: "#cbd5e1",
-    fontSize: 16,
-    fontWeight: "700",
-  },
+  cancelFormatButtonText: { color: "#cbd5e1", fontSize: 16, fontWeight: "700" },
   successContainer: {
     flex: 1,
     padding: 40,
@@ -1145,18 +1391,11 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     fontWeight: "500",
   },
-  secondaryButton: {
-    padding: 20,
-    marginTop: 20,
-  },
-  secondaryButtonText: {
-    color: "#64748b",
-    fontSize: 16,
-    fontWeight: "800",
-  },
+  secondaryButton: { padding: 20, marginTop: 20 },
+  secondaryButtonText: { color: "#64748b", fontSize: 16, fontWeight: "800" },
   reportIssueButton: {
     flexDirection: "row",
-    backgroundColor: "rgba(239, 68, 68, 0.1)", // Light red background
+    backgroundColor: "rgba(239, 68, 68, 0.1)",
     paddingHorizontal: 30,
     paddingVertical: 20,
     borderRadius: 20,
@@ -1166,13 +1405,9 @@ const styles = StyleSheet.create({
     marginTop: 20,
     marginBottom: 40,
     borderWidth: 1,
-    borderColor: "rgba(239, 68, 68, 0.2)", // Red border
+    borderColor: "rgba(239, 68, 68, 0.2)",
   },
-  reportIssueButtonText: {
-    color: "#ef4444", // Red text
-    fontSize: 18,
-    fontWeight: "900",
-  },
+  reportIssueButtonText: { color: "#ef4444", fontSize: 18, fontWeight: "900" },
   permissionText: {
     color: "#fff",
     fontSize: 18,
@@ -1180,15 +1415,8 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     textAlign: "center",
   },
-  capturedContainer: {
-    flex: 1,
-    backgroundColor: "#000",
-  },
-  capturedImage: {
-    flex: 1,
-    resizeMode: "cover",
-    opacity: 0.6,
-  },
+  capturedContainer: { flex: 1, backgroundColor: "#000" },
+  capturedImage: { flex: 1, resizeMode: "cover", opacity: 0.6 },
   laserScanner: {
     position: "absolute",
     left: 0,
@@ -1218,21 +1446,6 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 2,
   },
-  reportButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-    marginTop: 16,
-    padding: 16,
-    backgroundColor: "rgba(239, 68, 68, 0.1)",
-    borderRadius: 16,
-  },
-  reportButtonText: {
-    color: "#ef4444",
-    fontSize: 16,
-    fontWeight: "800",
-  },
   bottleIdCard: {
     backgroundColor: "#1e293b",
     borderRadius: 20,
@@ -1244,16 +1457,142 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#334155",
   },
-  bottleIdText: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "800",
-    fontFamily: "System",
-  },
+  bottleIdText: { color: "#fff", fontSize: 18, fontWeight: "800" },
   issuesText: {
     color: "#ef4444",
     fontSize: 10,
     fontWeight: "700",
     marginTop: 2,
+  },
+  // New styles for no-match screen
+  noMatchContainer: {
+    flex: 1,
+    padding: 32,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  noMatchIconCircle: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: "rgba(245, 158, 11, 0.1)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: "rgba(245, 158, 11, 0.2)",
+  },
+  noMatchTitle: {
+    color: "#fff",
+    fontSize: 28,
+    fontWeight: "900",
+    marginBottom: 12,
+  },
+  noMatchDesc: {
+    color: "#94a3b8",
+    fontSize: 15,
+    textAlign: "center",
+    lineHeight: 24,
+    marginBottom: 24,
+  },
+  noMatchDetectedCard: {
+    backgroundColor: "#1e293b",
+    borderRadius: 20,
+    padding: 20,
+    width: "100%",
+    marginBottom: 8,
+  },
+  noMatchDetectedLabel: {
+    color: "#475569",
+    fontSize: 10,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginBottom: 8,
+  },
+  noMatchDetectedWine: {
+    color: "#64748b",
+    fontSize: 13,
+    fontWeight: "800",
+    textTransform: "uppercase",
+  },
+  noMatchDetectedName: {
+    color: "#fff",
+    fontSize: 20,
+    fontWeight: "900",
+    marginBottom: 12,
+  },
+  noMatchMeta: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
+  manualSelectButton: {
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    marginTop: 4,
+  },
+  manualSelectButtonText: {
+    color: "#64748b",
+    fontSize: 16,
+    fontWeight: "800",
+    textDecorationLine: "underline",
+  },
+  manualSelectHint: {
+    color: "#475569",
+    fontSize: 13,
+    fontWeight: "600",
+    marginBottom: 20,
+    lineHeight: 20,
+  },
+  manualItemCard: {
+    backgroundColor: "#1e293b",
+    borderRadius: 20,
+    padding: 16,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 12,
+    gap: 14,
+    borderWidth: 1,
+    borderColor: "#334155",
+  },
+  manualItemCardHighlighted: {
+    borderColor: "#4f46e5",
+    backgroundColor: "#1e1b4b",
+  },
+  scoreBadge: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  scoreBadgeText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  scoreBreakdownRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 10,
+  },
+  scoreBreakdownItem: {
+    flex: 1,
+    gap: 4,
+  },
+  scoreBarBg: {
+    height: 4,
+    backgroundColor: "#334155",
+    borderRadius: 2,
+    overflow: "hidden",
+  },
+  scoreBarFill: {
+    height: "100%",
+    backgroundColor: "#4f46e5",
+    borderRadius: 2,
+  },
+  scoreBarLabel: {
+    color: "#475569",
+    fontSize: 9,
+    fontWeight: "700",
+    textTransform: "uppercase",
   },
 });
