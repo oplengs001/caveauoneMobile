@@ -199,7 +199,6 @@ export default function TaggingScreen() {
             {
               text: "Try Again",
               onPress: () => {
-                setScannedSku(null);
                 setLoading(false);
                 isProcessing.current = false;
                 setState("scanning");
@@ -335,10 +334,7 @@ export default function TaggingScreen() {
 
   const handleMarkAsSold = async () => {
     if (!bottle || !salePrice) {
-      Alert.alert(
-        "Missing Price",
-        "Please provide a sale price to continue.",
-      );
+      Alert.alert("Missing Price", "Please provide a sale price to continue.");
       return;
     }
 
@@ -742,8 +738,8 @@ export default function TaggingScreen() {
                 Bottle Already {mode === "sell" ? "Sold" : "Consumed"}
               </Text>
               <Text style={styles.incomingWarningText}>
-                This bottle is already marked as &apos;consumed&apos; and cannot be
-                processed again.
+                This bottle is already marked as &apos;consumed&apos; and cannot
+                be processed again.
               </Text>
               <TouchableOpacity
                 style={[
@@ -755,7 +751,6 @@ export default function TaggingScreen() {
                   setState("scanning");
                   setBottle(null);
                   setWine(null);
-                  setScannedSku(null);
                   setSelectedLocationId(null);
                   setIsIncoming(false);
                   setSuccessAction(null);
