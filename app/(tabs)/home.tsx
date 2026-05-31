@@ -1,7 +1,7 @@
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { auth, db } from "@/lib/firebase";
-import { WineRequest } from "@/types";
+import { WineRequest, Delivery } from "@/types";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
 import { signOut } from "firebase/auth";
 import {
@@ -48,6 +48,7 @@ export default function HomeScreen() {
   });
   const [loadingMetrics, setLoadingMetrics] = useState(true);
   const [outboundRequests, setOutboundRequests] = useState<WineRequest[]>([]);
+  const [incomingDeliveries, setIncomingDeliveries] = useState<Delivery[]>([]);
   const [loadingRequests, setLoadingRequests] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -141,18 +142,32 @@ export default function HomeScreen() {
     }
     try {
       setLoadingRequests(true);
-      const q = query(
-        collection(db, "wine_requests"),
-        where("storeId", "==", profile.locationId),
-        where("status", "==", "receiving"),
-      );
-      const snapshot = await getDocs(q);
-      const requests = snapshot.docs.map(
+      const [reqSnap, delSnap] = await Promise.all([
+        getDocs(
+          query(
+            collection(db, "wine_requests"),
+            where("storeId", "==", profile.locationId),
+            where("status", "==", "receiving"),
+          )
+        ),
+        getDocs(
+          query(
+            collection(db, "deliveries"),
+            where("storeId", "==", profile.locationId),
+            where("status", "in", ["dispatched", "receiving"]),
+          )
+        )
+      ]);
+      const requests = reqSnap.docs.map(
         (doc) => ({ id: doc.id, ...doc.data() }) as WineRequest,
       );
+      const deliveries = delSnap.docs.map(
+        (doc) => ({ id: doc.id, ...doc.data() }) as Delivery,
+      );
       setOutboundRequests(requests);
+      setIncomingDeliveries(deliveries);
     } catch (error) {
-      console.error("Error fetching outbound requests:", error);
+      console.error("Error fetching incoming requests/deliveries:", error);
     } finally {
       setLoadingRequests(false);
     }
@@ -283,7 +298,7 @@ export default function HomeScreen() {
     dashboardMetrics.stockout.wines > 0 ||
     dashboardMetrics.parAlert.wines > 0 ||
     dashboardMetrics.underSafety.wines > 0;
-  const hasDeliveries = outboundRequests.length > 0;
+  const hasDeliveries = outboundRequests.length > 0 || incomingDeliveries.length > 0;
 
   return (
     <SafeAreaView
@@ -471,11 +486,44 @@ export default function HomeScreen() {
                       <Text
                         style={[styles.requestCardTitle, { color: theme.text }]}
                       >
-                        Transfer from Warehouse
+                        Transfer from Warehouse (Request)
                       </Text>
                       <Text style={styles.requestCardSubtitle}>
                         {req.items.reduce((acc, i) => acc + (i.qty || 0), 0)}{" "}
                         items • REQ: {req.id.slice(0, 4).toUpperCase()}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+                
+                {incomingDeliveries.map((del) => (
+                  <TouchableOpacity
+                    key={del.id}
+                    style={[
+                      styles.requestCard,
+                      {
+                        backgroundColor: theme.card,
+                        borderColor: theme.border,
+                      },
+                    ]}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/deliveries/[id]",
+                        params: { id: del.id },
+                      })
+                    }
+                  >
+                    <View style={styles.requestCardIcon}>
+                      <Truck size={20} color="#8b5cf6" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={[styles.requestCardTitle, { color: theme.text }]}
+                      >
+                        Admin Delivery
+                      </Text>
+                      <Text style={styles.requestCardSubtitle}>
+                        {del.totalBottles} items • DEL: {del.id.slice(0, 4).toUpperCase()}
                       </Text>
                     </View>
                   </TouchableOpacity>

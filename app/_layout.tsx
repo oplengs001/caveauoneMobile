@@ -44,6 +44,7 @@ export default function RootLayout() {
           <Stack.Screen name="intake/scan" options={{ headerShown: false, presentation: 'fullScreenModal' }} />
           <Stack.Screen name="intake/review" options={{ headerShown: false }} />
           <Stack.Screen name="tagging/index" options={{ headerShown: false, presentation: 'fullScreenModal' }} />
+          <Stack.Screen name="deliveries" options={{ headerShown: false }} />
           <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
         </Stack>
         <StatusBar style="auto" />

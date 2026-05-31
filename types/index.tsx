@@ -120,6 +120,31 @@ export interface WineRequest {
   rejectionReason?: string;
 }
 
+export interface DeliveryItem {
+  masterWineId: string;
+  wineName: string;
+  vintage?: string;
+  producer?: string;
+  format?: string;
+  sku: string;
+  qty: number;
+  ingressedQty: number;
+  bottleIds: string[];
+}
+
+export interface Delivery {
+  id: string;
+  storeId: string;
+  createdBy: string;
+  notes?: string;
+  status: "dispatched" | "receiving" | "ingress_complete" | "cancelled";
+  items: DeliveryItem[];
+  totalBottles: number;
+  createdAt: any;
+  updatedAt: any;
+}
+
+
 export type WineFormat =
   | "37.5cl"
   | "50cl"
