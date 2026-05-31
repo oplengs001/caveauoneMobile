@@ -23,11 +23,15 @@ import {
   CheckCircle2,
   Map,
   Plus,
+  Receipt,
   RefreshCw,
   Save,
   ScanQrCode,
+  Tag,
+  User,
   Wine,
   X,
+  Zap,
 } from "lucide-react-native";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -56,6 +60,206 @@ const STORAGE_CATEGORIES = [
   { label: "Custom", prefix: "X", icon: "➕", major: "ID", minor: "Sub" },
 ];
 
+const VAT_RATE = 0.12;
+
+// ── Small helper: formats a number as currency ──────────────────────────────
+function formatCurrency(value: number): string {
+  return value.toLocaleString("en-PH", {
+    style: "currency",
+    currency: "PHP",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+// ── VAT Breakdown Card ───────────────────────────────────────────────────────
+function VatBreakdownCard({
+  basePrice,
+  theme,
+  isFastMoving,
+}: {
+  basePrice: string;
+  theme: any;
+  isFastMoving: boolean;
+}) {
+  const numericBase = parseFloat(basePrice) || 0;
+  const vatAmount = numericBase * VAT_RATE;
+  const total = numericBase + vatAmount;
+  const hasValue = numericBase > 0;
+
+  return (
+    <View
+      style={[
+        vatStyles.card,
+        {
+          backgroundColor: theme.card,
+          borderColor: hasValue ? theme.primary + "40" : theme.border,
+        },
+      ]}
+    >
+      {/* Header */}
+      <View style={vatStyles.cardHeader}>
+        <Receipt size={14} color={theme.primary} />
+        <Text style={[vatStyles.cardTitle, { color: theme.primary }]}>
+          VAT BREAKDOWN
+        </Text>
+        {isFastMoving && (
+          <View
+            style={[
+              vatStyles.fastMovingBadge,
+              { backgroundColor: "#f59e0b18", borderColor: "#f59e0b40" },
+            ]}
+          >
+            <Zap size={10} color="#f59e0b" />
+            <Text style={vatStyles.fastMovingText}>FAST MOVING</Text>
+          </View>
+        )}
+      </View>
+
+      {/* Rows */}
+      <View style={vatStyles.row}>
+        <Text style={[vatStyles.rowLabel, { color: theme.textSecondary }]}>
+          Base Price
+        </Text>
+        <Text style={[vatStyles.rowValue, { color: theme.text }]}>
+          {hasValue ? formatCurrency(numericBase) : "—"}
+        </Text>
+      </View>
+
+      <View style={[vatStyles.divider, { backgroundColor: theme.border }]} />
+
+      <View style={vatStyles.row}>
+        <View style={vatStyles.rowLabelGroup}>
+          <Text style={[vatStyles.rowLabel, { color: theme.textSecondary }]}>
+            VAT
+          </Text>
+          <View
+            style={[
+              vatStyles.rateBadge,
+              { backgroundColor: theme.primary + "18" },
+            ]}
+          >
+            <Text style={[vatStyles.rateText, { color: theme.primary }]}>
+              12%
+            </Text>
+          </View>
+        </View>
+        <Text style={[vatStyles.rowValue, { color: theme.textSecondary }]}>
+          {hasValue ? formatCurrency(vatAmount) : "—"}
+        </Text>
+      </View>
+
+      <View style={[vatStyles.divider, { backgroundColor: theme.border }]} />
+
+      {/* Total */}
+      <View
+        style={[vatStyles.totalRow, { backgroundColor: theme.primary + "0C" }]}
+      >
+        <Text style={[vatStyles.totalLabel, { color: theme.text }]}>
+          TOTAL (VAT-IN)
+        </Text>
+        <Text
+          style={[
+            vatStyles.totalValue,
+            { color: hasValue ? theme.primary : theme.textSecondary },
+          ]}
+        >
+          {hasValue ? formatCurrency(total) : "—"}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+const vatStyles = StyleSheet.create({
+  card: {
+    borderRadius: 20,
+    borderWidth: 1,
+    marginBottom: 24,
+    overflow: "hidden",
+  },
+  cardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+  },
+  cardTitle: {
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1.5,
+    flex: 1,
+  },
+  fastMovingBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  fastMovingText: {
+    color: "#f59e0b",
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 0.5,
+  },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+  },
+  rowLabelGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  rowLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  rowValue: {
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  rateBadge: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  rateText: {
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  divider: {
+    height: 1,
+    marginHorizontal: 18,
+  },
+  totalRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+  },
+  totalLabel: {
+    fontSize: 12,
+    fontWeight: "900",
+    letterSpacing: 1,
+  },
+  totalValue: {
+    fontSize: 22,
+    fontWeight: "900",
+    letterSpacing: -0.5,
+  },
+});
+
+// ── Main Screen ──────────────────────────────────────────────────────────────
+
 export default function TaggingScreen() {
   const { profile } = useAuth();
   const theme = profile?.role === "store" ? Colors.store : Colors.warehouse;
@@ -76,8 +280,6 @@ export default function TaggingScreen() {
   }>();
 
   const [permission, requestPermission] = useCameraPermissions();
-  // If a bottleId is pre-supplied (e.g. from wine-requests flow), skip the
-  // camera scanner and go straight to "displaying" to avoid a glitchy flash.
   const [state, setState] = useState<TaggingState>(
     initialBottleId ? "displaying" : "scanning",
   );
@@ -93,6 +295,9 @@ export default function TaggingScreen() {
     "sold" | "received" | "tagged" | null
   >(null);
 
+  // Fast-moving flag — drives whether we pre-populate the price
+  const [isFastMoving, setIsFastMoving] = useState(false);
+
   // Add Location Modal State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newCat, setNewCat] = useState(STORAGE_CATEGORIES[0]);
@@ -101,7 +306,7 @@ export default function TaggingScreen() {
   const [newCapacity, setNewCapacity] = useState("");
   const [savingLocation, setSavingLocation] = useState(false);
 
-  // For the new "Sell Bottle" feature
+  // Sell Bottle state
   const [salePrice, setSalePrice] = useState("");
   const [buyerName, setBuyerName] = useState("");
 
@@ -146,24 +351,52 @@ export default function TaggingScreen() {
 
   useEffect(() => {
     fetchLocations();
-
     if (initialBottleId && mode !== "sell") {
       loadBottleData(initialBottleId as string);
     }
   }, [initialBottleId, profile?.locationId]);
 
+  // ── Fetch store_wine_settings when wine is loaded in sell mode ─────────────
+  // Only pre-populate price if the wine is marked as fast-moving.
   useEffect(() => {
-    // Pre-fill price when wine data is available in sell mode
-    if (mode === "sell" && wine?.price) {
-      setSalePrice(String(wine.price));
-    } else if (mode === "sell") {
-      setSalePrice(""); // Clear if no price
-    }
-  }, [wine, mode]);
+    if (mode !== "sell" || !wine || !profile?.locationId) return;
+
+    const checkFastMoving = async () => {
+      try {
+        const settingsSnap = await getDocs(
+          query(
+            collection(db, "store_wine_settings"),
+            where("storeId", "==", profile.locationId),
+            where("masterWineId", "==", wine.id),
+          ),
+        );
+
+        if (!settingsSnap.empty) {
+          const setting = settingsSnap.docs[0].data();
+          const fastMoving = setting.isFastMoving === true;
+          setIsFastMoving(fastMoving);
+          // Only auto-fill price for fast-moving wines
+          if (fastMoving && wine.price) {
+            setSalePrice(String(wine.price));
+          } else {
+            setSalePrice(""); // Leave blank — let staff decide
+          }
+        } else {
+          setIsFastMoving(false);
+          setSalePrice("");
+        }
+      } catch (err) {
+        console.error("Error checking fast-moving setting:", err);
+        setIsFastMoving(false);
+        setSalePrice("");
+      }
+    };
+
+    checkFastMoving();
+  }, [wine, mode, profile?.locationId]);
 
   const fetchLocations = async () => {
     if (!profile?.locationId) return;
-
     try {
       const q = query(
         collection(db, "locations"),
@@ -171,11 +404,12 @@ export default function TaggingScreen() {
         orderBy("name", "asc"),
       );
       const locationsSnap = await getDocs(q);
-      const locData = locationsSnap.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as Location[];
-      setLocations(locData);
+      setLocations(
+        locationsSnap.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        })) as Location[],
+      );
     } catch (error) {
       console.error("Error fetching locations:", error);
     }
@@ -183,7 +417,6 @@ export default function TaggingScreen() {
 
   const loadBottleData = async (bottleId: string) => {
     if (loading || isProcessing.current) return;
-
     isProcessing.current = true;
     setLoading(true);
 
@@ -215,7 +448,6 @@ export default function TaggingScreen() {
       } as InventoryBottle;
       setBottle(bottleData);
 
-      // Detection: If bottle is not at the user's assigned node
       if (
         isStore &&
         profile?.locationId &&
@@ -234,7 +466,6 @@ export default function TaggingScreen() {
       }
 
       setSelectedLocationId(bottleData.locationRef?.id || null);
-
       setState("displaying");
     } catch (error) {
       console.error("Error fetching bottle details:", error);
@@ -247,7 +478,6 @@ export default function TaggingScreen() {
 
   const handleCreateLocation = async () => {
     if (!profile?.locationId || !newMajor) return;
-
     setSavingLocation(true);
     const generatedCode = `${newCat.prefix}${newMajor.toUpperCase()}${newMinor}`;
 
@@ -268,7 +498,6 @@ export default function TaggingScreen() {
       await fetchLocations();
       setSelectedLocationId(docRef.id);
       setIsAddModalOpen(false);
-      // Reset form
       setNewMajor("");
       setNewMinor("");
       setNewCapacity("");
@@ -287,18 +516,13 @@ export default function TaggingScreen() {
 
   const handleConfirmTagging = async () => {
     if (!bottle || !selectedLocationId) return;
-
     setState("updating");
     try {
-      const bottleRef = doc(db, "inventory_bottles", bottle.id);
-      const locationRef = doc(db, "locations", selectedLocationId);
-
-      await updateDoc(bottleRef, {
-        locationRef: locationRef,
+      await updateDoc(doc(db, "inventory_bottles", bottle.id), {
+        locationRef: doc(db, "locations", selectedLocationId),
         status: "shelved",
         updatedAt: new Date(),
       });
-
       setSuccessAction("tagged");
       setState("success");
     } catch (error) {
@@ -310,19 +534,14 @@ export default function TaggingScreen() {
 
   const handleReceiveStock = async () => {
     if (!bottle || !profile?.locationId) return;
-
     setState("updating");
     try {
-      const bottleRef = doc(db, "inventory_bottles", bottle.id);
-      const storeRef = doc(db, "stores", profile.locationId);
-
-      await updateDoc(bottleRef, {
-        storeRef: storeRef,
-        locationRef: null, // Clear physical bin until shelved
+      await updateDoc(doc(db, "inventory_bottles", bottle.id), {
+        storeRef: doc(db, "stores", profile.locationId),
+        locationRef: null,
         status: "shelved",
         updatedAt: new Date(),
       });
-
       setSuccessAction("received");
       setState("success");
     } catch (error) {
@@ -348,7 +567,10 @@ export default function TaggingScreen() {
 
     setState("updating");
     try {
-      // Log the sale in the new 'sales' collection
+      const numericPrice = parseFloat(salePrice);
+      const vatAmount = numericPrice * VAT_RATE;
+      const totalAmount = numericPrice + vatAmount;
+
       await addDoc(collection(db, "sales"), {
         bottleId: bottle.id,
         masterWineId: bottle.masterWineRef?.id || null,
@@ -360,24 +582,25 @@ export default function TaggingScreen() {
         soldById: profile?.id,
         soldByEmail: profile?.email,
         soldAt: serverTimestamp(),
-        price: parseFloat(salePrice),
+        price: numericPrice,
+        vatAmount,
+        totalAmount,
         buyerName: buyerName || null,
+        isFastMoving,
       });
 
-      const bottleRef = doc(db, "inventory_bottles", bottle.id);
-      await updateDoc(bottleRef, {
+      await updateDoc(doc(db, "inventory_bottles", bottle.id), {
         status: "consumed",
         soldAt: serverTimestamp(),
-        locationRef: null, // No longer in a physical location
+        locationRef: null,
         updatedAt: serverTimestamp(),
       });
 
-      // Automatically request for needed stock if PAR alert is reached
+      // Auto-request restock if PAR level reached
       if (isStore && profile?.locationId && bottle.masterWineRef && wine) {
         const storeId = profile.locationId;
         const wineRef = bottle.masterWineRef;
 
-        // Fetch store wine settings
         const settingsSnap = await getDocs(
           query(
             collection(db, "store_wine_settings"),
@@ -388,13 +611,11 @@ export default function TaggingScreen() {
 
         if (!settingsSnap.empty) {
           const setting = settingsSnap.docs[0].data();
-
           if (
             !setting.discontinued &&
             setting.parLevel !== undefined &&
             setting.safetyStock !== undefined
           ) {
-            // Get current stock count
             const countSnap = await getCountFromServer(
               query(
                 collection(db, "inventory_bottles"),
@@ -405,9 +626,7 @@ export default function TaggingScreen() {
             );
             const stockCount = countSnap.data().count;
 
-            // Check if PAR alert reached
             if (stockCount <= setting.parLevel) {
-              // Check if there's already a pending request for this wine
               const pendingRequestsSnap = await getDocs(
                 query(
                   collection(db, "wine_requests"),
@@ -419,9 +638,7 @@ export default function TaggingScreen() {
               let hasPending = false;
               pendingRequestsSnap.docs.forEach((reqDoc) => {
                 reqDoc.data().items?.forEach((item: any) => {
-                  if (item.masterWineId === wineRef.id) {
-                    hasPending = true;
-                  }
+                  if (item.masterWineId === wineRef.id) hasPending = true;
                 });
               });
 
@@ -454,12 +671,8 @@ export default function TaggingScreen() {
                     createdAt: serverTimestamp(),
                     updatedAt: serverTimestamp(),
                   });
-
-                  // Show the snackbar notification
                   showSnackbar(
-                    `Par level reached! Automatically requested ${requestedQty} bottle${
-                      requestedQty > 1 ? "s" : ""
-                    } for restock.`,
+                    `Par level reached! Automatically requested ${requestedQty} bottle${requestedQty > 1 ? "s" : ""} for restock.`,
                   );
                 }
               }
@@ -476,6 +689,24 @@ export default function TaggingScreen() {
       setState("displaying");
     }
   };
+
+  const resetSellState = () => {
+    isProcessing.current = false;
+    setState("scanning");
+    setBottle(null);
+    setWine(null);
+    setSelectedLocationId(null);
+    setIsIncoming(false);
+    setSuccessAction(null);
+    setSalePrice("");
+    setBuyerName("");
+    setIsFastMoving(false);
+  };
+
+  // ── Derived VAT values ─────────────────────────────────────────────────────
+  const numericBase = parseFloat(salePrice) || 0;
+  const vatAmount = numericBase * VAT_RATE;
+  const totalWithVat = numericBase + vatAmount;
 
   if (!permission) return <View style={styles.container} />;
 
@@ -502,6 +733,7 @@ export default function TaggingScreen() {
     >
       <Stack.Screen options={{ headerShown: false }} />
 
+      {/* ── Success ── */}
       {state === "success" && (
         <View style={styles.successContainer}>
           <View style={styles.successCircle}>
@@ -548,6 +780,72 @@ export default function TaggingScreen() {
             >
               {wine?.vintage} • {wine?.producer} • {wine?.format}
             </Text>
+            {successAction === "sold" && numericBase > 0 && (
+              <View
+                style={[
+                  styles.saleSummaryRow,
+                  { borderTopColor: theme.border },
+                ]}
+              >
+                <View style={styles.saleSummaryItem}>
+                  <Text
+                    style={[
+                      styles.saleSummaryLabel,
+                      { color: theme.textSecondary },
+                    ]}
+                  >
+                    BASE
+                  </Text>
+                  <Text
+                    style={[styles.saleSummaryValue, { color: theme.text }]}
+                  >
+                    {formatCurrency(numericBase)}
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.saleSummaryDivider,
+                    { backgroundColor: theme.border },
+                  ]}
+                />
+                <View style={styles.saleSummaryItem}>
+                  <Text
+                    style={[
+                      styles.saleSummaryLabel,
+                      { color: theme.textSecondary },
+                    ]}
+                  >
+                    VAT 12%
+                  </Text>
+                  <Text
+                    style={[
+                      styles.saleSummaryValue,
+                      { color: theme.textSecondary },
+                    ]}
+                  >
+                    {formatCurrency(vatAmount)}
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.saleSummaryDivider,
+                    { backgroundColor: theme.border },
+                  ]}
+                />
+                <View style={styles.saleSummaryItem}>
+                  <Text
+                    style={[styles.saleSummaryLabel, { color: theme.primary }]}
+                  >
+                    TOTAL
+                  </Text>
+                  <Text
+                    style={[styles.saleSummaryValue, { color: theme.primary }]}
+                  >
+                    {formatCurrency(totalWithVat)}
+                  </Text>
+                </View>
+              </View>
+            )}
           </View>
 
           <TouchableOpacity
@@ -567,15 +865,7 @@ export default function TaggingScreen() {
                   params: { openScanner: "true" },
                 });
               } else {
-                isProcessing.current = false;
-                setState("scanning");
-                setBottle(null);
-                setWine(null);
-                setSelectedLocationId(null);
-                setIsIncoming(false);
-                setSuccessAction(null);
-                setSalePrice("");
-                setBuyerName("");
+                resetSellState();
               }
             }}
           >
@@ -592,15 +882,14 @@ export default function TaggingScreen() {
         </View>
       )}
 
+      {/* ── Scanner ── */}
       {state === "scanning" && (
         <View style={styles.scannerContainer}>
           <CameraView
             style={styles.camera}
             facing="back"
             onBarcodeScanned={handleBarcodeScanned}
-            barcodeScannerSettings={{
-              barcodeTypes: ["qr"],
-            }}
+            barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
           >
             <View style={styles.overlay}>
               <View style={styles.scanTargetContainer}>
@@ -629,6 +918,7 @@ export default function TaggingScreen() {
         </View>
       )}
 
+      {/* ── Displaying / Updating ── */}
       {(state === "displaying" || state === "updating") && (
         <View
           style={[
@@ -636,6 +926,7 @@ export default function TaggingScreen() {
             { backgroundColor: theme.background },
           ]}
         >
+          {/* Header */}
           <View
             style={[
               styles.header,
@@ -680,6 +971,7 @@ export default function TaggingScreen() {
             </Text>
           </View>
 
+          {/* Wine info card */}
           <View
             style={[
               styles.card,
@@ -698,6 +990,17 @@ export default function TaggingScreen() {
               <Text style={[styles.skuLabel, { color: theme.textSecondary }]}>
                 BOTTLE ID: {bottle?.id.toUpperCase()}
               </Text>
+              {isFastMoving && mode === "sell" && (
+                <View
+                  style={[
+                    styles.fastMovingChip,
+                    { backgroundColor: "#f59e0b18", borderColor: "#f59e0b40" },
+                  ]}
+                >
+                  <Zap size={10} color="#f59e0b" />
+                  <Text style={styles.fastMovingChipText}>FAST MOVING</Text>
+                </View>
+              )}
             </View>
             <Text style={[styles.wineName, { color: theme.text }]}>
               {wine?.name || "Processing..."}
@@ -731,6 +1034,7 @@ export default function TaggingScreen() {
             </View>
           </View>
 
+          {/* ── Status-based content ── */}
           {bottle?.status === "consumed" ? (
             <View style={styles.incomingWarningContainer}>
               <AlertTriangle size={48} color="#f59e0b" strokeWidth={1.5} />
@@ -738,25 +1042,15 @@ export default function TaggingScreen() {
                 Bottle Already {mode === "sell" ? "Sold" : "Consumed"}
               </Text>
               <Text style={styles.incomingWarningText}>
-                This bottle is already marked as &apos;consumed&apos; and cannot
-                be processed again.
+                This bottle is already marked as 'consumed' and cannot be
+                processed again.
               </Text>
               <TouchableOpacity
                 style={[
                   styles.onboardingButton,
                   { backgroundColor: theme.primary },
                 ]}
-                onPress={() => {
-                  isProcessing.current = false;
-                  setState("scanning");
-                  setBottle(null);
-                  setWine(null);
-                  setSelectedLocationId(null);
-                  setIsIncoming(false);
-                  setSuccessAction(null);
-                  setSalePrice("");
-                  setBuyerName("");
-                }}
+                onPress={resetSellState}
               >
                 <Text style={styles.onboardingButtonText}>
                   SCAN ANOTHER BOTTLE
@@ -771,7 +1065,7 @@ export default function TaggingScreen() {
               </Text>
               <Text style={styles.incomingWarningText}>
                 This bottle is currently marked as incoming. You need to verify
-                the sticker first before it can be tagged to a location.
+                the sticker first before it can be tagged.
               </Text>
               <TouchableOpacity
                 style={[
@@ -796,8 +1090,8 @@ export default function TaggingScreen() {
               <AlertTriangle size={48} color="#f59e0b" strokeWidth={1.5} />
               <Text style={styles.incomingWarningTitle}>Transfer Required</Text>
               <Text style={styles.incomingWarningText}>
-                This bottle is not marked as outbound to your store. It must be
-                dispatched from its current location before it can be received.
+                This bottle must be dispatched from its current location before
+                it can be received here.
               </Text>
               <TouchableOpacity
                 style={[
@@ -861,49 +1155,100 @@ export default function TaggingScreen() {
               </View>
             </View>
           ) : mode === "sell" ? (
+            /* ── Sell mode ── */
             <ScrollView showsVerticalScrollIndicator={false}>
-              <View style={{ paddingTop: 16, paddingBottom: 120 }}>
-                <View style={[styles.sectionHeader, { paddingHorizontal: 24 }]}>
-                  <View
-                    style={{
-                      flex: 1,
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: 10,
-                    }}
-                  >
-                    <Wine size={18} color="#64748b" />
-                    <Text style={styles.sectionTitle}>
-                      Confirm Sale Details
+              <View style={{ paddingBottom: 160 }}>
+                {/* Price input section */}
+                <View style={styles.sellSection}>
+                  <View style={styles.sellSectionHeader}>
+                    <Tag size={15} color={theme.primary} />
+                    <Text
+                      style={[styles.sellSectionTitle, { color: theme.text }]}
+                    >
+                      Sale Price
                     </Text>
+                    {isFastMoving && (
+                      <Text
+                        style={[styles.autoFilledHint, { color: "#f59e0b" }]}
+                      >
+                        ✦ Auto-filled
+                      </Text>
+                    )}
                   </View>
+                  <View
+                    style={[
+                      styles.priceInputWrapper,
+                      {
+                        backgroundColor: theme.card,
+                        borderColor: salePrice
+                          ? theme.primary + "60"
+                          : theme.border,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.currencySymbol,
+                        { color: theme.textSecondary },
+                      ]}
+                    >
+                      ₱
+                    </Text>
+                    <TextInput
+                      style={[styles.priceInput, { color: theme.text }]}
+                      placeholder="0.00"
+                      placeholderTextColor={theme.textSecondary}
+                      keyboardType="decimal-pad"
+                      value={salePrice}
+                      onChangeText={setSalePrice}
+                    />
+                  </View>
+                  {!isFastMoving && (
+                    <Text
+                      style={[styles.priceHint, { color: theme.textSecondary }]}
+                    >
+                      Enter the agreed sale price for this bottle.
+                    </Text>
+                  )}
                 </View>
 
-                <View style={{ paddingHorizontal: 24 }}>
-                  <Text style={[styles.modalLabel, { marginBottom: 8 }]}>
-                    SALE PRICE ($)
-                  </Text>
+                {/* VAT Breakdown Card */}
+                <VatBreakdownCard
+                  basePrice={salePrice}
+                  theme={theme}
+                  isFastMoving={isFastMoving}
+                />
+
+                {/* Buyer name */}
+                <View style={styles.sellSection}>
+                  <View style={styles.sellSectionHeader}>
+                    <User size={15} color={theme.textSecondary} />
+                    <Text
+                      style={[styles.sellSectionTitle, { color: theme.text }]}
+                    >
+                      Buyer Name
+                      <Text
+                        style={[
+                          styles.optionalLabel,
+                          { color: theme.textSecondary },
+                        ]}
+                      >
+                        {" "}
+                        (optional)
+                      </Text>
+                    </Text>
+                  </View>
                   <TextInput
                     style={[
-                      styles.modalInput,
-                      { color: theme.text, borderColor: theme.border },
+                      styles.buyerInput,
+                      {
+                        color: theme.text,
+                        backgroundColor: theme.card,
+                        borderColor: theme.border,
+                      },
                     ]}
-                    placeholder="e.g. 120.00"
-                    placeholderTextColor="#475569"
-                    keyboardType="decimal-pad"
-                    value={salePrice}
-                    onChangeText={setSalePrice}
-                  />
-                  <Text style={[styles.modalLabel, { marginBottom: 8 }]}>
-                    BUYER NAME (OPTIONAL)
-                  </Text>
-                  <TextInput
-                    style={[
-                      styles.modalInput,
-                      { color: theme.text, borderColor: theme.border },
-                    ]}
-                    placeholder="e.g. John Doe"
-                    placeholderTextColor="#475569"
+                    placeholder="e.g. Juan dela Cruz"
+                    placeholderTextColor={theme.textSecondary}
                     value={buyerName}
                     onChangeText={setBuyerName}
                     autoCapitalize="words"
@@ -912,6 +1257,7 @@ export default function TaggingScreen() {
               </View>
             </ScrollView>
           ) : (
+            /* ── Tag location mode ── */
             <>
               {isStore && (
                 <View
@@ -931,8 +1277,8 @@ export default function TaggingScreen() {
                       Store Actions
                     </Text>
                     <Text style={styles.infoBannerText}>
-                      This item is active in your inventory. You can mark it as
-                      sold instantly, or select a physical bin below.
+                      This item is active in your inventory. Select a physical
+                      bin below.
                     </Text>
                   </View>
                 </View>
@@ -1054,14 +1400,44 @@ export default function TaggingScreen() {
             </>
           )}
 
-          <View style={styles.footer}>
+          {/* ── Footer ── */}
+          <View style={[styles.footer, { backgroundColor: theme.background }]}>
             {bottle?.status !== "incoming" &&
               bottle?.status !== "consumed" &&
               !(isStore && isIncoming && bottle?.status !== "outbound") && (
                 <>
                   {mode === "sell" ? (
-                    <>
-                      {isStore && (
+                    isStore && (
+                      <>
+                        {/* Inline price summary strip above button */}
+                        {numericBase > 0 && (
+                          <View
+                            style={[
+                              styles.footerPriceSummary,
+                              {
+                                backgroundColor: theme.card,
+                                borderColor: theme.border,
+                              },
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.footerPriceLabel,
+                                { color: theme.textSecondary },
+                              ]}
+                            >
+                              Total incl. VAT
+                            </Text>
+                            <Text
+                              style={[
+                                styles.footerPriceValue,
+                                { color: theme.primary },
+                              ]}
+                            >
+                              {formatCurrency(totalWithVat)}
+                            </Text>
+                          </View>
+                        )}
                         <TouchableOpacity
                           style={[
                             styles.confirmButton,
@@ -1077,74 +1453,68 @@ export default function TaggingScreen() {
                             <>
                               <Wine size={24} color="#fff" strokeWidth={2.5} />
                               <Text style={styles.confirmButtonText}>
-                                MARK AS SOLD
+                                CONFIRM SALE
                               </Text>
                             </>
                           )}
                         </TouchableOpacity>
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      {isIncoming ? (
-                        <TouchableOpacity
-                          style={[
-                            styles.confirmButton,
-                            { backgroundColor: "#059669" }, // Emerald-600
-                            state === "updating" && styles.buttonDisabled,
-                          ]}
-                          onPress={handleReceiveStock}
-                          disabled={state === "updating"}
-                        >
-                          {state === "updating" ? (
-                            <ActivityIndicator color="#fff" size="small" />
-                          ) : (
-                            <>
-                              <CheckCircle2
-                                size={24}
-                                color="#fff"
-                                strokeWidth={2.5}
-                              />
-                              <Text style={styles.confirmButtonText}>
-                                RECEIVE INTO STORE
-                              </Text>
-                            </>
-                          )}
-                        </TouchableOpacity>
+                      </>
+                    )
+                  ) : isIncoming ? (
+                    <TouchableOpacity
+                      style={[
+                        styles.confirmButton,
+                        { backgroundColor: "#059669" },
+                        state === "updating" && styles.buttonDisabled,
+                      ]}
+                      onPress={handleReceiveStock}
+                      disabled={state === "updating"}
+                    >
+                      {state === "updating" ? (
+                        <ActivityIndicator color="#fff" size="small" />
                       ) : (
-                        <TouchableOpacity
-                          style={[
-                            styles.confirmButton,
-                            {
-                              backgroundColor: isStore
-                                ? theme.secondary
-                                : "#10b981",
-                            },
-                            (!selectedLocationId || state === "updating") &&
-                              styles.buttonDisabled,
-                          ]}
-                          onPress={handleConfirmTagging}
-                          disabled={!selectedLocationId || state === "updating"}
-                        >
-                          {state === "updating" ? (
-                            <ActivityIndicator color="#fff" size="small" />
-                          ) : (
-                            <>
-                              <CheckCircle2
-                                size={24}
-                                color="#fff"
-                                strokeWidth={2.5}
-                              />
-                              <Text style={styles.confirmButtonText}>
-                                {isStore
-                                  ? "UPDATE LOCATION"
-                                  : "FINALIZE SHELVING"}
-                              </Text>
-                            </>
-                          )}
-                        </TouchableOpacity>
+                        <>
+                          <CheckCircle2
+                            size={24}
+                            color="#fff"
+                            strokeWidth={2.5}
+                          />
+                          <Text style={styles.confirmButtonText}>
+                            RECEIVE INTO STORE
+                          </Text>
+                        </>
                       )}
-                    </>
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity
+                      style={[
+                        styles.confirmButton,
+                        {
+                          backgroundColor: isStore
+                            ? theme.secondary
+                            : "#10b981",
+                        },
+                        (!selectedLocationId || state === "updating") &&
+                          styles.buttonDisabled,
+                      ]}
+                      onPress={handleConfirmTagging}
+                      disabled={!selectedLocationId || state === "updating"}
+                    >
+                      {state === "updating" ? (
+                        <ActivityIndicator color="#fff" size="small" />
+                      ) : (
+                        <>
+                          <CheckCircle2
+                            size={24}
+                            color="#fff"
+                            strokeWidth={2.5}
+                          />
+                          <Text style={styles.confirmButtonText}>
+                            {isStore ? "UPDATE LOCATION" : "FINALIZE SHELVING"}
+                          </Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
                   )}
                 </>
               )}
@@ -1152,11 +1522,11 @@ export default function TaggingScreen() {
         </View>
       )}
 
-      {/* Add Location Modal */}
+      {/* ── Add Location Modal ── */}
       <Modal
         visible={isAddModalOpen}
         animationType="slide"
-        transparent={true}
+        transparent
         onRequestClose={() => setIsAddModalOpen(false)}
       >
         <View style={styles.modalOverlay}>
@@ -1290,7 +1660,7 @@ export default function TaggingScreen() {
         </View>
       </Modal>
 
-      {/* Snackbar */}
+      {/* ── Snackbar ── */}
       {snackbarMessage && (
         <Animated.View
           style={[
@@ -1310,10 +1680,7 @@ export default function TaggingScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#0f172a",
-  },
+  container: { flex: 1, backgroundColor: "#0f172a" },
   permissionContainer: {
     flex: 1,
     justifyContent: "center",
@@ -1369,9 +1736,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(16, 185, 129, 0.05)",
     borderRadius: 32,
   },
-  centerIcon: {
-    position: "absolute",
-  },
+  centerIcon: { position: "absolute" },
   corner: {
     position: "absolute",
     width: 40,
@@ -1429,11 +1794,7 @@ const styles = StyleSheet.create({
     borderColor: "#334155",
   },
   detailsContainer: { flex: 1, padding: 24 },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 32,
-  },
+  header: { flexDirection: "row", alignItems: "center", marginBottom: 24 },
   backButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -1461,9 +1822,9 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: "#1e293b",
-    borderRadius: 24,
-    padding: 24,
-    marginBottom: 32,
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 24,
     borderWidth: 1,
     borderColor: "#334155",
   },
@@ -1475,19 +1836,74 @@ const styles = StyleSheet.create({
   },
   wineName: {
     color: "#fff",
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: "900",
-    marginBottom: 8,
+    marginBottom: 6,
     letterSpacing: -0.5,
   },
   wineMetaRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 8,
+    flexWrap: "wrap",
   },
-  wineVintage: { color: "#6366f1", fontSize: 16, fontWeight: "800" },
-  metaDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: "#334155" },
-  wineProducer: { color: "#64748b", fontSize: 14, fontWeight: "600" },
+  wineVintage: { fontSize: 14, fontWeight: "800" },
+  metaDot: { width: 4, height: 4, borderRadius: 2 },
+  wineProducer: { fontSize: 13, fontWeight: "600" },
+  wineFormat: { fontSize: 13, fontWeight: "700" },
+  fastMovingChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    marginLeft: "auto",
+  },
+  fastMovingChipText: {
+    color: "#f59e0b",
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 0.5,
+  },
+
+  // Sell mode
+  sellSection: { marginBottom: 20 },
+  sellSectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 12,
+  },
+  sellSectionTitle: { fontSize: 14, fontWeight: "800" },
+  autoFilledHint: { fontSize: 11, fontWeight: "700", marginLeft: "auto" },
+  optionalLabel: { fontSize: 13, fontWeight: "600" },
+  priceInputWrapper: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 16,
+    borderWidth: 1.5,
+    paddingHorizontal: 18,
+    height: 64,
+  },
+  currencySymbol: { fontSize: 22, fontWeight: "900", marginRight: 8 },
+  priceInput: { flex: 1, fontSize: 28, fontWeight: "900", letterSpacing: -0.5 },
+  priceHint: {
+    fontSize: 12,
+    fontWeight: "600",
+    marginTop: 8,
+    paddingHorizontal: 4,
+  },
+  buyerInput: {
+    height: 56,
+    borderWidth: 1.5,
+    borderRadius: 16,
+    paddingHorizontal: 18,
+    fontSize: 15,
+    fontWeight: "700",
+  },
+
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -1510,16 +1926,12 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1.5,
   },
-  addLocationText: {
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 1,
-  },
+  addLocationText: { fontSize: 10, fontWeight: "900", letterSpacing: 1 },
   locationList: { paddingBottom: 120 },
   locationRow: { justifyContent: "space-between", gap: 12 },
   locationItem: {
     backgroundColor: "#1e293b",
-    borderRadius: 24,
+    borderRadius: 20,
     padding: 20,
     marginBottom: 12,
     flex: 1,
@@ -1530,7 +1942,6 @@ const styles = StyleSheet.create({
   },
   locationItemSelected: {
     borderColor: "#4f46e5",
-    backgroundColor: "#1e293b",
     shadowColor: "#4f46e5",
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.2,
@@ -1552,10 +1963,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 4,
   },
-  locationPrefix: {
-    fontSize: 20,
-    fontWeight: "900",
-  },
+  locationPrefix: { fontSize: 20, fontWeight: "900" },
   locationType: {
     color: "#475569",
     fontSize: 9,
@@ -1569,232 +1977,55 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     textAlign: "center",
   },
+
   footer: {
     position: "absolute",
     bottom: 0,
     left: 0,
     right: 0,
-    padding: 24,
-    backgroundColor: "transparent",
+    padding: 20,
+    paddingBottom: 28,
   },
+  footerPriceSummary: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginBottom: 10,
+  },
+  footerPriceLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  footerPriceValue: { fontSize: 20, fontWeight: "900", letterSpacing: -0.5 },
   confirmButton: {
-    backgroundColor: "#10b981",
-    height: 72,
-    borderRadius: 24,
+    height: 68,
+    borderRadius: 22,
     justifyContent: "center",
     alignItems: "center",
     flexDirection: "row",
     gap: 12,
     shadowColor: "#10b981",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
     elevation: 8,
   },
   confirmButtonText: {
     color: "#fff",
-    fontSize: 16,
-    fontWeight: "900",
-    textTransform: "uppercase",
-    letterSpacing: 1.5,
-  },
-  soldButton: {
-    height: 72,
-    borderRadius: 24,
-    justifyContent: "center",
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-    elevation: 4,
-  },
-  buttonDisabled: { opacity: 0.3 },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    justifyContent: "flex-end",
-  },
-  modalContent: {
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
-    padding: 32,
-    minHeight: "60%",
-  },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 32,
-  },
-  modalTitle: {
-    fontSize: 24,
-    fontWeight: "900",
-    letterSpacing: -0.5,
-  },
-  modalSubtitle: {
-    color: "#64748b",
-    fontSize: 13,
-    fontWeight: "600",
-    marginTop: 4,
-  },
-  modalClose: {
-    padding: 8,
-  },
-  modalForm: {
-    flex: 1,
-  },
-  modalLabel: {
-    color: "#64748b",
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 1.5,
-    marginBottom: 12,
-  },
-  catGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-    marginBottom: 24,
-  },
-  catItem: {
-    flex: 1,
-    minWidth: "30%",
-    alignItems: "center",
-    padding: 12,
-    borderRadius: 16,
-    borderWidth: 1.5,
-    gap: 6,
-  },
-  catIcon: {
-    fontSize: 20,
-  },
-  catLabel: {
-    fontSize: 9,
-    fontWeight: "900",
-    color: "#64748b",
-    textTransform: "uppercase",
-  },
-  inputRow: {
-    flexDirection: "row",
-    gap: 16,
-    marginBottom: 24,
-  },
-  modalInput: {
-    height: 60,
-    borderWidth: 1.5,
-    borderRadius: 16,
-    paddingHorizontal: 20,
-    fontSize: 16,
-    fontWeight: "700",
-    marginBottom: 24,
-  },
-  previewContainer: {
-    backgroundColor: "#0f172a",
-    padding: 24,
-    borderRadius: 24,
-    alignItems: "center",
-    marginBottom: 32,
-  },
-  previewLabel: {
-    color: "rgba(255,255,255,0.4)",
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 1,
-    marginBottom: 8,
-  },
-  previewCode: {
-    fontSize: 32,
-    fontWeight: "900",
-    letterSpacing: -1,
-  },
-  saveButton: {
-    height: 64,
-    borderRadius: 20,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 12,
-  },
-  saveButtonText: {
-    color: "#fff",
     fontSize: 15,
     fontWeight: "900",
-    letterSpacing: 1,
-  },
-  incomingWarningContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(245, 158, 11, 0.05)",
-    borderRadius: 32,
-    padding: 32,
-    marginTop: 20,
-    borderWidth: 2,
-    borderColor: "#f59e0b",
-    borderStyle: "dashed",
-    gap: 16,
-  },
-  incomingWarningTitle: {
-    color: "#f59e0b",
-    fontSize: 22,
-    fontWeight: "900",
     textTransform: "uppercase",
-    letterSpacing: -0.5,
-  },
-  incomingWarningText: {
-    color: "#94a3b8",
-    fontSize: 16,
-    fontWeight: "600",
-    textAlign: "center",
-    lineHeight: 24,
-    maxWidth: "80%",
-  },
-  onboardingButton: {
-    marginTop: 24,
-    paddingHorizontal: 32,
-    paddingVertical: 18,
-    borderRadius: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 4,
-  },
-  onboardingButtonText: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "900",
     letterSpacing: 1.5,
   },
-  wineFormat: {
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  infoBanner: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 16,
-    borderRadius: 16,
-    borderWidth: 1,
-    gap: 16,
-    marginBottom: 24,
-  },
-  infoBannerTitle: {
-    fontSize: 13,
-    fontWeight: "900",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-    marginBottom: 4,
-  },
-  infoBannerText: {
-    color: "#94a3b8",
-    fontSize: 12,
-    lineHeight: 18,
-    fontWeight: "600",
-  },
+  buttonDisabled: { opacity: 0.3 },
+
+  // Success
   successContainer: {
     flex: 1,
     padding: 40,
@@ -1832,6 +2063,23 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: "center",
   },
+  saleSummaryRow: {
+    flexDirection: "row",
+    width: "100%",
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    justifyContent: "space-around",
+  },
+  saleSummaryItem: { alignItems: "center", gap: 4 },
+  saleSummaryLabel: {
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 1,
+    textTransform: "uppercase",
+  },
+  saleSummaryValue: { fontSize: 14, fontWeight: "800" },
+  saleSummaryDivider: { width: 1, height: "100%" },
   mainButton: {
     width: "100%",
     flexDirection: "row",
@@ -1842,11 +2090,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 12,
   },
-  mainButtonText: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "900",
-  },
+  mainButtonText: { color: "#fff", fontSize: 18, fontWeight: "900" },
   secondaryButton: {
     width: "100%",
     padding: 20,
@@ -1854,11 +2098,174 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  secondaryButtonText: {
-    color: "#64748b",
-    fontSize: 16,
-    fontWeight: "800",
+  secondaryButtonText: { color: "#64748b", fontSize: 16, fontWeight: "800" },
+
+  // Warnings
+  incomingWarningContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(245, 158, 11, 0.05)",
+    borderRadius: 32,
+    padding: 32,
+    marginTop: 8,
+    borderWidth: 2,
+    borderColor: "#f59e0b",
+    borderStyle: "dashed",
+    gap: 16,
   },
+  incomingWarningTitle: {
+    color: "#f59e0b",
+    fontSize: 22,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: -0.5,
+  },
+  incomingWarningText: {
+    color: "#94a3b8",
+    fontSize: 16,
+    fontWeight: "600",
+    textAlign: "center",
+    lineHeight: 24,
+    maxWidth: "80%",
+  },
+  onboardingButton: {
+    marginTop: 24,
+    paddingHorizontal: 32,
+    paddingVertical: 18,
+    borderRadius: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  onboardingButtonText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "900",
+    letterSpacing: 1.5,
+  },
+  infoBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 16,
+    marginBottom: 24,
+  },
+  infoBannerTitle: {
+    fontSize: 13,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  infoBannerText: {
+    color: "#94a3b8",
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: "600",
+  },
+
+  // Add location modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "flex-end",
+  },
+  modalContent: {
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    padding: 32,
+    minHeight: "60%",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 32,
+  },
+  modalTitle: { fontSize: 24, fontWeight: "900", letterSpacing: -0.5 },
+  modalSubtitle: {
+    color: "#64748b",
+    fontSize: 13,
+    fontWeight: "600",
+    marginTop: 4,
+  },
+  modalClose: { padding: 8 },
+  modalForm: { flex: 1 },
+  modalLabel: {
+    color: "#64748b",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1.5,
+    marginBottom: 12,
+  },
+  catGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginBottom: 24,
+  },
+  catItem: {
+    flex: 1,
+    minWidth: "30%",
+    alignItems: "center",
+    padding: 12,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    gap: 6,
+  },
+  catIcon: { fontSize: 20 },
+  catLabel: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: "#64748b",
+    textTransform: "uppercase",
+  },
+  inputRow: { flexDirection: "row", gap: 16, marginBottom: 24 },
+  modalInput: {
+    height: 60,
+    borderWidth: 1.5,
+    borderRadius: 16,
+    paddingHorizontal: 20,
+    fontSize: 16,
+    fontWeight: "700",
+    marginBottom: 24,
+  },
+  previewContainer: {
+    backgroundColor: "#0f172a",
+    padding: 24,
+    borderRadius: 24,
+    alignItems: "center",
+    marginBottom: 32,
+  },
+  previewLabel: {
+    color: "rgba(255,255,255,0.4)",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1,
+    marginBottom: 8,
+  },
+  previewCode: { fontSize: 32, fontWeight: "900", letterSpacing: -1 },
+  saveButton: {
+    height: 64,
+    borderRadius: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+  },
+  saveButtonText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "900",
+    letterSpacing: 1,
+  },
+
+  // Snackbar
   snackbar: {
     position: "absolute",
     top: 60,
@@ -1876,10 +2283,5 @@ const styles = StyleSheet.create({
     elevation: 6,
     zIndex: 999,
   },
-  snackbarText: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "600",
-    flex: 1,
-  },
+  snackbarText: { color: "#fff", fontSize: 14, fontWeight: "600", flex: 1 },
 });
