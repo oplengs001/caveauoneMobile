@@ -10,7 +10,8 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "submit-build": "npx eas-cli@latest build --platform all --auto-submit",
-    "ios-device": "expo run:ios --device"
+    "ios-device": "expo run:ios --device",
+    "eas-update": "npx eas-cli update --channel production"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
