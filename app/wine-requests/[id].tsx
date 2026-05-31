@@ -483,8 +483,7 @@ export default function WineRequestDetail() {
           </View>
         )}
       </ScrollView>
-      {(request.status === "converted" ||
-        request.status === "receiving" ||
+      {(request.status === "receiving" ||
         (request.status === "ingress_complete" &&
           !request.items.every((i) => (i.ingressedQty || 0) >= i.qty))) && (
         <View style={styles.footer}>

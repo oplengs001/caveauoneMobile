@@ -20,18 +20,22 @@ import {
   Box,
   Calendar,
   Check,
+  ChevronDown,
   ChevronLeft,
   Filter,
   Globe,
   Grape,
+  Hash,
+  MapPin,
   Scan,
   Search as SearchIcon,
   WineIcon,
   X,
 } from "lucide-react-native";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
   FlatList,
   Modal,
   RefreshControl,
@@ -45,7 +49,6 @@ import {
 } from "react-native";
 import { InventoryBottle, Location, MasterWine } from "../../types";
 
-// A mapped type that includes the resolved master wine and location data
 type BottleView = InventoryBottle & {
   masterWineData?: MasterWine;
   locationData?: Location;
@@ -53,239 +56,97 @@ type BottleView = InventoryBottle & {
 
 const PAGE_SIZE = 20;
 
-export default function InventoryScreen() {
-  const { profile } = useAuth();
-  const theme = profile?.role === "store" ? Colors.store : Colors.warehouse;
-  const isStore = profile?.role === "store";
+// ─── Expandable Wine Card ──────────────────────────────────────────────────────
 
-  const [bottles, setBottles] = useState<BottleView[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [lastDoc, setLastDoc] = useState<QueryDocumentSnapshot | null>(null);
-  const [hasMore, setHasMore] = useState(true);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [refreshing, setRefreshing] = useState(false);
-  const router = useRouter();
-  const [sections, setSections] = useState<
-    { title: string; masterWineData?: MasterWine; data: BottleView[] }[]
-  >([]);
+function WineCard({
+  item,
+  theme,
+}: {
+  item: { title: string; masterWineData?: MasterWine; data: BottleView[] };
+  theme: any;
+}) {
+  const { masterWineData, data: bottles } = item;
+  const stockCount = bottles.length;
+  const [expanded, setExpanded] = useState(false);
+  const rotateAnim = useRef(new Animated.Value(0)).current;
+  const heightAnim = useRef(new Animated.Value(0)).current;
 
-  const [sortBy, setSortBy] = useState<
-    "name_asc" | "name_desc" | "stock_desc" | "stock_asc"
-  >("name_asc");
-  const [filterType, setFilterType] = useState<string | null>(null);
-  const [isSortModalOpen, setIsSortModalOpen] = useState(false);
-  const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
+  if (!masterWineData) return null;
 
-  const [wineCache] = useState(new Map<string, MasterWine>());
-  const [locationCache] = useState(new Map<string, Location>());
+  const locationCounts = bottles.reduce(
+    (acc, bottle) => {
+      const locName = bottle.locationData?.name || "Unassigned";
+      acc[locName] = (acc[locName] || 0) + 1;
+      return acc;
+    },
+    {} as Record<string, number>,
+  );
 
-  const fetchInventory = async (isRefresh = false) => {
-    if (loadingMore || (!hasMore && !isRefresh)) return;
-
-    if (isRefresh) {
-      setRefreshing(true);
-      setHasMore(true);
-    } else {
-      if (bottles.length > 0) setLoadingMore(true);
-      else setLoading(true);
-    }
-
-    try {
-      const bottlesRef = collection(db, "inventory_bottles");
-      const baseQueries = [];
-
-      // Boutique Scoping: If store user, only show their node's inventory
-      if (isStore && profile?.locationId) {
-        baseQueries.push(
-          where("storeRef", "==", doc(db, "stores", profile.locationId)),
-        );
-      }
-
-      const isSearching = searchQuery.trim().length > 0;
-      const fetchLimit = isSearching ? 200 : PAGE_SIZE;
-
-      let q = query(
-        bottlesRef,
-        ...baseQueries,
-        orderBy("createdAt", "desc"),
-        limit(fetchLimit),
-      );
-
-      if (!isRefresh && lastDoc && !isSearching) {
-        q = query(
-          bottlesRef,
-          ...baseQueries,
-          orderBy("createdAt", "desc"),
-          startAfter(lastDoc),
-          limit(PAGE_SIZE),
-        );
-      }
-
-      const snap = await getDocs(q);
-
-      const resolved = await Promise.all(
-        snap.docs.map(async (docSnap) => {
-          const data = docSnap.data();
-          let masterWineData = wineCache.get(data.masterWineRef?.id);
-          let locationData = locationCache.get(data.locationRef?.id);
-
-          if (!masterWineData && data.masterWineRef) {
-            const wSnap = await getDoc(data.masterWineRef);
-            if (wSnap.exists()) {
-              masterWineData = {
-                id: wSnap.id,
-                ...(wSnap.data() as object),
-              } as MasterWine;
-              wineCache.set(wSnap.id, masterWineData);
-            }
-          }
-
-          if (!locationData && data.locationRef) {
-            const lSnap = await getDoc(data.locationRef);
-            if (lSnap.exists()) {
-              locationData = {
-                id: lSnap.id,
-                ...(lSnap.data() as object),
-              } as Location;
-              locationCache.set(lSnap.id, locationData);
-            }
-          }
-
-          return {
-            id: docSnap.id,
-            ...(data as object),
-            createdAt: data.createdAt?.toDate() || new Date(),
-            updatedAt: data.updatedAt?.toDate() || new Date(),
-            masterWineData,
-            locationData,
-          } as BottleView;
-        }),
-      );
-
-      if (isSearching) {
-        const queryLower = searchQuery.toLowerCase();
-        resolved.filter((b) => {
-          return (
-            b.sku?.toLowerCase().includes(queryLower) ||
-            b.masterWineData?.name?.toLowerCase().includes(queryLower) ||
-            b.masterWineData?.producer?.toLowerCase().includes(queryLower)
-          );
-        });
-      }
-
-      if (isRefresh) {
-        setBottles(resolved);
-        setLastDoc(snap.docs[snap.docs.length - 1]);
-        setHasMore(snap.docs.length === PAGE_SIZE);
-      } else {
-        setBottles((prev) => [...prev, ...resolved]);
-        if (snap.docs.length > 0) {
-          setLastDoc(snap.docs[snap.docs.length - 1]);
-        }
-        setHasMore(snap.docs.length === PAGE_SIZE);
-      }
-    } catch (error) {
-      console.error("Error fetching inventory: ", error);
-    } finally {
-      setLoading(false);
-      setLoadingMore(false);
-      setRefreshing(false);
-    }
+  const toggleExpand = () => {
+    const toValue = expanded ? 0 : 1;
+    Animated.parallel([
+      Animated.spring(rotateAnim, {
+        toValue,
+        useNativeDriver: true,
+        tension: 80,
+        friction: 10,
+      }),
+      Animated.spring(heightAnim, {
+        toValue,
+        useNativeDriver: false,
+        tension: 60,
+        friction: 12,
+      }),
+    ]).start();
+    setExpanded(!expanded);
   };
 
-  useEffect(() => {
-    const delayDebounce = setTimeout(() => {
-      fetchInventory(true);
-    }, 500);
-    return () => clearTimeout(delayDebounce);
-  }, [searchQuery]);
+  const chevronRotate = rotateAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0deg", "180deg"],
+  });
 
-  useEffect(() => {
-    // 1. Filter by wine type
-    const filteredBottles = filterType
-      ? bottles.filter((b) => b.masterWineData?.type === filterType)
-      : bottles;
+  const maxHeight = heightAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, bottles.length * 52 + 24],
+  });
 
-    const grouped = filteredBottles.reduce(
-      (
-        acc,
-        bottle,
-      ): Record<
-        string,
-        { title: string; masterWineData?: MasterWine; data: BottleView[] }
-      > => {
-        const wineId = bottle.masterWineRef?.id || "unknown";
-        if (!acc[wineId]) {
-          acc[wineId] = {
-            title: bottle.masterWineData?.name || "Unknown Wine",
-            masterWineData: bottle.masterWineData,
-            data: [],
-          };
-        }
-        acc[wineId].data.push(bottle);
-        return acc;
-      },
-      {},
-    );
-
-    const groupsArray = Object.values(grouped);
-
-    // 2. Sort
-    if (sortBy === "name_asc") {
-      groupsArray.sort((a, b) => a.title.localeCompare(b.title));
-    } else if (sortBy === "name_desc") {
-      groupsArray.sort((a, b) => b.title.localeCompare(a.title));
-    } else if (sortBy === "stock_desc") {
-      groupsArray.sort((a, b) => b.data.length - a.data.length);
-    } else if (sortBy === "stock_asc") {
-      groupsArray.sort((a, b) => a.data.length - b.data.length);
-    }
-
-    setSections(groupsArray);
-  }, [bottles, sortBy, filterType]);
-
-  const onRefresh = useCallback(() => {
-    fetchInventory(true);
-  }, [searchQuery]);
-
-  const renderItem = ({
-    item,
-  }: {
-    item: { title: string; masterWineData?: MasterWine; data: BottleView[] };
-  }) => {
-    const { masterWineData, data: bottles } = item;
-    const stockCount = bottles.length;
-
-    if (!masterWineData) {
-      return null; // Or a placeholder
-    }
-
-    const locationCounts = bottles.reduce(
-      (acc, bottle) => {
-        const locName = bottle.locationData?.name || "Unassigned";
-        acc[locName] = (acc[locName] || 0) + 1;
-        return acc;
-      },
-      {} as Record<string, number>,
-    );
-
-    return (
-      <View
-        style={[
-          styles.itemContainer,
-          { backgroundColor: theme.card, borderColor: theme.border },
-        ]}
+  return (
+    <View
+      style={[
+        styles.itemContainer,
+        {
+          backgroundColor: theme.card,
+          borderColor: expanded ? theme.primary + "60" : theme.border,
+        },
+      ]}
+    >
+      {/* ── Card Header (always visible) ── */}
+      <TouchableOpacity
+        onPress={toggleExpand}
+        activeOpacity={0.85}
+        style={styles.cardTouchable}
       >
         <View style={styles.cardBody}>
-          <View style={styles.stockInfo}>
-            <Text style={[styles.stockCount, { color: theme.text }]}>
+          {/* Stock count pill */}
+          <View
+            style={[
+              styles.stockPill,
+              {
+                backgroundColor: theme.primary + "18",
+                borderColor: theme.primary + "40",
+              },
+            ]}
+          >
+            <Text style={[styles.stockCount, { color: theme.primary }]}>
               {stockCount}
             </Text>
-            <Text style={[styles.stockLabel, { color: theme.textSecondary }]}>
-              in stock
+            <Text style={[styles.stockLabel, { color: theme.primary + "90" }]}>
+              bottles
             </Text>
           </View>
+
+          {/* Wine info */}
           <View style={styles.wineInfo}>
             <Text style={[styles.wineName, { color: theme.text }]}>
               {masterWineData.name}
@@ -299,31 +160,34 @@ export default function InventoryScreen() {
 
             <View style={styles.detailsGrid}>
               <View style={styles.detailItem}>
-                <Calendar size={14} color={theme.textSecondary} />
+                <Calendar size={12} color={theme.textSecondary} />
                 <Text style={[styles.detailText, { color: theme.text }]}>
                   {masterWineData.vintage || "N/A"}
                 </Text>
               </View>
               <View style={styles.detailItem}>
-                <BottleWine size={14} color={theme.textSecondary} />
+                <BottleWine size={12} color={theme.textSecondary} />
                 <Text style={[styles.detailText, { color: theme.text }]}>
                   {masterWineData.format || "N/A"}
                 </Text>
               </View>
               <View style={styles.detailItem}>
-                <WineIcon size={14} color={theme.textSecondary} />
+                <WineIcon size={12} color={theme.textSecondary} />
                 <Text style={[styles.detailText, { color: theme.text }]}>
                   {masterWineData.type || "N/A"}
                 </Text>
               </View>
               <View style={styles.detailItem}>
-                <Grape size={14} color={theme.textSecondary} />
-                <Text style={[styles.detailText, { color: theme.text }]}>
+                <Grape size={12} color={theme.textSecondary} />
+                <Text
+                  style={[styles.detailText, { color: theme.text }]}
+                  numberOfLines={1}
+                >
                   {masterWineData.grapeVariety || "N/A"}
                 </Text>
               </View>
               <View style={styles.detailItem}>
-                <Globe size={14} color={theme.textSecondary} />
+                <Globe size={12} color={theme.textSecondary} />
                 <Text
                   style={[styles.detailText, { color: theme.text }]}
                   numberOfLines={1}
@@ -335,6 +199,7 @@ export default function InventoryScreen() {
               </View>
             </View>
 
+            {/* Location pills */}
             {Object.keys(locationCounts).length > 0 && (
               <View style={styles.locationsContainer}>
                 {Object.entries(locationCounts).map(([locName, count]) => (
@@ -366,10 +231,312 @@ export default function InventoryScreen() {
               </View>
             )}
           </View>
+
+          {/* Expand toggle icon */}
+          <Animated.View style={{ transform: [{ rotate: chevronRotate }] }}>
+            <ChevronDown size={20} color={theme.textSecondary} />
+          </Animated.View>
         </View>
-      </View>
+      </TouchableOpacity>
+
+      {/* ── Expandable Bottle List ── */}
+      <Animated.View style={[styles.bottleListWrapper, { maxHeight }]}>
+        <View
+          style={[styles.bottleDivider, { borderTopColor: theme.border }]}
+        />
+        <View style={styles.bottleListHeader}>
+          <Hash size={12} color={theme.textSecondary} />
+          <Text
+            style={[styles.bottleListTitle, { color: theme.textSecondary }]}
+          >
+            Individual Bottles
+          </Text>
+        </View>
+        {bottles.map((bottle, index) => (
+          <View
+            key={bottle.id}
+            style={[
+              styles.bottleRow,
+              index < bottles.length - 1 && {
+                borderBottomWidth: 1,
+                borderBottomColor: theme.border + "60",
+              },
+            ]}
+          >
+            {/* Index number */}
+            <View
+              style={[
+                styles.bottleIndex,
+                { backgroundColor: theme.border + "40" },
+              ]}
+            >
+              <Text
+                style={[styles.bottleIndexText, { color: theme.textSecondary }]}
+              >
+                {index + 1}
+              </Text>
+            </View>
+
+            {/* Bottle ID */}
+            <Text
+              style={[styles.bottleId, { color: theme.text }]}
+              numberOfLines={1}
+            >
+              {bottle.id}
+            </Text>
+
+            {/* Location badge */}
+            {bottle.locationData?.name && (
+              <View
+                style={[
+                  styles.bottleLocationBadge,
+                  { backgroundColor: theme.primary + "10" },
+                ]}
+              >
+                <MapPin size={10} color={theme.primary} />
+                <Text
+                  style={[styles.bottleLocationText, { color: theme.primary }]}
+                >
+                  {bottle.locationData.name}
+                </Text>
+              </View>
+            )}
+          </View>
+        ))}
+      </Animated.View>
+    </View>
+  );
+}
+
+// ─── Main Screen ──────────────────────────────────────────────────────────────
+
+export default function InventoryScreen() {
+  const { profile } = useAuth();
+  const theme = profile?.role === "store" ? Colors.store : Colors.warehouse;
+  const isStore = profile?.role === "store";
+
+  const [bottles, setBottles] = useState<BottleView[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
+  const router = useRouter();
+  const [sections, setSections] = useState<
+    { title: string; masterWineData?: MasterWine; data: BottleView[] }[]
+  >([]);
+
+  const [sortBy, setSortBy] = useState<
+    "name_asc" | "name_desc" | "stock_desc" | "stock_asc"
+  >("name_asc");
+  const [filterType, setFilterType] = useState<string | null>(null);
+  const [isSortModalOpen, setIsSortModalOpen] = useState(false);
+  const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
+
+  const [wineCache] = useState(new Map<string, MasterWine>());
+  const [locationCache] = useState(new Map<string, Location>());
+
+  // ── Refs so fetchInventory always reads the latest values without
+  //    being re-created on every render (avoids stale-closure bugs).
+  const isFetchingRef = useRef(false);
+  const hasMoreRef = useRef(true);
+  const lastDocRef = useRef<QueryDocumentSnapshot | null>(null);
+  const searchQueryRef = useRef(searchQuery);
+
+  // Keep the ref in sync with state so the debounced effect below
+  // can reset the cursor without a re-render race.
+  useEffect(() => {
+    searchQueryRef.current = searchQuery;
+  }, [searchQuery]);
+
+  const fetchInventory = useCallback(
+    async (isRefresh = false) => {
+      // Guard: don't stack concurrent fetches; don't paginate when nothing left.
+      if (isFetchingRef.current) return;
+      if (!isRefresh && !hasMoreRef.current) return;
+
+      isFetchingRef.current = true;
+
+      if (isRefresh) {
+        // Reset cursor synchronously via refs so the query below
+        // doesn't accidentally paginate from a stale lastDoc.
+        lastDocRef.current = null;
+        hasMoreRef.current = true;
+        // Show the full-screen spinner on first load; pull-to-refresh uses
+        // the RefreshControl spinner so we don't blank the whole list.
+        if (bottles.length === 0) setLoading(true);
+        else setRefreshing(true);
+        setBottles([]);
+      } else {
+        setLoadingMore(true);
+      }
+
+      try {
+        const bottlesRef = collection(db, "inventory_bottles");
+        const baseConstraints: any[] = [];
+
+        if (isStore && profile?.locationId) {
+          baseConstraints.push(
+            where("storeRef", "==", doc(db, "stores", profile.locationId)),
+          );
+        }
+
+        const currentSearch = searchQueryRef.current.trim();
+        const isSearching = currentSearch.length > 0;
+        const fetchLimit = isSearching ? 200 : PAGE_SIZE;
+
+        let q = query(
+          bottlesRef,
+          ...baseConstraints,
+          orderBy("createdAt", "desc"),
+          limit(fetchLimit),
+        );
+
+        // Only paginate when not refreshing, not searching, and cursor exists.
+        if (!isRefresh && !isSearching && lastDocRef.current) {
+          q = query(
+            bottlesRef,
+            ...baseConstraints,
+            orderBy("createdAt", "desc"),
+            startAfter(lastDocRef.current),
+            limit(PAGE_SIZE),
+          );
+        }
+
+        const snap = await getDocs(q);
+
+        const resolved = await Promise.all(
+          snap.docs.map(async (docSnap) => {
+            const data = docSnap.data();
+            let masterWineData = wineCache.get(data.masterWineRef?.id);
+            let locationData = locationCache.get(data.locationRef?.id);
+
+            if (!masterWineData && data.masterWineRef) {
+              const wSnap = await getDoc(data.masterWineRef);
+              if (wSnap.exists()) {
+                masterWineData = {
+                  id: wSnap.id,
+                  ...(wSnap.data() as object),
+                } as MasterWine;
+                wineCache.set(wSnap.id, masterWineData);
+              }
+            }
+
+            if (!locationData && data.locationRef) {
+              const lSnap = await getDoc(data.locationRef);
+              if (lSnap.exists()) {
+                locationData = {
+                  id: lSnap.id,
+                  ...(lSnap.data() as object),
+                } as Location;
+                locationCache.set(lSnap.id, locationData);
+              }
+            }
+
+            return {
+              id: docSnap.id,
+              ...(data as object),
+              createdAt: data.createdAt?.toDate() || new Date(),
+              updatedAt: data.updatedAt?.toDate() || new Date(),
+              masterWineData,
+              locationData,
+            } as BottleView;
+          }),
+        );
+
+        const filteredResolved = isSearching
+          ? resolved.filter((b) => {
+              const q = currentSearch.toLowerCase();
+              return (
+                b.sku?.toLowerCase().includes(q) ||
+                b.masterWineData?.name?.toLowerCase().includes(q) ||
+                b.masterWineData?.producer?.toLowerCase().includes(q)
+              );
+            })
+          : resolved;
+
+        // Advance the Firestore cursor ref before setting state.
+        const lastSnap = snap.docs[snap.docs.length - 1];
+        if (lastSnap) lastDocRef.current = lastSnap;
+        hasMoreRef.current = !isSearching && snap.docs.length === PAGE_SIZE;
+
+        setBottles((prev) =>
+          isRefresh ? filteredResolved : [...prev, ...filteredResolved],
+        );
+        setHasMore(hasMoreRef.current);
+      } catch (error) {
+        console.error("Error fetching inventory:", error);
+      } finally {
+        isFetchingRef.current = false;
+        setLoading(false);
+        setLoadingMore(false);
+        setRefreshing(false);
+      }
+    },
+    [isStore, profile?.locationId],
+  ); // stable — doesn't close over volatile state
+
+  // Initial load
+  useEffect(() => {
+    fetchInventory(true);
+  }, [fetchInventory]);
+
+  // Re-fetch (reset) whenever search query changes, debounced.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchInventory(true);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchQuery]); // intentionally uses state so the effect re-runs on each keystroke
+
+  const onRefresh = useCallback(() => {
+    fetchInventory(true);
+  }, [fetchInventory]);
+
+  useEffect(() => {
+    const filteredBottles = filterType
+      ? bottles.filter((b) => b.masterWineData?.type === filterType)
+      : bottles;
+
+    const grouped = filteredBottles.reduce(
+      (
+        acc,
+        bottle,
+      ): Record<
+        string,
+        { title: string; masterWineData?: MasterWine; data: BottleView[] }
+      > => {
+        const wineId = bottle.masterWineRef?.id || "unknown";
+        if (!acc[wineId]) {
+          acc[wineId] = {
+            title: bottle.masterWineData?.name || "Unknown Wine",
+            masterWineData: bottle.masterWineData,
+            data: [],
+          };
+        }
+        acc[wineId].data.push(bottle);
+        return acc;
+      },
+      {},
     );
-  };
+
+    const groupsArray = Object.values(grouped);
+
+    if (sortBy === "name_asc")
+      groupsArray.sort((a, b) => a.title.localeCompare(b.title));
+    else if (sortBy === "name_desc")
+      groupsArray.sort((a, b) => b.title.localeCompare(a.title));
+    else if (sortBy === "stock_desc")
+      groupsArray.sort((a, b) => b.data.length - a.data.length);
+    else if (sortBy === "stock_asc")
+      groupsArray.sort((a, b) => a.data.length - b.data.length);
+
+    setSections(groupsArray);
+  }, [bottles, sortBy, filterType]);
+
+  const onRefresh = useCallback(() => {
+    fetchInventory(true);
+  }, [searchQuery]);
 
   return (
     <SafeAreaView
@@ -377,6 +544,7 @@ export default function InventoryScreen() {
     >
       <Stack.Screen options={{ headerShown: false }} />
 
+      {/* ── Header ── */}
       <View
         style={[
           styles.header,
@@ -392,7 +560,6 @@ export default function InventoryScreen() {
         >
           <ChevronLeft size={28} color={theme.primary} strokeWidth={2.5} />
         </TouchableOpacity>
-
         <View style={{ flex: 1 }}>
           <Text style={[styles.title, { color: theme.primary }]}>
             Bottle Management
@@ -402,55 +569,45 @@ export default function InventoryScreen() {
           </Text>
         </View>
         <View style={styles.headerActions}>
-          <View style={styles.actionRow}>
-            <TouchableOpacity
-              style={[
-                styles.headerActionChip,
-                { backgroundColor: theme.primary, borderColor: theme.primary },
-              ]}
-              onPress={() =>
-                router.push({
-                  pathname: "/tagging",
-                  params: { mode: "tagging" },
-                })
-              }
-              activeOpacity={0.7}
-            >
-              <Scan size={16} color="#fff" strokeWidth={2.5} />
-              <Text style={[styles.headerActionText, { color: "#fff" }]}>
-                Scan to Update
-              </Text>
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity
+            style={[
+              styles.headerActionChip,
+              { backgroundColor: theme.primary, borderColor: theme.primary },
+            ]}
+            onPress={() =>
+              router.push({ pathname: "/tagging", params: { mode: "tagging" } })
+            }
+            activeOpacity={0.7}
+          >
+            <Scan size={16} color="#fff" strokeWidth={2.5} />
+            <Text style={[styles.headerActionText, { color: "#fff" }]}>
+              Scan to Update
+            </Text>
+          </TouchableOpacity>
         </View>
       </View>
 
+      {/* ── Search + Controls ── */}
       <View style={styles.topControls}>
-        <View style={styles.searchContainer}>
-          <View
-            style={[
-              styles.searchWrapper,
-              {
-                backgroundColor: theme.card,
-                borderColor: theme.border,
-                borderRadius: 16,
-              },
-            ]}
-          >
-            <SearchIcon
-              size={20}
-              color={theme.textSecondary}
-              style={styles.searchIcon}
-            />
-            <TextInput
-              style={[styles.searchInput, { color: theme.text }]}
-              placeholder="Omni Search (SKU, Wine, Producer)..."
-              placeholderTextColor="#9ca3af"
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              clearButtonMode="while-editing"
-            />
-          </View>
+        <View
+          style={[
+            styles.searchWrapper,
+            { backgroundColor: theme.card, borderColor: theme.border },
+          ]}
+        >
+          <SearchIcon
+            size={18}
+            color={theme.textSecondary}
+            style={styles.searchIcon}
+          />
+          <TextInput
+            style={[styles.searchInput, { color: theme.text }]}
+            placeholder="Search by SKU, wine name, or producer…"
+            placeholderTextColor={theme.textSecondary}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            clearButtonMode="while-editing"
+          />
         </View>
 
         <View
@@ -463,7 +620,7 @@ export default function InventoryScreen() {
             ]}
             onPress={() => setIsSortModalOpen(true)}
           >
-            <ArrowUpDown size={16} color={theme.textSecondary} />
+            <ArrowUpDown size={15} color={theme.textSecondary} />
             <Text style={[styles.filterSortText, { color: theme.text }]}>
               Sort By
             </Text>
@@ -479,7 +636,7 @@ export default function InventoryScreen() {
             onPress={() => setIsFilterModalOpen(true)}
           >
             <Filter
-              size={16}
+              size={15}
               color={filterType ? theme.primary : theme.textSecondary}
             />
             <Text
@@ -488,18 +645,23 @@ export default function InventoryScreen() {
                 { color: filterType ? theme.primary : theme.text },
               ]}
             >
-              {filterType ? filterType : "Filters"}
+              {filterType ?? "Filters"}
             </Text>
           </TouchableOpacity>
         </View>
       </View>
 
+      {/* ── List ── */}
       {loading ? (
-        <ActivityIndicator size="large" color="#4f46e5" style={{ flex: 1 }} />
+        <ActivityIndicator
+          size="large"
+          color={theme.primary}
+          style={{ flex: 1 }}
+        />
       ) : (
         <FlatList
           data={sections}
-          renderItem={renderItem}
+          renderItem={({ item }) => <WineCard item={item} theme={theme} />}
           keyExtractor={(item) => item.masterWineData?.id || item.title}
           contentContainerStyle={styles.listContent}
           onEndReached={() => fetchInventory(false)}
@@ -508,7 +670,7 @@ export default function InventoryScreen() {
             loadingMore ? (
               <ActivityIndicator
                 size="small"
-                color="#4f46e5"
+                color={theme.primary}
                 style={{ marginVertical: 20 }}
               />
             ) : null
@@ -517,7 +679,7 @@ export default function InventoryScreen() {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              tintColor="#4f46e5"
+              tintColor={theme.primary}
             />
           }
           ListEmptyComponent={
@@ -531,8 +693,8 @@ export default function InventoryScreen() {
         />
       )}
 
-      {/* Sort Modal */}
-      <Modal visible={isSortModalOpen} animationType="slide" transparent={true}>
+      {/* ── Sort Modal ── */}
+      <Modal visible={isSortModalOpen} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
             <View style={styles.modalHeader}>
@@ -544,8 +706,8 @@ export default function InventoryScreen() {
               </TouchableOpacity>
             </View>
             {[
-              { id: "name_asc", label: "Name (A to Z)" },
-              { id: "name_desc", label: "Name (Z to A)" },
+              { id: "name_asc", label: "Name (A → Z)" },
+              { id: "name_desc", label: "Name (Z → A)" },
               { id: "stock_desc", label: "Highest Stock First" },
               { id: "stock_asc", label: "Lowest Stock First" },
             ].map((option) => (
@@ -582,12 +744,8 @@ export default function InventoryScreen() {
         </View>
       </Modal>
 
-      {/* Filter Modal */}
-      <Modal
-        visible={isFilterModalOpen}
-        animationType="slide"
-        transparent={true}
-      >
+      {/* ── Filter Modal ── */}
+      <Modal visible={isFilterModalOpen} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
             <View style={styles.modalHeader}>
@@ -599,35 +757,8 @@ export default function InventoryScreen() {
               </TouchableOpacity>
             </View>
             <ScrollView showsVerticalScrollIndicator={false}>
-              <TouchableOpacity
-                style={[
-                  styles.modalOption,
-                  { borderColor: theme.border },
-                  filterType === null && {
-                    borderColor: theme.primary,
-                    backgroundColor: theme.primary + "10",
-                  },
-                ]}
-                onPress={() => {
-                  setFilterType(null);
-                  setIsFilterModalOpen(false);
-                }}
-              >
-                <Text
-                  style={[
-                    styles.modalOptionText,
-                    { color: theme.text },
-                    filterType === null && { color: theme.primary },
-                  ]}
-                >
-                  All Types
-                </Text>
-                {filterType === null && (
-                  <Check size={20} color={theme.primary} />
-                )}
-              </TouchableOpacity>
-
               {[
+                null,
                 "Red Wine",
                 "White wine",
                 "Sweet Wine",
@@ -635,7 +766,7 @@ export default function InventoryScreen() {
                 "Rose wine",
               ].map((type) => (
                 <TouchableOpacity
-                  key={type}
+                  key={type ?? "__all__"}
                   style={[
                     styles.modalOption,
                     { borderColor: theme.border },
@@ -656,7 +787,7 @@ export default function InventoryScreen() {
                       filterType === type && { color: theme.primary },
                     ]}
                   >
-                    {type}
+                    {type ?? "All Types"}
                   </Text>
                   {filterType === type && (
                     <Check size={20} color={theme.primary} />
@@ -671,272 +802,205 @@ export default function InventoryScreen() {
   );
 }
 
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#0f172a",
-  },
+  container: { flex: 1 },
+
+  // Header
   header: {
     flexDirection: "row",
     alignItems: "center",
     padding: 24,
     paddingBottom: 20,
   },
-  backButton: {
-    marginRight: 12,
-  },
+  backButton: { marginRight: 12 },
   title: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: "900",
-    color: "#fff",
-    flex: 1,
     textTransform: "uppercase",
     letterSpacing: -0.5,
   },
   subtitle: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "700",
     textTransform: "uppercase",
     letterSpacing: 1.5,
+    marginTop: 2,
   },
-  headerActions: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  actionRow: {
-    flexDirection: "row",
-    gap: 8,
-  },
+  headerActions: { flexDirection: "row", alignItems: "center" },
   headerActionChip: {
     flexDirection: "row",
-    height: 40,
-    paddingHorizontal: 12,
+    height: 38,
+    paddingHorizontal: 14,
     borderRadius: 20,
-    backgroundColor: "#1e293b",
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#334155",
     gap: 6,
   },
-  headerActionText: {
-    color: "#fff",
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  headerActionTextActive: {
-    color: "#000",
-  },
-  headerActionChipActive: {
-    backgroundColor: "#f59e0b",
-    borderColor: "#f59e0b",
-  },
-  topControls: {
-    paddingHorizontal: 24,
-    paddingBottom: 16,
-  },
-  searchContainer: {
-    marginBottom: 4,
-  },
+  headerActionText: { fontSize: 12, fontWeight: "800" },
+
+  // Search + Controls
+  topControls: { paddingHorizontal: 20, paddingBottom: 8 },
   searchWrapper: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#1e293b",
-    borderRadius: 16,
-    marginTop: 15,
+    borderRadius: 14,
+    marginBottom: 12,
     borderWidth: 1,
-    borderColor: "#334155",
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
+    height: 52,
   },
-  searchIcon: {
-    marginRight: 12,
-  },
-  searchInput: {
-    flex: 1,
-    color: "#ffffff",
-    fontSize: 16,
-    height: 60,
-    fontWeight: "600",
-  },
-  filterSortRow: {
-    flexDirection: "row",
-    gap: 12,
-    marginTop: 12,
-  },
+  searchIcon: { marginRight: 10 },
+  searchInput: { flex: 1, fontSize: 15, fontWeight: "600" },
+  filterSortRow: { flexDirection: "row", gap: 10 },
   filterSortBtn: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 12,
+    paddingVertical: 11,
     borderRadius: 12,
     borderWidth: 1,
-    gap: 8,
+    gap: 7,
   },
-  filterSortText: {
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  listContent: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 100,
-  },
+  filterSortText: { fontSize: 13, fontWeight: "600" },
+
+  // List
+  listContent: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 100 },
+
+  // Card
   itemContainer: {
-    backgroundColor: "#1e293b",
     borderRadius: 20,
-    marginBottom: 16,
+    marginBottom: 14,
     borderWidth: 1,
-    borderColor: "#334155",
     overflow: "hidden",
   },
+  cardTouchable: {},
   cardBody: {
     flexDirection: "row",
     padding: 16,
-    gap: 16,
+    gap: 14,
     alignItems: "center",
   },
-  stockInfo: {
+
+  // Stock pill
+  stockPill: {
     alignItems: "center",
     justifyContent: "center",
-    padding: 8,
-    width: 90,
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingVertical: 12,
+    width: 72,
   },
-  stockCount: {
-    fontSize: 42,
-    fontWeight: "900",
-    letterSpacing: -2,
-  },
+  stockCount: { fontSize: 34, fontWeight: "900", letterSpacing: -1.5 },
   stockLabel: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "700",
     textTransform: "uppercase",
-    marginTop: -4,
+    marginTop: -2,
   },
-  wineInfo: {
-    flex: 1,
-  },
-  wineName: {
-    fontSize: 16,
-    fontWeight: "800",
-    marginBottom: 2,
-  },
-  wineProducer: {
-    fontSize: 12,
-    fontWeight: "600",
-    marginBottom: 12,
-  },
-  detailsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-  },
+
+  // Wine info
+  wineInfo: { flex: 1 },
+  wineName: { fontSize: 15, fontWeight: "800", marginBottom: 2 },
+  wineProducer: { fontSize: 12, fontWeight: "600", marginBottom: 10 },
+
+  detailsGrid: { flexDirection: "row", flexWrap: "wrap" },
   detailItem: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
     flexBasis: "50%",
-    marginBottom: 8,
+    marginBottom: 7,
   },
-  detailText: {
-    fontSize: 13,
-    fontWeight: "600",
-    flex: 1,
-  },
+  detailText: { fontSize: 12, fontWeight: "600", flex: 1 },
+
+  // Location pills
   locationsContainer: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
-    marginTop: 12,
+    gap: 6,
+    marginTop: 10,
   },
   locationPill: {
     flexDirection: "row",
     alignItems: "center",
-    borderRadius: 12,
-    paddingRight: 10,
-    paddingVertical: 4,
-    paddingLeft: 4,
+    borderRadius: 10,
+    paddingRight: 8,
+    paddingVertical: 3,
+    paddingLeft: 3,
   },
   locationCountBadge: {
-    borderRadius: 10,
-    paddingHorizontal: 6,
+    borderRadius: 8,
+    paddingHorizontal: 5,
     paddingVertical: 2,
-    marginRight: 6,
-    minWidth: 20,
+    marginRight: 5,
+    minWidth: 18,
+    alignItems: "center",
+  },
+  locationCountText: { color: "#fff", fontSize: 10, fontWeight: "800" },
+  locationNameText: { fontSize: 11, fontWeight: "700" },
+
+  // Expandable bottle list
+  bottleListWrapper: { overflow: "hidden" },
+  bottleDivider: { borderTopWidth: 1, marginHorizontal: 16 },
+  bottleListHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 8,
+  },
+  bottleListTitle: {
+    fontSize: 11,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+  },
+  bottleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    gap: 10,
+  },
+  bottleIndex: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
   },
-  locationCountText: {
-    color: "#fff",
-    fontSize: 11,
-    fontWeight: "800",
+  bottleIndexText: { fontSize: 11, fontWeight: "700" },
+  bottleId: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "600",
+    fontVariant: ["tabular-nums"],
   },
-  locationNameText: {
-    fontSize: 12,
-    fontWeight: "700",
+  bottleLocationBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
   },
+  bottleLocationText: { fontSize: 11, fontWeight: "700" },
+
+  // Empty state
   emptyContainer: {
     alignItems: "center",
     justifyContent: "center",
     marginTop: 80,
     gap: 16,
   },
-  emptyText: {
-    color: "#475569",
-    textAlign: "center",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  batchActionBar: {
-    position: "absolute",
-    bottom: 32,
-    left: 24,
-    right: 24,
-    backgroundColor: "#1e293b",
-    padding: 16,
-    borderRadius: 24,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.5,
-    shadowRadius: 20,
-    elevation: 10,
-    borderWidth: 1,
-    borderColor: "#334155",
-  },
-  batchInfo: {
-    flex: 1,
-    paddingLeft: 8,
-  },
-  batchCount: {
-    color: "#fff",
-    fontSize: 15,
-    fontWeight: "800",
-  },
-  printButton: {
-    backgroundColor: "#f59e0b",
-    paddingHorizontal: 24,
-    paddingVertical: 14,
-    borderRadius: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    shadowColor: "#f59e0b",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-  },
-  printButtonDisabled: {
-    backgroundColor: "#334155",
-    opacity: 0.5,
-    shadowOpacity: 0,
-  },
-  printButtonText: {
-    color: "#fff",
-    fontSize: 15,
-    fontWeight: "900",
-  },
+  emptyText: { textAlign: "center", fontSize: 15, fontWeight: "600" },
+
+  // Modals
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.6)",
@@ -954,22 +1018,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 20,
   },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: "900",
-  },
+  modalTitle: { fontSize: 20, fontWeight: "900" },
   modalOption: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: 16,
+    paddingVertical: 14,
     paddingHorizontal: 16,
     borderRadius: 12,
     borderWidth: 1,
-    marginBottom: 12,
+    marginBottom: 10,
   },
-  modalOptionText: {
-    fontSize: 16,
-    fontWeight: "700",
-  },
+  modalOptionText: { fontSize: 15, fontWeight: "700" },
 });
