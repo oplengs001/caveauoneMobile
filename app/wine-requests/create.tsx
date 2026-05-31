@@ -40,7 +40,6 @@ export default function CreateWineRequest() {
   const router = useRouter();
   const { profile } = useAuth();
   const theme = Colors.store;
-  [];
 
   const [searchQuery, setSearchQuery] = useState("");
   const [locations, setLocations] = useState<{ id: string; name: string }[]>(
@@ -195,7 +194,7 @@ export default function CreateWineRequest() {
   ) => {
     if (itemsToGroup.length === 0) return {};
 
-    const itemAssignments: Map<string, string> = new Map(); // wine.id -> locationId
+    const itemAssignments: Map<string, string> = new Map();
     const usedLocations: Set<string> = new Set();
 
     const sortedItems = [...itemsToGroup].sort((a, b) => {
@@ -584,9 +583,8 @@ export default function CreateWineRequest() {
           </View>
 
           <ScrollView
-            horizontal
             style={styles.cartItemsContainer}
-            showsHorizontalScrollIndicator={false}
+            showsVerticalScrollIndicator={true}
           >
             {Object.entries(groupedForUI).map(([locationId, group]) => (
               <View key={locationId} style={styles.cartGroup}>
@@ -609,12 +607,28 @@ export default function CreateWineRequest() {
                       key={item.wine.id}
                       style={[styles.cartItem, { borderColor: theme.border }]}
                     >
-                      <Text
-                        style={[styles.cartItemName, { color: theme.text }]}
-                        numberOfLines={1}
-                      >
-                        {item.wine.name}
-                      </Text>
+                      {/* FIX: Wrapper for Text elements to handle sub-text */}
+                      <View style={styles.cartItemInfo}>
+                        <Text
+                          style={[styles.cartItemName, { color: theme.text }]}
+                          numberOfLines={1}
+                        >
+                          {item.wine.name}
+                        </Text>
+                        {/* FIX: Added Subtext for Vintage & Producer */}
+                        <Text
+                          style={[
+                            styles.cartItemSub,
+                            { color: theme.textSecondary },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {[item.wine.vintage, item.wine.producer]
+                            .filter(Boolean)
+                            .join(" • ")}
+                        </Text>
+                      </View>
+
                       <View style={styles.cartControls}>
                         <TouchableOpacity
                           onPress={() => updateQty(item.wine.id, -1)}
@@ -742,7 +756,7 @@ const styles = StyleSheet.create({
   listContent: {
     padding: 24,
     paddingTop: 0,
-    paddingBottom: 200,
+    paddingBottom: 250,
   },
   wineCard: {
     flexDirection: "row",
@@ -829,12 +843,12 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   cartItemsContainer: {
-    maxHeight: 150,
+    maxHeight: height * 0.35,
     marginBottom: 16,
   },
   cartGroup: {
-    marginRight: 16,
-    width: 280,
+    marginBottom: 16,
+    width: "100%",
   },
   cartGroupTitle: {
     fontSize: 10,
@@ -853,11 +867,20 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     backgroundColor: "rgba(0,0,0,0.02)",
   },
+  /* FIX: New styles for wrapping text in cart items */
+  cartItemInfo: {
+    flex: 1,
+    marginRight: 8,
+    justifyContent: "center",
+  },
   cartItemName: {
     fontSize: 11,
     fontWeight: "800",
-    flex: 1,
-    marginRight: 8,
+  },
+  cartItemSub: {
+    fontSize: 10,
+    marginTop: 2,
+    fontWeight: "600",
   },
   cartControls: {
     flexDirection: "row",
