@@ -587,6 +587,7 @@ export default function TaggingScreen() {
         totalAmount,
         buyerName: buyerName || null,
         isFastMoving,
+        masterWinePrice: bottle.masterWineRef ? wine?.price || null : null,
       });
 
       await updateDoc(doc(db, "inventory_bottles", bottle.id), {
@@ -1453,7 +1454,7 @@ export default function TaggingScreen() {
                             <>
                               <Wine size={24} color="#fff" strokeWidth={2.5} />
                               <Text style={styles.confirmButtonText}>
-                                CONFIRM SALE
+                                Mark as Sold
                               </Text>
                             </>
                           )}

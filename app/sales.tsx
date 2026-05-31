@@ -31,7 +31,8 @@ interface Sale {
   vintage?: string;
   format?: string;
   bottleId: string;
-  price: number;
+  price: number; // Selling price (Base)
+  masterWinePrice?: number; // Added to calculate profit (Cost)
   soldAt: {
     toDate: () => Date;
   };
@@ -71,7 +72,6 @@ export default function SalesScreen() {
   const [isFilterModalVisible, setFilterModalVisible] = useState(false);
   const [period, setPeriod] = useState<PeriodType>("all");
 
-  // Custom date states (YYYY-MM-DD format strings for input)
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
 
@@ -109,7 +109,7 @@ export default function SalesScreen() {
             59,
             59,
             999,
-          ); // Last day of last month
+          );
         } else if (period === "custom") {
           startDate = customStart ? new Date(customStart) : null;
           if (startDate) startDate.setHours(0, 0, 0, 0);
@@ -118,7 +118,6 @@ export default function SalesScreen() {
           if (endDate) endDate.setHours(23, 59, 59, 999);
         }
 
-        // Build composite queries safely
         let salesQuery;
         const baseConstraints = [where("storeId", "==", profile.locationId)];
 
@@ -137,7 +136,6 @@ export default function SalesScreen() {
             orderBy("soldAt", "desc"),
           );
         } else {
-          // Just startDate (Today, Week, Month, or Custom with no end date)
           salesQuery = query(
             collection(db, "sales"),
             ...baseConstraints,
@@ -159,17 +157,23 @@ export default function SalesScreen() {
       }
     };
 
-    // Prevent fetching custom without at least a start date
     if (period === "custom" && !customStart) return;
 
     fetchSales();
   }, [profile, period, customStart, customEnd]);
 
-  // Derived Statistics for Dashboard
+  // Calculations
   const totalBaseSales = sales.reduce((sum, sale) => sum + sale.price, 0);
   const vatAmount = totalBaseSales * 0.12;
   const grossSales = totalBaseSales + vatAmount;
   const totalBottles = sales.length;
+
+  // New Profit Calculation (Assuming masterWinePrice holds the cost)
+  const totalCost = sales.reduce(
+    (sum, sale) => sum + (sale.masterWinePrice || 0),
+    0,
+  );
+  const netProfit = totalBaseSales - totalCost;
 
   const getPeriodLabel = () => {
     if (period === "lastMonth") return "Last Month's";
@@ -183,6 +187,7 @@ export default function SalesScreen() {
         {getPeriodLabel()} Summary
       </Text>
 
+      {/* Row 1: Revenue and Bottles */}
       <View style={styles.metricsRow}>
         <View
           style={[
@@ -219,6 +224,48 @@ export default function SalesScreen() {
         </View>
       </View>
 
+      {/* Row 2: Profit Card (Full Width) */}
+      <View
+        style={[
+          styles.metricCard,
+          {
+            backgroundColor: theme.card,
+            borderColor: theme.border,
+            marginBottom: 12,
+            borderLeftWidth: 4,
+            borderLeftColor:
+              netProfit >= 0
+                ? Colors.store.success || "#10b981"
+                : Colors.store.danger || "#ef4444",
+          },
+        ]}
+      >
+        <Text
+          style={[
+            styles.metricLabel,
+            { color: theme.textSecondary, marginBottom: 8 },
+          ]}
+        >
+          Net Profit (Subtotal - Cost)
+        </Text>
+        <Text
+          style={[
+            styles.metricValue,
+            {
+              color:
+                netProfit >= 0
+                  ? Colors.store.success || "#10b981"
+                  : Colors.store.danger || "#ef4444",
+              fontSize: 22,
+            },
+          ]}
+        >
+          {netProfit >= 0 ? "+" : ""}
+          {formatCurrency(netProfit)}
+        </Text>
+      </View>
+
+      {/* Breakdown Details */}
       <View
         style={[
           styles.breakdownCard,
@@ -279,6 +326,10 @@ export default function SalesScreen() {
     const itemVat = item.price * 0.12;
     const itemTotal = item.price + itemVat;
 
+    const cost = item.masterWinePrice || 0;
+    const itemProfit = item.price - cost;
+    const isProfitable = itemProfit >= 0;
+
     return (
       <View
         style={[
@@ -293,9 +344,31 @@ export default function SalesScreen() {
           <Text style={[styles.wineDetails, { color: theme.textSecondary }]}>
             {item.producer} {item.format && `• ${item.format}`}
           </Text>
-          <Text style={[styles.bottleIdText, { color: theme.textSecondary }]}>
-            ID: {item.bottleId}
-          </Text>
+
+          <View style={styles.metaRow}>
+            <Text style={[styles.bottleIdText, { color: theme.textSecondary }]}>
+              ID: {item.bottleId}
+            </Text>
+            {cost > 0 && (
+              <View
+                style={[
+                  styles.profitBadge,
+                  { backgroundColor: isProfitable ? "#10b98115" : "#ef444415" },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.profitText,
+                    { color: isProfitable ? "#10b981" : "#ef4444" },
+                  ]}
+                >
+                  {isProfitable ? "+" : ""}
+                  {formatCurrency(itemProfit)}
+                </Text>
+              </View>
+            )}
+          </View>
+
           {item.buyerName && (
             <Text style={[styles.buyerName, { color: theme.textSecondary }]}>
               Buyer: {item.buyerName}
@@ -544,9 +617,12 @@ const styles = StyleSheet.create({
   saleInfo: { flex: 1, paddingRight: 12 },
   wineName: { fontSize: 15, fontWeight: "600", marginBottom: 2 },
   wineDetails: { fontSize: 13, marginBottom: 4 },
+  metaRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 2 },
   bottleIdText: { fontSize: 12 },
-  buyerName: { fontSize: 13, marginTop: 4 },
-  saleDate: { fontSize: 12, marginTop: 6 },
+  profitBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  profitText: { fontSize: 10, fontWeight: "bold" },
+  buyerName: { fontSize: 13, marginTop: 6 },
+  saleDate: { fontSize: 12, marginTop: 4 },
   priceContainer: { alignItems: "flex-end" },
   price: { fontSize: 16, fontWeight: "bold" },
   vatText: { fontSize: 11, marginTop: 2 },

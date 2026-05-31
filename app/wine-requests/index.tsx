@@ -3,7 +3,17 @@ import { useAuth } from "@/context/AuthContext";
 import { db } from "@/lib/firebase";
 import { WineRequest } from "@/types";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
-import { collection, getDocs, orderBy, query, where } from "firebase/firestore";
+import {
+  collection,
+  DocumentData,
+  getDocs,
+  limit,
+  orderBy,
+  query,
+  QueryDocumentSnapshot,
+  startAfter,
+  where,
+} from "firebase/firestore";
 import {
   ArrowRight,
   Ban,
@@ -11,6 +21,7 @@ import {
   CheckCircle2,
   ChevronLeft,
   Clock,
+  Layers,
   Package,
   Plus,
   Truck,
@@ -21,11 +32,24 @@ import {
   FlatList,
   RefreshControl,
   SafeAreaView,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+
+const PAGE_SIZE = 10;
+
+// Added icons to the filter definitions
+const FILTER_TAGS = [
+  { id: "all", label: "All Requests", icon: Layers },
+  { id: "pending", label: "Pending", icon: Clock },
+  { id: "converted", label: "Pulling Out", icon: Package },
+  { id: "outbound", label: "Outbound", icon: Truck },
+  { id: "ingress_complete", label: "Received", icon: CheckCircle2 },
+  { id: "rejected", label: "Rejected", icon: Ban },
+];
 
 export default function WineRequestsIndex() {
   const router = useRouter();
@@ -34,27 +58,59 @@ export default function WineRequestsIndex() {
 
   const [requests, setRequests] = useState<WineRequest[]>([]);
   const [locations, setLocations] = useState<Record<string, string>>({});
+  const [activeFilter, setActiveFilter] = useState("all");
+
+  // Pagination & Loading States
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [lastDoc, setLastDoc] =
+    useState<QueryDocumentSnapshot<DocumentData> | null>(null);
+  const [hasMore, setHasMore] = useState(true);
 
-  const fetchRequests = async () => {
+  const fetchRequests = async (isLoadMore = false) => {
     if (!profile?.email) return;
+    if (isLoadMore && (!hasMore || loadingMore)) return;
+
+    if (isLoadMore) {
+      setLoadingMore(true);
+    } else {
+      setLoading(true);
+    }
 
     try {
+      // Build Query
+      let baseQuery = query(
+        collection(db, "wine_requests"),
+        where("createdBy", "==", profile.email),
+      );
+
+      if (activeFilter !== "all") {
+        baseQuery = query(baseQuery, where("status", "==", activeFilter));
+      }
+
+      let finalQuery = query(
+        baseQuery,
+        orderBy("createdAt", "desc"),
+        limit(PAGE_SIZE),
+      );
+
+      if (isLoadMore && lastDoc) {
+        finalQuery = query(finalQuery, startAfter(lastDoc));
+      }
+
+      // Execute Queries
       const [requestsSnap, storesSnap] = await Promise.all([
-        getDocs(
-          query(
-            collection(db, "wine_requests"),
-            where("createdBy", "==", profile.email),
-            orderBy("createdAt", "desc"),
-          ),
-        ),
-        getDocs(collection(db, "stores")),
+        getDocs(finalQuery),
+        !isLoadMore ? getDocs(collection(db, "stores")) : Promise.resolve(null),
       ]);
 
-      const locMap: Record<string, string> = {};
-      storesSnap.docs.forEach((d) => (locMap[d.id] = d.data().name));
-      setLocations(locMap);
+      // Cache locations on initial load
+      if (storesSnap) {
+        const locMap: Record<string, string> = {};
+        storesSnap.docs.forEach((d) => (locMap[d.id] = d.data().name));
+        setLocations(locMap);
+      }
 
       const data = requestsSnap.docs.map((doc) => ({
         id: doc.id,
@@ -62,24 +118,41 @@ export default function WineRequestsIndex() {
         createdAt: doc.data().createdAt?.toDate() || new Date(),
       })) as WineRequest[];
 
-      setRequests(data);
+      if (isLoadMore) {
+        setRequests((prev) => [...prev, ...data]);
+      } else {
+        setRequests(data);
+      }
+
+      // Update Pagination state
+      setLastDoc(requestsSnap.docs[requestsSnap.docs.length - 1] || null);
+      setHasMore(requestsSnap.docs.length === PAGE_SIZE);
     } catch (error) {
       console.error("Error fetching requests:", error);
     } finally {
       setLoading(false);
       setRefreshing(false);
+      setLoadingMore(false);
     }
   };
 
   useFocusEffect(
     useCallback(() => {
       fetchRequests();
-    }, [profile?.email]),
+    }, [profile?.email, activeFilter]),
   );
 
   const onRefresh = () => {
     setRefreshing(true);
-    fetchRequests();
+    fetchRequests(false);
+  };
+
+  const handleFilterChange = (filterId: string) => {
+    if (filterId === activeFilter) return;
+    setActiveFilter(filterId);
+    setHasMore(true);
+    setLastDoc(null);
+    setRequests([]);
   };
 
   const getStatusStyle = (status: string) => {
@@ -225,6 +298,15 @@ export default function WineRequestsIndex() {
     );
   };
 
+  const renderFooter = () => {
+    if (!loadingMore) return null;
+    return (
+      <View style={styles.footerLoader}>
+        <ActivityIndicator size="small" color={theme.primary} />
+      </View>
+    );
+  };
+
   return (
     <SafeAreaView
       style={[styles.container, { backgroundColor: theme.background }]}
@@ -256,7 +338,47 @@ export default function WineRequestsIndex() {
         </TouchableOpacity>
       </View>
 
-      {loading ? (
+      <View style={styles.filterContainer}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterScrollContent}
+        >
+          {FILTER_TAGS.map((tag) => {
+            const isActive = activeFilter === tag.id;
+            const Icon = tag.icon;
+            return (
+              <TouchableOpacity
+                key={tag.id}
+                onPress={() => handleFilterChange(tag.id)}
+                style={[
+                  styles.filterPill,
+                  {
+                    backgroundColor: isActive ? theme.primary : theme.card,
+                    borderColor: isActive ? theme.primary : theme.border,
+                  },
+                ]}
+              >
+                <Icon
+                  size={14}
+                  color={isActive ? "#fff" : theme.textSecondary}
+                  strokeWidth={2.5}
+                />
+                <Text
+                  style={[
+                    styles.filterText,
+                    { color: isActive ? "#fff" : theme.textSecondary },
+                  ]}
+                >
+                  {tag.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
+
+      {loading && !refreshing ? (
         <View style={styles.center}>
           <ActivityIndicator size="large" color={theme.primary} />
         </View>
@@ -266,6 +388,9 @@ export default function WineRequestsIndex() {
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
           contentContainerStyle={styles.listContent}
+          onEndReached={() => fetchRequests(true)}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={renderFooter}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -277,14 +402,24 @@ export default function WineRequestsIndex() {
             <View style={styles.emptyState}>
               <Package size={64} color={theme.border} strokeWidth={1} />
               <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
-                No requests found
+                No{" "}
+                {activeFilter !== "all" ? activeFilter.replace("_", " ") : ""}{" "}
+                requests found
               </Text>
               <TouchableOpacity
                 style={[styles.emptyBtn, { borderColor: theme.primary }]}
-                onPress={() => router.push("/wine-requests/create")}
+                onPress={() => {
+                  if (activeFilter !== "all") {
+                    handleFilterChange("all");
+                  } else {
+                    router.push("/wine-requests/create");
+                  }
+                }}
               >
                 <Text style={[styles.emptyBtnText, { color: theme.primary }]}>
-                  Create First Request
+                  {activeFilter !== "all"
+                    ? "Clear Filters"
+                    : "Create First Request"}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -336,6 +471,26 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 8,
   },
+  filterContainer: {
+    marginBottom: 16,
+  },
+  filterScrollContent: {
+    paddingHorizontal: 24,
+    gap: 8,
+  },
+  filterPill: {
+    flexDirection: "row", // Aligns icon and text horizontally
+    alignItems: "center", // Centers them vertically
+    gap: 6, // Adds spacing between icon and text
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  filterText: {
+    fontSize: 13,
+    fontWeight: "700",
+  },
   listContent: {
     padding: 24,
     paddingTop: 0,
@@ -384,7 +539,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 16,
     borderRadius: 12,
-    // theme is defined above
   },
   targetStoreText: {
     fontSize: 12,
@@ -394,6 +548,7 @@ const styles = StyleSheet.create({
   itemsContainer: {
     gap: 10,
     marginBottom: 20,
+    marginTop: 16,
   },
   wineRow: {
     flexDirection: "row",
@@ -444,6 +599,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+  footerLoader: {
+    paddingVertical: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   emptyState: {
     alignItems: "center",
     justifyContent: "center",
@@ -453,6 +613,7 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 16,
     fontWeight: "600",
+    textTransform: "capitalize",
   },
   emptyBtn: {
     paddingHorizontal: 24,
