@@ -157,6 +157,7 @@ export default function StoreMasterListScreen() {
   const [selected, setSelected] = useState<WineEntry | null>(null);
   const [sheetPar, setSheetPar] = useState("");
   const [sheetSafety, setSheetSafety] = useState("");
+  const [sheetSellingPrice, setSheetSellingPrice] = useState("");
   const [sheetDiscontinued, setSheetDiscontinued] = useState(false);
   const [sheetIsFastMoving, setSheetIsFastMoving] = useState(false);
   const [sheetIsReserve, setSheetIsReserve] = useState(false);
@@ -311,6 +312,7 @@ export default function StoreMasterListScreen() {
     setSelected(entry);
     setSheetPar(entry.setting?.parLevel?.toString() ?? "");
     setSheetSafety(entry.setting?.safetyStock?.toString() ?? "");
+    setSheetSellingPrice(entry.setting?.sellingPrice?.toString() ?? "");
     setSheetDiscontinued(entry.setting?.discontinued ?? false);
     setSheetIsFastMoving(entry.setting?.isFastMoving ?? false);
     setSheetIsReserve(entry.setting?.isReserve ?? false);
@@ -340,6 +342,7 @@ export default function StoreMasterListScreen() {
         discontinued: sheetDiscontinued,
         isFastMoving: sheetIsFastMoving,
         isReserve: sheetIsReserve,
+        sellingPrice: sheetSellingPrice ? parseFloat(sheetSellingPrice) : null,
         updatedAt: serverTimestamp(),
         createdAt: selected.setting?.createdAt ?? serverTimestamp(),
       });
@@ -522,6 +525,14 @@ export default function StoreMasterListScreen() {
                     : ""}
                   {item.masterWine.format ? ` · ${item.masterWine.format}` : ""}
                 </Text>
+                {item.setting?.sellingPrice != null && (
+                  <Text style={styles.sellingPrice}>
+                    ₱{item.setting.sellingPrice.toLocaleString("en-US", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </Text>
+                )}
               </View>
               <ChevronRight size={18} color="#94a3b8" />
             </View>
@@ -996,6 +1007,22 @@ export default function StoreMasterListScreen() {
                 placeholderTextColor="#94a3b8"
               />
 
+              {/* Selling Price */}
+              <Text style={[styles.fieldLabel, { marginTop: 20 }]}>
+                SELLING PRICE
+              </Text>
+              <Text style={styles.fieldHint}>
+                The retail price of this wine at this store.
+              </Text>
+              <TextInput
+                style={styles.input}
+                value={sheetSellingPrice}
+                onChangeText={setSheetSellingPrice}
+                keyboardType="decimal-pad"
+                placeholder="e.g. 2500.00"
+                placeholderTextColor="#94a3b8"
+              />
+
               {/* Formula preview */}
               {sheetPar && sheetSafety && (
                 <View style={styles.formulaBox}>
@@ -1270,6 +1297,12 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   wineMeta: { fontSize: 11, color: theme.textSecondary, fontWeight: "500" },
+  sellingPrice: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: theme.primary,
+    marginTop: 3,
+  },
   statusBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
   statusText: {
     fontSize: 9,

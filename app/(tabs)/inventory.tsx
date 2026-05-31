@@ -491,7 +491,7 @@ export default function InventoryScreen() {
 
   const onRefresh = useCallback(() => {
     fetchInventory(true);
-  }, [fetchInventory]);
+  }, [fetchInventory, searchQuery]);
 
   useEffect(() => {
     const filteredBottles = filterType
@@ -533,10 +533,6 @@ export default function InventoryScreen() {
 
     setSections(groupsArray);
   }, [bottles, sortBy, filterType]);
-
-  const onRefresh = useCallback(() => {
-    fetchInventory(true);
-  }, [searchQuery]);
 
   return (
     <SafeAreaView

@@ -214,4 +214,5 @@ export interface StoreWineSetting {
   updatedAt: any;
   isFastMoving: boolean;
   isReserve: boolean;
+  sellingPrice?: number;
 }
