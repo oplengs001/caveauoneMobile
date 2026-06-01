@@ -18,20 +18,24 @@ import {
 import {
   AlertTriangle,
   BarChart3,
+  Check,
   CheckCircle2,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Clock,
   Lock,
   Package,
   RefreshCw,
+  Search,
   TrendingDown,
   TrendingUp,
   Truck,
+  Wine,
   X,
   Zap,
 } from "lucide-react-native";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -155,6 +159,13 @@ export default function StoreMasterListScreen() {
     "all" | "alerts" | "under_safety" | "stockout" | "overstock" | "unset"
   >(initialFilter || "all");
 
+  // Wine Dropdown Filter Data
+  const [isWineFilterModalOpen, setIsWineFilterModalOpen] = useState(false);
+  const [masterWinesList, setMasterWinesList] = useState<MasterWine[]>([]);
+  const [selectedWineFilter, setSelectedWineFilter] =
+    useState<MasterWine | null>(null);
+  const [wineSearchTerm, setWineSearchTerm] = useState("");
+
   // Adjustment sheet
   const [selected, setSelected] = useState<WineEntry | null>(null);
   const [sheetPar, setSheetPar] = useState("");
@@ -168,6 +179,34 @@ export default function StoreMasterListScreen() {
   const [isBatchConfirmVisible, setIsBatchConfirmVisible] = useState(false);
   const [batchRequesting, setBatchRequesting] = useState(false);
   const [isSuccessVisible, setIsSuccessVisible] = useState(false);
+
+  // Load master wines for the searchable dropdown filter
+  useEffect(() => {
+    const fetchMasterWines = async () => {
+      try {
+        const snap = await getDocs(collection(db, "master_wines"));
+        setMasterWinesList(
+          snap.docs.map((d) => ({ id: d.id, ...d.data() }) as MasterWine),
+        );
+      } catch (err) {
+        console.error("Failed to fetch master wines:", err);
+      }
+    };
+    fetchMasterWines();
+  }, []);
+
+  // Filter master wines based on modal search term
+  const filteredMasterWines = useMemo(() => {
+    const q = wineSearchTerm.toLowerCase();
+    return masterWinesList
+      .filter(
+        (w) =>
+          w.name?.toLowerCase().includes(q) ||
+          w.producer?.toLowerCase().includes(q) ||
+          w.sku?.toLowerCase().includes(q),
+      )
+      .slice(0, 30); // Pseudo-pagination / limit for UI performance
+  }, [masterWinesList, wineSearchTerm]);
 
   const fetchData = useCallback(async () => {
     if (!storeId) return;
@@ -475,7 +514,11 @@ export default function StoreMasterListScreen() {
     setIsBatchConfirmVisible(true);
   };
 
+  // Filter local entries based on active status chip AND selected wine
   const filtered = entries.filter((e) => {
+    if (selectedWineFilter && e.masterWine.id !== selectedWineFilter.id) {
+      return false;
+    }
     if (filter === "alerts") return e.status === "par_alert";
     if (filter === "under_safety") return e.status === "under_safety";
     if (filter === "stockout") return e.status === "stockout";
@@ -704,6 +747,49 @@ export default function StoreMasterListScreen() {
         </View>
       )}
 
+      {/* Wine Search Dropdown Filter */}
+      <View style={{ paddingHorizontal: 20, paddingTop: 12, paddingBottom: 4 }}>
+        <TouchableOpacity
+          style={[
+            styles.wineFilterBtn,
+            {
+              backgroundColor: selectedWineFilter
+                ? theme.primary + "10"
+                : theme.card,
+              borderColor: selectedWineFilter ? theme.primary : theme.border,
+            },
+          ]}
+          onPress={() => setIsWineFilterModalOpen(true)}
+          activeOpacity={0.7}
+        >
+          <Wine
+            size={16}
+            color={selectedWineFilter ? theme.primary : theme.textSecondary}
+          />
+          <Text
+            style={[
+              styles.wineFilterBtnText,
+              { color: selectedWineFilter ? theme.primary : theme.text },
+            ]}
+            numberOfLines={1}
+          >
+            {selectedWineFilter
+              ? selectedWineFilter.name
+              : "Filter specific wine..."}
+          </Text>
+          {selectedWineFilter ? (
+            <TouchableOpacity
+              onPress={() => setSelectedWineFilter(null)}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <X size={16} color={theme.primary} />
+            </TouchableOpacity>
+          ) : (
+            <ChevronDown size={16} color={theme.textSecondary} />
+          )}
+        </TouchableOpacity>
+      </View>
+
       {/* Filter Chips */}
       <View style={styles.filterRow}>
         <ScrollView
@@ -775,7 +861,11 @@ export default function StoreMasterListScreen() {
           ListEmptyComponent={
             <View style={styles.empty}>
               <BarChart3 size={56} color={theme.border} strokeWidth={1} />
-              <Text style={styles.emptyText}>No wines found.</Text>
+              <Text style={styles.emptyText}>
+                {selectedWineFilter
+                  ? "No data found for this wine."
+                  : "No wines found."}
+              </Text>
             </View>
           }
         />
@@ -1195,6 +1285,146 @@ export default function StoreMasterListScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* ── Wine Search Filter Modal ── */}
+      <Modal visible={isWineFilterModalOpen} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View
+            style={[
+              styles.modalContent,
+              { backgroundColor: theme.card, height: "80%" },
+            ]}
+          >
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>
+                Select Wine
+              </Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setIsWineFilterModalOpen(false);
+                  setWineSearchTerm("");
+                }}
+              >
+                <X size={24} color={theme.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Modal Search Input */}
+            <View
+              style={[
+                styles.searchWrapper,
+                {
+                  backgroundColor: theme.background,
+                  borderColor: theme.border,
+                  marginBottom: 16,
+                },
+              ]}
+            >
+              <Search
+                size={18}
+                color={theme.textSecondary}
+                style={styles.searchIcon}
+              />
+              <TextInput
+                style={[styles.searchInput, { color: theme.text }]}
+                placeholder="Search catalog..."
+                placeholderTextColor={theme.textSecondary}
+                value={wineSearchTerm}
+                onChangeText={setWineSearchTerm}
+                autoFocus
+                clearButtonMode="while-editing"
+              />
+            </View>
+
+            {/* Catalog List */}
+            <FlatList
+              data={filteredMasterWines}
+              keyExtractor={(item) => item.id}
+              showsVerticalScrollIndicator={false}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={[
+                    styles.modalOption,
+                    { borderColor: theme.border, paddingVertical: 10 },
+                    selectedWineFilter?.id === item.id && {
+                      borderColor: theme.primary,
+                      backgroundColor: theme.primary + "10",
+                    },
+                  ]}
+                  onPress={() => {
+                    setSelectedWineFilter(item);
+                    setIsWineFilterModalOpen(false);
+                    setWineSearchTerm("");
+                  }}
+                >
+                  <View
+                    style={{
+                      flex: 1,
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 10,
+                    }}
+                  >
+                    <View
+                      style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: 10,
+                        backgroundColor:
+                          selectedWineFilter?.id === item.id
+                            ? theme.primary + "20"
+                            : theme.background,
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <Wine
+                        size={20}
+                        color={
+                          selectedWineFilter?.id === item.id
+                            ? theme.primary
+                            : theme.textSecondary
+                        }
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={[styles.modalOptionText, { color: theme.text }]}
+                        numberOfLines={1}
+                      >
+                        {item.name}
+                      </Text>
+                      <Text
+                        style={{
+                          fontSize: 12,
+                          color: theme.textSecondary,
+                          marginTop: 2,
+                          fontWeight: "500",
+                        }}
+                        numberOfLines={1}
+                      >
+                        {[item.vintage, item.producer, item.format]
+                          .filter(Boolean)
+                          .join(" • ")}
+                      </Text>
+                    </View>
+                  </View>
+                  {selectedWineFilter?.id === item.id && (
+                    <Check size={20} color={theme.primary} />
+                  )}
+                </TouchableOpacity>
+              )}
+              ListEmptyComponent={
+                <View style={{ padding: 20, alignItems: "center" }}>
+                  <Text style={{ color: theme.textSecondary, fontSize: 14 }}>
+                    No wines found in catalog.
+                  </Text>
+                </View>
+              }
+            />
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1248,6 +1478,22 @@ const styles = StyleSheet.create({
     borderColor: "#fcd34d",
   },
   alertBannerText: { color: "#92400e", fontWeight: "700", fontSize: 13 },
+
+  // Wine Filter Trigger Button Styles
+  wineFilterBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    height: 48,
+    gap: 10,
+  },
+  wineFilterBtnText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "600",
+  },
 
   filterRow: {
     flexDirection: "row",
@@ -1733,4 +1979,46 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   btnDisabled: { opacity: 0.4 },
+
+  // Wine Search Modal Overlay Specific Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "flex-end",
+  },
+  modalContent: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    minHeight: "40%",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  modalTitle: { fontSize: 20, fontWeight: "900" },
+  modalOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 10,
+  },
+  modalOptionText: { fontSize: 15, fontWeight: "700" },
+  searchWrapper: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 14,
+    marginBottom: 16,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    height: 52,
+  },
+  searchIcon: { marginRight: 10 },
+  searchInput: { flex: 1, fontSize: 15, fontWeight: "600" },
 });
