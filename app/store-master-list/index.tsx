@@ -25,7 +25,6 @@ import {
   Lock,
   Package,
   RefreshCw,
-  Shield,
   TrendingDown,
   TrendingUp,
   Truck,
@@ -578,9 +577,28 @@ export default function StoreMasterListScreen() {
           </View>
         )}
 
-        {/* Visual Capacity Bar */}
-        {isConfigured && (
+        {/* Integrated Stats & Capacity Bar */}
+        {isConfigured ? (
           <View style={styles.barContainer}>
+            {/* Top Stats Row */}
+            <View style={styles.barStatsRow}>
+              <View style={styles.stockHeaderRow}>
+                <Package size={16} color={theme.textSecondary} />
+                <Text style={styles.stockPrimaryValue}>{item.stockCount}</Text>
+                <Text style={styles.stockPrimaryLabel}>IN STOCK</Text>
+              </View>
+
+              {item.requestedQty > 0 && (
+                <View style={styles.deficitBadge}>
+                  <TrendingDown size={12} color="#ea580c" strokeWidth={2.5} />
+                  <Text style={styles.deficitText}>
+                    {item.requestedQty} DEFICIT
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            {/* Progress Bar Track */}
             <View style={styles.barTrack}>
               <View
                 style={[
@@ -591,93 +609,33 @@ export default function StoreMasterListScreen() {
               {/* Par Level Visual Marker */}
               {parLevel > 0 && parPercentage < 100 && (
                 <View
-                  style={[styles.parMarker, { left: `${parPercentage}%` }]}
-                />
-              )}
-            </View>
-            <View style={styles.barLabelsRow}>
-              <Text style={styles.barLabelSecondary}>
-                {parLevel > 0 ? `Par: ${parLevel}` : ""}
-              </Text>
-              {fillPercentage < 100 && (
-                <Text style={styles.barLabel}>
-                  {Math.round(fillPercentage)}% of Target
-                </Text>
-              )}
-            </View>
-          </View>
-        )}
-
-        {/* Metric Breakdown Grid */}
-        <View style={styles.metricsGrid}>
-          <View style={[styles.metricBox, { backgroundColor: "#f8fafc" }]}>
-            <View style={styles.metricIconRow}>
-              <Package size={12} color="#64748b" />
-              <Text style={styles.metricLabel}>IN STOCK</Text>
-            </View>
-            <Text style={[styles.metricValue, { color: "#0f172a" }]}>
-              {item.stockCount}
-            </Text>
-          </View>
-
-          {isConfigured && (
-            <>
-              {/* New PAR Level Metric Box */}
-              <View style={[styles.metricBox, { backgroundColor: "#f8fafc" }]}>
-                <View style={styles.metricIconRow}>
-                  <AlertTriangle size={12} color="#64748b" />
-                  <Text style={styles.metricLabel}>PAR</Text>
-                </View>
-                <Text style={[styles.metricValue, { color: "#0f172a" }]}>
-                  {parLevel}
-                </Text>
-              </View>
-
-              <View style={[styles.metricBox, { backgroundColor: "#f8fafc" }]}>
-                <View style={styles.metricIconRow}>
-                  <Shield size={12} color="#64748b" />
-                  <Text style={styles.metricLabel}>SAFETY</Text>
-                </View>
-                <Text style={[styles.metricValue, { color: "#0f172a" }]}>
-                  {item.setting?.safetyStock}
-                </Text>
-              </View>
-
-              <View
-                style={[
-                  styles.metricBox,
-                  {
-                    backgroundColor:
-                      item.requestedQty > 0 ? "#fff7ed" : "#f8fafc",
-                  },
-                ]}
-              >
-                <View style={styles.metricIconRow}>
-                  <TrendingDown
-                    size={12}
-                    color={item.requestedQty > 0 ? "#ea580c" : "#64748b"}
-                  />
-                  <Text
-                    style={[
-                      styles.metricLabel,
-                      { color: item.requestedQty > 0 ? "#ea580c" : "#64748b" },
-                    ]}
-                  >
-                    DEFICIT
-                  </Text>
-                </View>
-                <Text
                   style={[
-                    styles.metricValue,
-                    { color: item.requestedQty > 0 ? "#ea580c" : "#0f172a" },
+                    styles.parMarkerContainer,
+                    { left: `${parPercentage}%` },
                   ]}
                 >
-                  {item.requestedQty > 0 ? `+${item.requestedQty}` : "0"}
-                </Text>
-              </View>
-            </>
-          )}
-        </View>
+                  <Text style={styles.parMarkerArrow}>▼</Text>
+                  <View style={styles.parMarkerLine} />
+                </View>
+              )}
+            </View>
+
+            {/* Bottom Labels */}
+            <View style={styles.barLabelsRow}>
+              <Text style={styles.barLabelSecondary}>
+                {parLevel > 0 ? `PAR: ${parLevel}` : ""}
+              </Text>
+              <Text style={styles.barLabel}>SAFETY TARGET: {safetyStock}</Text>
+            </View>
+          </View>
+        ) : (
+          /* Fallback for unconfigured wines */
+          <View style={styles.unconfiguredStockRow}>
+            <Package size={14} color={theme.textSecondary} />
+            <Text style={styles.stockPrimaryValue}>{item.stockCount}</Text>
+            <Text style={styles.stockPrimaryLabel}>IN STOCK (UNSET)</Text>
+          </View>
+        )}
 
         {/* Pending Request Override Footer */}
         {item.activeRequest && (
@@ -1376,64 +1334,107 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
 
-  // Capacity Bar
-  barContainer: { marginBottom: 16, marginTop: 8 },
+  // Capacity Bar & Integrated Stats
+  barContainer: { marginBottom: 12, marginTop: 4 },
+
+  barStatsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-end",
+    marginBottom: 14,
+  },
+  stockHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  stockPrimaryValue: {
+    fontSize: 22,
+    fontWeight: "900",
+    color: theme.text,
+    lineHeight: 24,
+  },
+  stockPrimaryLabel: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: theme.textSecondary,
+    letterSpacing: 0.5,
+    paddingBottom: 2,
+  },
+
+  deficitBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#fff7ed",
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#ffedd5",
+  },
+  deficitText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#ea580c",
+    letterSpacing: 0.5,
+  },
+
   barTrack: {
-    height: 6,
+    height: 8,
     backgroundColor: "#f1f5f9",
-    borderRadius: 3,
+    borderRadius: 4,
     position: "relative",
   },
-  barFill: { height: "100%", borderRadius: 3 },
-  parMarker: {
+  barFill: { height: "100%", borderRadius: 4 },
+
+  parMarkerContainer: {
     position: "absolute",
-    top: -2,
-    bottom: -2,
-    width: 3,
-    backgroundColor: "#94a3b8",
-    borderRadius: 2,
-    zIndex: 1,
-    marginLeft: -1.5,
+    top: -12,
+    width: 20,
+    marginLeft: -10,
+    alignItems: "center",
+    zIndex: 10,
   },
+  parMarkerArrow: {
+    fontSize: 10,
+    color: "#ea580c",
+    lineHeight: 10,
+    marginBottom: 1,
+  },
+  parMarkerLine: {
+    width: 4,
+    height: 12,
+    backgroundColor: "#ea580c",
+    borderRadius: 2,
+    borderWidth: 1,
+    borderColor: "#fff",
+  },
+
   barLabelsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginTop: 6,
+    marginTop: 8,
   },
   barLabelSecondary: {
-    fontSize: 9,
-    fontWeight: "700",
-    color: "#94a3b8",
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#ea580c",
   },
   barLabel: {
     fontSize: 10,
-    fontWeight: "700",
+    fontWeight: "800",
     color: theme.textSecondary,
   },
 
-  // Metrics Grid
-  metricsGrid: { flexDirection: "row", gap: 8 },
-  metricBox: {
-    flex: 1,
-    padding: 10,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#f1f5f9",
-  },
-  metricIconRow: {
+  unconfiguredStockRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    marginBottom: 4,
+    gap: 6,
+    marginTop: 8,
+    marginBottom: 8,
   },
-  metricLabel: {
-    fontSize: 9,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-    color: "#64748b",
-  },
-  metricValue: { fontSize: 18, fontWeight: "900" },
 
   // Pending Request Footer inside Card
   requestedFooter: {
