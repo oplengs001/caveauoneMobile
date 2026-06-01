@@ -10,6 +10,7 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "submit-build": "npx eas-cli@latest build --platform all --auto-submit",
+    "submit-build-ios": "npx eas-cli@latest build --platform ios --auto-submit",
     "ios-device": "expo run:ios --device",
     "eas-update": "npx eas-cli update --channel production"
   },

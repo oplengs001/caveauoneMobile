@@ -23,7 +23,10 @@ import {
   ChevronRight,
   Clock,
   Lock,
+  Package,
   RefreshCw,
+  Shield,
+  TrendingDown,
   TrendingUp,
   Truck,
   X,
@@ -94,7 +97,7 @@ const STATUS_CONFIG: Record<
   { label: string; color: string; bg: string; accent: string }
 > = {
   in_stock: {
-    label: "In Stock",
+    label: "Optimal",
     color: "#065f46",
     bg: "#d1fae5",
     accent: "#10b981",
@@ -107,9 +110,9 @@ const STATUS_CONFIG: Record<
   },
   overstock: {
     label: "Overstock",
-    color: "#166534",
-    bg: "#dcfce7",
-    accent: "#22c55e",
+    color: "#1e3a8a",
+    bg: "#dbeafe",
+    accent: "#3b82f6",
   },
   par_alert: {
     label: "PAR Alert",
@@ -142,12 +145,12 @@ export default function StoreMasterListScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const { filter: initialFilter } = useLocalSearchParams<{
     filter:
-    | "all"
-    | "alerts"
-    | "under_safety"
-    | "stockout"
-    | "overstock"
-    | "unset";
+      | "all"
+      | "alerts"
+      | "under_safety"
+      | "stockout"
+      | "overstock"
+      | "unset";
   }>();
   const [filter, setFilter] = useState<
     "all" | "alerts" | "under_safety" | "stockout" | "overstock" | "unset"
@@ -170,7 +173,6 @@ export default function StoreMasterListScreen() {
   const fetchData = useCallback(async () => {
     if (!storeId) return;
     try {
-      // 1. Fetch bottles with stock and all wine settings for the store
       const [bottlesSnap, settingsSnap] = await Promise.all([
         getDocs(
           query(
@@ -186,11 +188,9 @@ export default function StoreMasterListScreen() {
         ),
       ]);
 
-      // 2. Build a comprehensive list of wines to display and a map of their settings.
       const wineRefMap = new Map<string, any>();
       const settingsMap = new Map<string, StoreWineSetting>();
 
-      // Add wines from inventory
       bottlesSnap.docs.forEach((d) => {
         const ref = d.data().masterWineRef;
         if (ref && !wineRefMap.has(ref.id)) {
@@ -198,7 +198,6 @@ export default function StoreMasterListScreen() {
         }
       });
 
-      // Add wines from settings, and build the settings map
       settingsSnap.docs.forEach((d) => {
         const settingData = d.data();
         settingsMap.set(settingData.masterWineId, {
@@ -206,7 +205,6 @@ export default function StoreMasterListScreen() {
           ...settingData,
         } as StoreWineSetting);
 
-        // If a wine has settings but no stock, it should still be on the list.
         if (
           settingData.masterWineId &&
           !wineRefMap.has(settingData.masterWineId)
@@ -218,25 +216,34 @@ export default function StoreMasterListScreen() {
         }
       });
 
-      // 3. Fetch active requests to link them to wines
       const pendingRequestsSnap = await getDocs(
         query(
           collection(db, "wine_requests"),
           where("storeId", "==", storeId),
-          where("status", "in", ["pending", "converted", "outbound", "receiving"]),
+          where("status", "in", [
+            "pending",
+            "converted",
+            "outbound",
+            "receiving",
+          ]),
         ),
       );
-      const pendingWineRequestMap = new Map<string, { id: string; status: string }>();
+      const pendingWineRequestMap = new Map<
+        string,
+        { id: string; status: string }
+      >();
       pendingRequestsSnap.docs.forEach((reqDoc) => {
         const request = reqDoc.data();
         request.items?.forEach((item: { masterWineId: string }) => {
           if (item.masterWineId) {
-            pendingWineRequestMap.set(item.masterWineId, { id: reqDoc.id, status: request.status });
+            pendingWineRequestMap.set(item.masterWineId, {
+              id: reqDoc.id,
+              status: request.status,
+            });
           }
         });
       });
 
-      // 4. For each wine, count active bottles & fetch wine doc
       const results: WineEntry[] = await Promise.all(
         Array.from(wineRefMap.entries()).map(async ([wineId, wineRef]) => {
           const [wineSnap, countSnap] = await Promise.all([
@@ -253,9 +260,9 @@ export default function StoreMasterListScreen() {
 
           const masterWine: MasterWine = wineSnap.exists()
             ? ({
-              id: wineSnap.id,
-              ...(wineSnap.data() as object),
-            } as MasterWine)
+                id: wineSnap.id,
+                ...(wineSnap.data() as object),
+              } as MasterWine)
             : { id: wineId, name: "Unknown Wine", vintage: "", price: 0 };
 
           const stockCount = countSnap.data().count;
@@ -279,7 +286,6 @@ export default function StoreMasterListScreen() {
         }),
       );
 
-      // Sort: alerts first, then stockouts, then in_stock, then overstock, discontinued last
       const order: StockStatus[] = [
         "stockout",
         "par_alert",
@@ -415,7 +421,6 @@ export default function StoreMasterListScreen() {
 
   const executeBatchRequest = async () => {
     if (!storeId || !profile) return;
-
     if (itemsToRequest.length === 0) return;
 
     setBatchRequesting(true);
@@ -468,7 +473,6 @@ export default function StoreMasterListScreen() {
       );
       return;
     }
-
     setIsBatchConfirmVisible(true);
   };
 
@@ -491,151 +495,196 @@ export default function StoreMasterListScreen() {
 
   const renderItem = ({ item }: { item: WineEntry }) => {
     const cfg = STATUS_CONFIG[item.status];
+    const isConfigured = !!item.setting && !item.setting.discontinued;
+
+    // Calculate Progress Bar Fill (cap at 100%)
+    const safetyStock = item.setting?.safetyStock || 0;
+    const fillPercentage =
+      safetyStock > 0
+        ? Math.min(100, (item.stockCount / safetyStock) * 100)
+        : item.stockCount > 0
+          ? 100
+          : 0;
+
     return (
       <TouchableOpacity
         style={[
           styles.card,
-          { borderLeftWidth: 4, borderLeftColor: cfg.accent },
+          {
+            borderColor: item.status === "stockout" ? "#fecaca" : theme.border,
+          },
         ]}
         onPress={() => openSheet(item)}
-        activeOpacity={0.8}
+        activeOpacity={0.7}
       >
-        <View style={styles.cardBody}>
-          {/* Left: Big stock count */}
-          <View style={[styles.stockCircle, { backgroundColor: cfg.bg }]}>
-            <Text style={[styles.stockCircleCount, { color: cfg.color }]}>
-              {item.stockCount}
+        {/* Header Row: Title & Price */}
+        <View style={styles.cardHeaderRow}>
+          <View style={{ flex: 1, paddingRight: 8 }}>
+            <Text style={styles.wineName} numberOfLines={2}>
+              {item.masterWine.name}
             </Text>
-            <Text style={[styles.stockCircleLabel, { color: cfg.color }]}>
-              in store
+            <Text style={styles.wineMeta}>
+              {item.masterWine.vintage}
+              {item.masterWine.producer ? ` · ${item.masterWine.producer}` : ""}
             </Text>
           </View>
-
-          {/* Right: Wine info + inline metrics */}
-          <View style={styles.cardInfo}>
-            <View style={styles.cardInfoTop}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.wineName} numberOfLines={2}>
-                  {item.masterWine.name}
-                </Text>
-                <Text style={styles.wineMeta}>
-                  {item.masterWine.vintage}
-                  {item.masterWine.producer
-                    ? ` · ${item.masterWine.producer}`
-                    : ""}
-                  {item.masterWine.format ? ` · ${item.masterWine.format}` : ""}
-                </Text>
-                {item.setting?.sellingPrice != null && (
-                  <Text style={styles.sellingPrice}>
-                    ₱{item.setting.sellingPrice.toLocaleString("en-US", {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
-                  </Text>
-                )}
-              </View>
-              <ChevronRight size={18} color="#94a3b8" />
+          <View style={{ alignItems: "flex-end" }}>
+            <View style={[styles.statusBadge, { backgroundColor: cfg.bg }]}>
+              <Text style={[styles.statusText, { color: cfg.color }]}>
+                {cfg.label}
+              </Text>
             </View>
-
-            {/* Compact inline metrics row */}
-            <View style={styles.inlineMetrics}>
-              <View style={[styles.statusBadge, { backgroundColor: cfg.bg }]}>
-                <Text style={[styles.statusText, { color: cfg.color }]}>
-                  {cfg.label}
-                </Text>
-              </View>
-              {item.setting?.isFastMoving && (
-                <View
-                  style={[
-                    styles.indicatorBadge,
-                    { backgroundColor: "#f59e0b20" },
-                  ]}
-                >
-                  <Zap size={10} color="#d97706" strokeWidth={2.5} />
-                  <Text style={[styles.indicatorText, { color: "#d97706" }]}>
-                    Fast Moving
-                  </Text>
-                </View>
-              )}
-              {item.setting?.isReserve && (
-                <View
-                  style={[
-                    styles.indicatorBadge,
-                    { backgroundColor: "#6366f120" },
-                  ]}
-                >
-                  <Lock size={10} color="#4338ca" strokeWidth={2.5} />
-                  <Text style={[styles.indicatorText, { color: "#4338ca" }]}>
-                    Reserve
-                  </Text>
-                </View>
-              )}
-              {item.setting && (
-                <>
-                  <Text style={styles.inlineMetricText}>
-                    PAR{" "}
-                    <Text style={styles.inlineMetricVal}>
-                      {item.setting.parLevel}
-                    </Text>
-                  </Text>
-                  <Text style={[styles.inlineMetricDot]}>·</Text>
-                  <Text style={styles.inlineMetricText}>
-                    Safety{" "}
-                    <Text style={styles.inlineMetricVal}>
-                      {item.setting.safetyStock}
-                    </Text>
-                  </Text>
-                </>
-              )}
-              {item.requestedQty > 0 && (
-                <>
-                  <Text style={styles.inlineMetricDot}>·</Text>
-                  <Text
-                    style={[styles.inlineMetricText, { color: cfg.accent }]}
-                  >
-                    Need{" "}
-                    <Text style={{ fontWeight: "900" }}>
-                      +{item.requestedQty}
-                    </Text>
-                  </Text>
-                </>
-              )}
-              {item.activeRequest && (
-                <>
-                  <Text style={styles.inlineMetricDot}>·</Text>
-                  <TouchableOpacity
-                    style={styles.requestedIndicator}
-                    onPress={(e) => {
-                      e.stopPropagation();
-                      router.push(`/wine-requests/${item.activeRequest!.id}`);
-                    }}
-                  >
-                    {item.activeRequest.status === "outbound" || item.activeRequest.status === "converted" ? (
-                      <Truck size={11} color={cfg.accent} />
-                    ) : item.activeRequest.status === "receiving" ? (
-                      <CheckCircle2 size={11} color={cfg.accent} />
-                    ) : (
-                      <Clock size={11} color={cfg.accent} />
-                    )}
-                    <Text
-                      style={[styles.inlineMetricText, { color: cfg.accent }]}
-                    >
-                      {item.activeRequest.status === "pending"
-                        ? "Requested"
-                        : item.activeRequest.status === "converted"
-                          ? "Pulling Out"
-                          : item.activeRequest.status === "outbound"
-                            ? "Outbound"
-                            : item.activeRequest.status === "receiving"
-                              ? "Receiving"
-                              : "Requested"}
-                    </Text>
-                  </TouchableOpacity>
-                </>
-              )}
-            </View>
+            {item.setting?.sellingPrice != null && (
+              <Text style={styles.sellingPrice}>
+                ₱
+                {item.setting.sellingPrice.toLocaleString("en-US", {
+                  minimumFractionDigits: 2,
+                })}
+              </Text>
+            )}
           </View>
         </View>
+
+        {/* Tags Row */}
+        {(item.setting?.isFastMoving || item.setting?.isReserve) && (
+          <View style={styles.tagsRow}>
+            {item.setting?.isFastMoving && (
+              <View
+                style={[styles.indicatorBadge, { backgroundColor: "#fef3c7" }]}
+              >
+                <Zap size={10} color="#d97706" strokeWidth={2.5} />
+                <Text style={[styles.indicatorText, { color: "#d97706" }]}>
+                  Fast Moving
+                </Text>
+              </View>
+            )}
+            {item.setting?.isReserve && (
+              <View
+                style={[styles.indicatorBadge, { backgroundColor: "#e0e7ff" }]}
+              >
+                <Lock size={10} color="#4338ca" strokeWidth={2.5} />
+                <Text style={[styles.indicatorText, { color: "#4338ca" }]}>
+                  Reserve
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* Visual Capacity Bar */}
+        {isConfigured && (
+          <View style={styles.barContainer}>
+            <View style={styles.barTrack}>
+              <View
+                style={[
+                  styles.barFill,
+                  { width: `${fillPercentage}%`, backgroundColor: cfg.accent },
+                ]}
+              />
+            </View>
+            {fillPercentage < 100 && (
+              <Text style={styles.barLabel}>
+                {Math.round(fillPercentage)}% of Target
+              </Text>
+            )}
+          </View>
+        )}
+
+        {/* Metric Breakdown Grid */}
+        <View style={styles.metricsGrid}>
+          <View style={[styles.metricBox, { backgroundColor: "#f8fafc" }]}>
+            <View style={styles.metricIconRow}>
+              <Package size={12} color="#64748b" />
+              <Text style={styles.metricLabel}>IN STOCK</Text>
+            </View>
+            <Text style={[styles.metricValue, { color: "#0f172a" }]}>
+              {item.stockCount}
+            </Text>
+          </View>
+
+          {isConfigured && (
+            <>
+              <View style={[styles.metricBox, { backgroundColor: "#f8fafc" }]}>
+                <View style={styles.metricIconRow}>
+                  <Shield size={12} color="#64748b" />
+                  <Text style={styles.metricLabel}>SAFETY</Text>
+                </View>
+                <Text style={[styles.metricValue, { color: "#0f172a" }]}>
+                  {item.setting?.safetyStock}
+                </Text>
+              </View>
+
+              <View
+                style={[
+                  styles.metricBox,
+                  {
+                    backgroundColor:
+                      item.requestedQty > 0 ? "#fff7ed" : "#f8fafc",
+                  },
+                ]}
+              >
+                <View style={styles.metricIconRow}>
+                  <TrendingDown
+                    size={12}
+                    color={item.requestedQty > 0 ? "#ea580c" : "#64748b"}
+                  />
+                  <Text
+                    style={[
+                      styles.metricLabel,
+                      { color: item.requestedQty > 0 ? "#ea580c" : "#64748b" },
+                    ]}
+                  >
+                    DEFICIT
+                  </Text>
+                </View>
+                <Text
+                  style={[
+                    styles.metricValue,
+                    { color: item.requestedQty > 0 ? "#ea580c" : "#0f172a" },
+                  ]}
+                >
+                  {item.requestedQty > 0 ? `+${item.requestedQty}` : "0"}
+                </Text>
+              </View>
+            </>
+          )}
+        </View>
+
+        {/* Pending Request Override Footer */}
+        {item.activeRequest && (
+          <TouchableOpacity
+            style={[styles.requestedFooter, { backgroundColor: cfg.bg }]}
+            onPress={(e) => {
+              e.stopPropagation();
+              router.push(`/wine-requests/${item.activeRequest!.id}`);
+            }}
+          >
+            {item.activeRequest.status === "outbound" ||
+            item.activeRequest.status === "converted" ? (
+              <Truck size={14} color={cfg.accent} />
+            ) : item.activeRequest.status === "receiving" ? (
+              <CheckCircle2 size={14} color={cfg.accent} />
+            ) : (
+              <Clock size={14} color={cfg.accent} />
+            )}
+            <Text style={[styles.requestedFooterText, { color: cfg.color }]}>
+              {item.activeRequest.status === "pending"
+                ? "Request Pending Approval"
+                : item.activeRequest.status === "converted"
+                  ? "Warehouse is Pulling Out"
+                  : item.activeRequest.status === "outbound"
+                    ? "Stock is Outbound"
+                    : item.activeRequest.status === "receiving"
+                      ? "Ready to Receive"
+                      : "Requested"}
+            </Text>
+            <ChevronRight
+              size={14}
+              color={cfg.color}
+              style={{ marginLeft: "auto" }}
+            />
+          </TouchableOpacity>
+        )}
       </TouchableOpacity>
     );
   };
@@ -650,7 +699,7 @@ export default function StoreMasterListScreen() {
           <ChevronLeft size={28} color={theme.primary} strokeWidth={2.5} />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
-          <Text style={styles.title}>Master List</Text>
+          <Text style={styles.title}>Stock Management</Text>
           <Text style={styles.subtitle}>{entries.length} wines tracked</Text>
         </View>
         <TouchableOpacity onPress={onRefresh} style={styles.refreshBtn}>
@@ -745,6 +794,7 @@ export default function StoreMasterListScreen() {
         />
       )}
 
+      {/* Batch Request Button */}
       {itemsToRequest.length > 0 && !loading && (
         <View style={styles.batchRequestContainer}>
           <TouchableOpacity
@@ -823,7 +873,7 @@ export default function StoreMasterListScreen() {
         </View>
       </Modal>
 
-      {/* Batch Request Confirmation Modal */}
+      {/* Batch Confirm Modal */}
       <Modal
         visible={isBatchConfirmVisible}
         animationType="slide"
@@ -833,7 +883,6 @@ export default function StoreMasterListScreen() {
         <View style={styles.sheetOverlay}>
           <View style={[styles.sheet, { maxHeight: "80%" }]}>
             <View style={styles.sheetHandle} />
-
             <View style={styles.sheetHeader}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.sheetWineName}>Confirm Batch Request</Text>
@@ -921,7 +970,7 @@ export default function StoreMasterListScreen() {
         </View>
       </Modal>
 
-      {/* Adjustment Sheet */}
+      {/* Adjustment Sheet Modal */}
       <Modal
         visible={!!selected}
         animationType="slide"
@@ -949,7 +998,6 @@ export default function StoreMasterListScreen() {
               </TouchableOpacity>
             </View>
 
-            {/* Current Stock */}
             <View style={styles.stockRow}>
               <View style={styles.stockPill}>
                 <Text style={styles.stockCount}>
@@ -977,7 +1025,6 @@ export default function StoreMasterListScreen() {
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false}>
-              {/* PAR Level */}
               <Text style={styles.fieldLabel}>PAR LEVEL</Text>
               <Text style={styles.fieldHint}>
                 When stock reaches this number, a reorder is triggered.
@@ -991,7 +1038,6 @@ export default function StoreMasterListScreen() {
                 placeholderTextColor="#94a3b8"
               />
 
-              {/* Safety Stock */}
               <Text style={[styles.fieldLabel, { marginTop: 20 }]}>
                 SAFETY STOCK
               </Text>
@@ -1007,7 +1053,6 @@ export default function StoreMasterListScreen() {
                 placeholderTextColor="#94a3b8"
               />
 
-              {/* Selling Price */}
               <Text style={[styles.fieldLabel, { marginTop: 20 }]}>
                 SELLING PRICE
               </Text>
@@ -1023,7 +1068,6 @@ export default function StoreMasterListScreen() {
                 placeholderTextColor="#94a3b8"
               />
 
-              {/* Formula preview */}
               {sheetPar && sheetSafety && (
                 <View style={styles.formulaBox}>
                   <Text style={styles.formulaLabel}>REQUEST FORMULA</Text>
@@ -1041,7 +1085,6 @@ export default function StoreMasterListScreen() {
                 </View>
               )}
 
-              {/* Stock Type Toggles */}
               <View style={styles.switchSection}>
                 <View style={styles.switchRow}>
                   <View style={{ flex: 1 }}>
@@ -1081,7 +1124,6 @@ export default function StoreMasterListScreen() {
                 </View>
               </View>
 
-              {/* Discontinued */}
               <View style={styles.discontinuedRow}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.fieldLabel}>DISCONTINUED</Text>
@@ -1097,7 +1139,6 @@ export default function StoreMasterListScreen() {
                 />
               </View>
 
-              {/* Actions */}
               <TouchableOpacity
                 style={[styles.saveBtn, saving && styles.btnDisabled]}
                 onPress={handleSaveSettings}
@@ -1118,16 +1159,19 @@ export default function StoreMasterListScreen() {
                     router.push(`/wine-requests/${selected.activeRequest!.id}`);
                   }}
                 >
-                  {selected.activeRequest.status === "outbound" || selected.activeRequest.status === "converted" ? (
+                  {selected.activeRequest.status === "outbound" ||
+                  selected.activeRequest.status === "converted" ? (
                     <Truck size={18} color={theme.primary} strokeWidth={2.5} />
                   ) : selected.activeRequest.status === "receiving" ? (
-                    <CheckCircle2 size={18} color={theme.primary} strokeWidth={2.5} />
+                    <CheckCircle2
+                      size={18}
+                      color={theme.primary}
+                      strokeWidth={2.5}
+                    />
                   ) : (
                     <Clock size={18} color={theme.primary} strokeWidth={2.5} />
                   )}
-                  <Text style={styles.requestBtnText}>
-                    VIEW ACTIVE REQUEST
-                  </Text>
+                  <Text style={styles.requestBtnText}>VIEW ACTIVE REQUEST</Text>
                 </TouchableOpacity>
               ) : (
                 selected &&
@@ -1202,6 +1246,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginTop: 2,
   },
+
   alertBanner: {
     flexDirection: "row",
     alignItems: "center",
@@ -1216,6 +1261,7 @@ const styles = StyleSheet.create({
     borderColor: "#fcd34d",
   },
   alertBannerText: { color: "#92400e", fontWeight: "700", fontSize: 13 },
+
   filterRow: {
     flexDirection: "row",
     gap: 8,
@@ -1240,87 +1286,57 @@ const styles = StyleSheet.create({
     color: theme.textSecondary,
   },
   filterChipTextActive: { color: "#fff" },
-  list: { paddingHorizontal: 16, paddingBottom: 40 },
+
+  list: { paddingHorizontal: 16, paddingBottom: 100 },
+
+  // --- New Card UI ---
   card: {
     backgroundColor: theme.card,
     borderRadius: 16,
     padding: 16,
-    marginBottom: 10,
+    marginBottom: 12,
     borderWidth: 1,
-    borderColor: theme.border,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
     shadowRadius: 6,
     elevation: 2,
-    overflow: "hidden",
   },
-  cardBody: {
+  cardHeaderRow: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-  },
-  stockCircle: {
-    width: 68,
-    height: 68,
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  stockCircleCount: {
-    fontSize: 26,
-    fontWeight: "900",
-    letterSpacing: -1,
-  },
-  stockCircleLabel: {
-    fontSize: 8,
-    fontWeight: "800",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-    opacity: 0.7,
-    marginTop: -1,
-  },
-  cardInfo: {
-    flex: 1,
-    gap: 8,
-  },
-  cardInfoTop: {
-    flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "flex-start",
-    gap: 8,
+    marginBottom: 8,
   },
   wineName: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "800",
     color: theme.text,
     letterSpacing: -0.2,
     marginBottom: 2,
   },
-  wineMeta: { fontSize: 11, color: theme.textSecondary, fontWeight: "500" },
-  sellingPrice: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: theme.primary,
-    marginTop: 3,
-  },
-  statusBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+  wineMeta: { fontSize: 12, color: theme.textSecondary, fontWeight: "500" },
+  statusBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
   statusText: {
-    fontSize: 9,
-    fontWeight: "800",
+    fontSize: 10,
+    fontWeight: "900",
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
-  inlineMetrics: {
-    flexDirection: "row",
-    alignItems: "center",
-    flexWrap: "wrap",
-    gap: 6,
+  sellingPrice: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: theme.primary,
+    marginTop: 4,
+    textAlign: "right",
   },
+
+  tagsRow: { flexDirection: "row", gap: 6, marginBottom: 12 },
   indicatorBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 8,
+    gap: 4,
+    paddingHorizontal: 6,
     paddingVertical: 3,
     borderRadius: 6,
   },
@@ -1330,29 +1346,68 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
-  requestedIndicator: {
+
+  // Capacity Bar
+  barContainer: { marginBottom: 16, marginTop: 8 },
+  barTrack: {
+    height: 6,
+    backgroundColor: "#f1f5f9",
+    borderRadius: 3,
+    overflow: "hidden",
+  },
+  barFill: { height: "100%", borderRadius: 3 },
+  barLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: theme.textSecondary,
+    marginTop: 6,
+    textAlign: "right",
+  },
+
+  // Metrics Grid
+  metricsGrid: { flexDirection: "row", gap: 8 },
+  metricBox: {
+    flex: 1,
+    padding: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#f1f5f9",
+  },
+  metricIconRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
+    marginBottom: 4,
   },
-  inlineMetricText: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: theme.textSecondary,
-  },
-  inlineMetricVal: {
-    fontWeight: "900",
-    color: theme.text,
-  },
-  inlineMetricDot: {
-    fontSize: 11,
-    color: theme.border,
+  metricLabel: {
+    fontSize: 9,
     fontWeight: "800",
+    letterSpacing: 0.5,
+    color: "#64748b",
   },
+  metricValue: { fontSize: 18, fontWeight: "900" },
+
+  // Pending Request Footer inside Card
+  requestedFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 12,
+    padding: 10,
+    borderRadius: 8,
+  },
+  requestedFooterText: {
+    fontSize: 11,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+
+  // Empty State
   empty: { alignItems: "center", paddingTop: 80, gap: 12 },
   emptyText: { color: theme.textSecondary, fontWeight: "600", fontSize: 15 },
 
-  // --- Success Modal ---
+  // --- Modals & Sheets (Unchanged structurally, just keeping styles aligned) ---
   successOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.6)",
@@ -1368,11 +1423,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     width: "100%",
     maxWidth: 400,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
-    elevation: 20,
   },
   successIconContainer: {
     width: 80,
@@ -1408,15 +1458,9 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     letterSpacing: 1,
   },
-  successCloseButton: {
-    marginTop: 8,
-    padding: 12,
-  },
-  successCloseButtonText: {
-    fontSize: 14,
-    fontWeight: "800",
-  },
-  // --- Batch Confirm Modal ---
+  successCloseButton: { marginTop: 8, padding: 12 },
+  successCloseButtonText: { fontSize: 14, fontWeight: "800" },
+
   confirmItemRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -1430,19 +1474,9 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 8,
   },
-  confirmItemQtyText: {
-    fontSize: 13,
-    fontWeight: "900",
-  },
-  confirmItemName: {
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  confirmItemMeta: {
-    fontSize: 12,
-    fontWeight: "500",
-    marginTop: 2,
-  },
+  confirmItemQtyText: { fontSize: 13, fontWeight: "900" },
+  confirmItemName: { fontSize: 14, fontWeight: "700" },
+  confirmItemMeta: { fontSize: 12, fontWeight: "500", marginTop: 2 },
   confirmActions: {
     flexDirection: "row",
     gap: 12,
@@ -1465,12 +1499,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "900",
     letterSpacing: 1,
-  },
-  confirmSubmitBtn: {
-    flex: 2,
-  },
-  confirmSubmitBtnText: {
-    color: "#fff",
   },
 
   batchRequestContainer: {
@@ -1503,7 +1531,6 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
 
-  // Sheet
   sheetOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.4)",
@@ -1614,11 +1641,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: theme.border,
   },
-  switchRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 16,
-  },
+  switchRow: { flexDirection: "row", alignItems: "center", marginBottom: 16 },
   discontinuedRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -1633,14 +1656,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 24,
-    shadowColor: theme.primary,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    elevation: 4,
     borderRadius: 18,
+    marginTop: 24,
   },
-
   saveBtnText: {
     color: "#fff",
     fontSize: 14,
