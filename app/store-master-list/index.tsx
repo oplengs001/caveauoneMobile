@@ -497,14 +497,20 @@ export default function StoreMasterListScreen() {
     const cfg = STATUS_CONFIG[item.status];
     const isConfigured = !!item.setting && !item.setting.discontinued;
 
-    // Calculate Progress Bar Fill (cap at 100%)
+    // Calculate Progress Bar Fills (cap at 100%)
     const safetyStock = item.setting?.safetyStock || 0;
+    const parLevel = item.setting?.parLevel || 0;
+
     const fillPercentage =
       safetyStock > 0
         ? Math.min(100, (item.stockCount / safetyStock) * 100)
         : item.stockCount > 0
           ? 100
           : 0;
+
+    // Determine where the PAR marker sits on the progress bar
+    const parPercentage =
+      safetyStock > 0 ? Math.min(100, (parLevel / safetyStock) * 100) : 0;
 
     return (
       <TouchableOpacity
@@ -526,6 +532,7 @@ export default function StoreMasterListScreen() {
             <Text style={styles.wineMeta}>
               {item.masterWine.vintage}
               {item.masterWine.producer ? ` · ${item.masterWine.producer}` : ""}
+              {item.masterWine.format ? ` · ${item.masterWine.format}` : ""}
             </Text>
           </View>
           <View style={{ alignItems: "flex-end" }}>
@@ -581,12 +588,23 @@ export default function StoreMasterListScreen() {
                   { width: `${fillPercentage}%`, backgroundColor: cfg.accent },
                 ]}
               />
+              {/* Par Level Visual Marker */}
+              {parLevel > 0 && parPercentage < 100 && (
+                <View
+                  style={[styles.parMarker, { left: `${parPercentage}%` }]}
+                />
+              )}
             </View>
-            {fillPercentage < 100 && (
-              <Text style={styles.barLabel}>
-                {Math.round(fillPercentage)}% of Target
+            <View style={styles.barLabelsRow}>
+              <Text style={styles.barLabelSecondary}>
+                {parLevel > 0 ? `Par: ${parLevel}` : ""}
               </Text>
-            )}
+              {fillPercentage < 100 && (
+                <Text style={styles.barLabel}>
+                  {Math.round(fillPercentage)}% of Target
+                </Text>
+              )}
+            </View>
           </View>
         )}
 
@@ -604,6 +622,17 @@ export default function StoreMasterListScreen() {
 
           {isConfigured && (
             <>
+              {/* New PAR Level Metric Box */}
+              <View style={[styles.metricBox, { backgroundColor: "#f8fafc" }]}>
+                <View style={styles.metricIconRow}>
+                  <AlertTriangle size={12} color="#64748b" />
+                  <Text style={styles.metricLabel}>PAR</Text>
+                </View>
+                <Text style={[styles.metricValue, { color: "#0f172a" }]}>
+                  {parLevel}
+                </Text>
+              </View>
+
               <View style={[styles.metricBox, { backgroundColor: "#f8fafc" }]}>
                 <View style={styles.metricIconRow}>
                   <Shield size={12} color="#64748b" />
@@ -1353,15 +1382,34 @@ const styles = StyleSheet.create({
     height: 6,
     backgroundColor: "#f1f5f9",
     borderRadius: 3,
-    overflow: "hidden",
+    position: "relative",
   },
   barFill: { height: "100%", borderRadius: 3 },
+  parMarker: {
+    position: "absolute",
+    top: -2,
+    bottom: -2,
+    width: 3,
+    backgroundColor: "#94a3b8",
+    borderRadius: 2,
+    zIndex: 1,
+    marginLeft: -1.5,
+  },
+  barLabelsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 6,
+  },
+  barLabelSecondary: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: "#94a3b8",
+  },
   barLabel: {
     fontSize: 10,
     fontWeight: "700",
     color: theme.textSecondary,
-    marginTop: 6,
-    textAlign: "right",
   },
 
   // Metrics Grid
@@ -1407,7 +1455,7 @@ const styles = StyleSheet.create({
   empty: { alignItems: "center", paddingTop: 80, gap: 12 },
   emptyText: { color: theme.textSecondary, fontWeight: "600", fontSize: 15 },
 
-  // --- Modals & Sheets (Unchanged structurally, just keeping styles aligned) ---
+  // --- Modals & Sheets ---
   successOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.6)",
