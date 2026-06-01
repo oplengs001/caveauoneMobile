@@ -29,10 +29,10 @@ import {
   MapPin,
   Scan,
   Search as SearchIcon,
-  WineIcon,
+  Wine as WineIcon,
   X,
 } from "lucide-react-native";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
@@ -326,44 +326,80 @@ export default function InventoryScreen() {
     { title: string; masterWineData?: MasterWine; data: BottleView[] }[]
   >([]);
 
+  // Filtering & Sorting
   const [sortBy, setSortBy] = useState<
     "name_asc" | "name_desc" | "stock_desc" | "stock_asc"
   >("name_asc");
   const [filterType, setFilterType] = useState<string | null>(null);
+
+  // Modals
   const [isSortModalOpen, setIsSortModalOpen] = useState(false);
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
+  const [isWineFilterModalOpen, setIsWineFilterModalOpen] = useState(false);
+
+  // Wine Dropdown Filter Data
+  const [masterWinesList, setMasterWinesList] = useState<MasterWine[]>([]);
+  const [selectedWineFilter, setSelectedWineFilter] =
+    useState<MasterWine | null>(null);
+  const [wineSearchTerm, setWineSearchTerm] = useState("");
 
   const [wineCache] = useState(new Map<string, MasterWine>());
   const [locationCache] = useState(new Map<string, Location>());
 
-  // ── Refs so fetchInventory always reads the latest values without
-  //    being re-created on every render (avoids stale-closure bugs).
+  // Refs for consistent fetch state across re-renders
   const isFetchingRef = useRef(false);
   const hasMoreRef = useRef(true);
   const lastDocRef = useRef<QueryDocumentSnapshot | null>(null);
   const searchQueryRef = useRef(searchQuery);
+  const selectedWineFilterRef = useRef(selectedWineFilter);
 
-  // Keep the ref in sync with state so the debounced effect below
-  // can reset the cursor without a re-render race.
+  // Keep refs in sync
   useEffect(() => {
     searchQueryRef.current = searchQuery;
   }, [searchQuery]);
 
+  useEffect(() => {
+    selectedWineFilterRef.current = selectedWineFilter;
+  }, [selectedWineFilter]);
+
+  // Load master wines for the searchable dropdown filter
+  useEffect(() => {
+    const fetchMasterWines = async () => {
+      try {
+        const snap = await getDocs(collection(db, "master_wines"));
+        setMasterWinesList(
+          snap.docs.map((d) => ({ id: d.id, ...d.data() }) as MasterWine),
+        );
+      } catch (err) {
+        console.error("Failed to fetch master wines:", err);
+      }
+    };
+    fetchMasterWines();
+  }, []);
+
+  // Filter master wines based on modal search term
+  const filteredMasterWines = useMemo(() => {
+    const q = wineSearchTerm.toLowerCase();
+    return masterWinesList
+      .filter(
+        (w) =>
+          w.name?.toLowerCase().includes(q) ||
+          w.producer?.toLowerCase().includes(q) ||
+          w.sku?.toLowerCase().includes(q),
+      )
+      .slice(0, 30); // limit for UI performance
+  }, [masterWinesList, wineSearchTerm]);
+
   const fetchInventory = useCallback(
     async (isRefresh = false) => {
-      // Guard: don't stack concurrent fetches; don't paginate when nothing left.
       if (isFetchingRef.current) return;
       if (!isRefresh && !hasMoreRef.current) return;
 
       isFetchingRef.current = true;
 
       if (isRefresh) {
-        // Reset cursor synchronously via refs so the query below
-        // doesn't accidentally paginate from a stale lastDoc.
         lastDocRef.current = null;
         hasMoreRef.current = true;
-        // Show the full-screen spinner on first load; pull-to-refresh uses
-        // the RefreshControl spinner so we don't blank the whole list.
         if (bottles.length === 0) setLoading(true);
         else setRefreshing(true);
         setBottles([]);
@@ -375,9 +411,21 @@ export default function InventoryScreen() {
         const bottlesRef = collection(db, "inventory_bottles");
         const baseConstraints: any[] = [];
 
+        // Apply Store Filter
         if (isStore && profile?.locationId) {
           baseConstraints.push(
             where("storeRef", "==", doc(db, "stores", profile.locationId)),
+          );
+        }
+
+        // Apply Wine Dropdown Filter (Exact Match)
+        if (selectedWineFilterRef.current) {
+          baseConstraints.push(
+            where(
+              "masterWineRef",
+              "==",
+              doc(db, "master_wines", selectedWineFilterRef.current.id),
+            ),
           );
         }
 
@@ -392,7 +440,6 @@ export default function InventoryScreen() {
           limit(fetchLimit),
         );
 
-        // Only paginate when not refreshing, not searching, and cursor exists.
         if (!isRefresh && !isSearching && lastDocRef.current) {
           q = query(
             bottlesRef,
@@ -455,7 +502,6 @@ export default function InventoryScreen() {
             })
           : resolved;
 
-        // Advance the Firestore cursor ref before setting state.
         const lastSnap = snap.docs[snap.docs.length - 1];
         if (lastSnap) lastDocRef.current = lastSnap;
         hasMoreRef.current = !isSearching && snap.docs.length === PAGE_SIZE;
@@ -474,24 +520,29 @@ export default function InventoryScreen() {
       }
     },
     [isStore, profile?.locationId],
-  ); // stable — doesn't close over volatile state
+  );
 
   // Initial load
   useEffect(() => {
     fetchInventory(true);
   }, [fetchInventory]);
 
-  // Re-fetch (reset) whenever search query changes, debounced.
+  // Re-fetch on Text Search
   useEffect(() => {
     const timer = setTimeout(() => {
       fetchInventory(true);
     }, 500);
     return () => clearTimeout(timer);
-  }, [searchQuery]); // intentionally uses state so the effect re-runs on each keystroke
+  }, [searchQuery, fetchInventory]);
+
+  // Re-fetch on Wine Dropdown Filter Selection
+  useEffect(() => {
+    fetchInventory(true);
+  }, [selectedWineFilter, fetchInventory]);
 
   const onRefresh = useCallback(() => {
     fetchInventory(true);
-  }, [fetchInventory, searchQuery]);
+  }, [fetchInventory]);
 
   useEffect(() => {
     const filteredBottles = filterType
@@ -606,6 +657,47 @@ export default function InventoryScreen() {
           />
         </View>
 
+        {/* New Wine Filter Dropdown Trigger */}
+        <TouchableOpacity
+          style={[
+            styles.wineFilterBtn,
+            {
+              backgroundColor: selectedWineFilter
+                ? theme.primary + "10"
+                : theme.card,
+              borderColor: selectedWineFilter ? theme.primary : theme.border,
+            },
+          ]}
+          onPress={() => setIsWineFilterModalOpen(true)}
+          activeOpacity={0.7}
+        >
+          <WineIcon
+            size={16}
+            color={selectedWineFilter ? theme.primary : theme.textSecondary}
+          />
+          <Text
+            style={[
+              styles.wineFilterBtnText,
+              { color: selectedWineFilter ? theme.primary : theme.text },
+            ]}
+            numberOfLines={1}
+          >
+            {selectedWineFilter
+              ? selectedWineFilter.name
+              : "Filter by specific wine..."}
+          </Text>
+          {selectedWineFilter ? (
+            <TouchableOpacity
+              onPress={() => setSelectedWineFilter(null)}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <X size={16} color={theme.primary} />
+            </TouchableOpacity>
+          ) : (
+            <ChevronDown size={16} color={theme.textSecondary} />
+          )}
+        </TouchableOpacity>
+
         <View
           style={[styles.filterSortRow, { marginBottom: isStore ? 16 : 4 }]}
         >
@@ -682,7 +774,9 @@ export default function InventoryScreen() {
             <View style={styles.emptyContainer}>
               <Box size={64} color={theme.border} strokeWidth={1} />
               <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
-                {searchQuery ? "No results found." : "No bottles found."}
+                {searchQuery || selectedWineFilter
+                  ? "No results found."
+                  : "No bottles found."}
               </Text>
             </View>
           }
@@ -794,6 +888,146 @@ export default function InventoryScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* ── Wine Search Filter Modal ── */}
+      <Modal visible={isWineFilterModalOpen} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View
+            style={[
+              styles.modalContent,
+              { backgroundColor: theme.card, height: "80%" },
+            ]}
+          >
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>
+                Select Wine
+              </Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setIsWineFilterModalOpen(false);
+                  setWineSearchTerm("");
+                }}
+              >
+                <X size={24} color={theme.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Modal Search Input */}
+            <View
+              style={[
+                styles.searchWrapper,
+                {
+                  backgroundColor: theme.background,
+                  borderColor: theme.border,
+                  marginBottom: 16,
+                },
+              ]}
+            >
+              <SearchIcon
+                size={18}
+                color={theme.textSecondary}
+                style={styles.searchIcon}
+              />
+              <TextInput
+                style={[styles.searchInput, { color: theme.text }]}
+                placeholder="Search catalog..."
+                placeholderTextColor={theme.textSecondary}
+                value={wineSearchTerm}
+                onChangeText={setWineSearchTerm}
+                autoFocus
+                clearButtonMode="while-editing"
+              />
+            </View>
+
+            {/* Catalog List */}
+            <FlatList
+              data={filteredMasterWines}
+              keyExtractor={(item) => item.id}
+              showsVerticalScrollIndicator={false}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={[
+                    styles.modalOption,
+                    { borderColor: theme.border, paddingVertical: 10 },
+                    selectedWineFilter?.id === item.id && {
+                      borderColor: theme.primary,
+                      backgroundColor: theme.primary + "10",
+                    },
+                  ]}
+                  onPress={() => {
+                    setSelectedWineFilter(item);
+                    setIsWineFilterModalOpen(false);
+                    setWineSearchTerm("");
+                  }}
+                >
+                  <View
+                    style={{
+                      flex: 1,
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 10,
+                    }}
+                  >
+                    <View
+                      style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: 10,
+                        backgroundColor:
+                          selectedWineFilter?.id === item.id
+                            ? theme.primary + "20"
+                            : theme.background,
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <WineIcon
+                        size={20}
+                        color={
+                          selectedWineFilter?.id === item.id
+                            ? theme.primary
+                            : theme.textSecondary
+                        }
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={[styles.modalOptionText, { color: theme.text }]}
+                        numberOfLines={1}
+                      >
+                        {item.name}
+                      </Text>
+                      <Text
+                        style={{
+                          fontSize: 12,
+                          color: theme.textSecondary,
+                          marginTop: 2,
+                          fontWeight: "500",
+                        }}
+                        numberOfLines={1}
+                      >
+                        {[item.vintage, item.producer, item.format]
+                          .filter(Boolean)
+                          .join(" • ")}
+                      </Text>
+                    </View>
+                  </View>
+                  {selectedWineFilter?.id === item.id && (
+                    <Check size={20} color={theme.primary} />
+                  )}
+                </TouchableOpacity>
+              )}
+              ListEmptyComponent={
+                <View style={{ padding: 20, alignItems: "center" }}>
+                  <Text style={{ color: theme.textSecondary, fontSize: 14 }}>
+                    No wines found in catalog.
+                  </Text>
+                </View>
+              }
+            />
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -843,13 +1077,31 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     borderRadius: 14,
-    marginBottom: 12,
+    marginBottom: 8,
     borderWidth: 1,
     paddingHorizontal: 14,
     height: 52,
   },
   searchIcon: { marginRight: 10 },
   searchInput: { flex: 1, fontSize: 15, fontWeight: "600" },
+
+  // Wine Dropdown Specific
+  wineFilterBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    height: 52,
+    marginBottom: 12,
+    gap: 10,
+  },
+  wineFilterBtnText: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: "600",
+  },
+
   filterSortRow: { flexDirection: "row", gap: 10 },
   filterSortBtn: {
     flex: 1,
