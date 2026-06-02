@@ -99,6 +99,7 @@ export interface WineRequestItem {
   format: string;
   sku: string;
   qty: number;
+  skippedQty?: number;
   pulledQty?: number;
   ingressedQty?: number;
   price?: number;

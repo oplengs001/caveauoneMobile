@@ -331,6 +331,13 @@ export default function WineRequestDetail() {
   const statusConfig = getStatusConfig(request.status);
   const StatusIcon = statusConfig.icon;
 
+  // Check if all requested items have been fully received (or skipped)
+  const isAllReceived =
+    request.items.length > 0 &&
+    request.items.every(
+      (i) => (i.ingressedQty || 0) + (i.skippedQty || 0) >= i.qty,
+    );
+
   return (
     <SafeAreaView
       style={[styles.container, { backgroundColor: theme.background }]}
@@ -410,6 +417,7 @@ export default function WineRequestDetail() {
             // Calculate actual expected amount instead of full amount
             const expectedQty = Math.max(0, wine.qty - skippedQty);
             const isFullySkipped = expectedQty === 0;
+            const isItemFulfilled = (wine.ingressedQty || 0) >= expectedQty;
 
             return (
               <View
@@ -480,7 +488,12 @@ export default function WineRequestDetail() {
                   request.status === "receiving" ||
                   request.status === "ingress_complete") && (
                   <View style={{ alignItems: "flex-end", gap: 6 }}>
-                    <View style={styles.progressContainer}>
+                    <View
+                      style={[
+                        styles.progressContainer,
+                        isItemFulfilled && { backgroundColor: "#d1fae5" }, // Turn purely green when fulfilled
+                      ]}
+                    >
                       <Text style={styles.progressText}>
                         {wine.ingressedQty || 0} / {expectedQty}
                       </Text>
@@ -524,20 +537,38 @@ export default function WineRequestDetail() {
           </View>
         )}
       </ScrollView>
-      {(request.status === "receiving" ||
-        (request.status === "ingress_complete" &&
-          !request.items.every(
-            (i) => (i.ingressedQty || 0) + (i.skippedQty || 0) >= i.qty,
-          ))) && (
+
+      {/* Footer / Call to Actions */}
+      {isAllReceived ? (
         <View style={styles.footer}>
+          <View style={styles.successIndicator}>
+            <CheckCircle2 size={20} color="#059669" />
+            <Text style={styles.successIndicatorText}>
+              All items successfully received
+            </Text>
+          </View>
           <TouchableOpacity
             style={styles.scanButton}
-            onPress={() => setScanning(true)}
+            onPress={() => router.dismissTo("/wine-requests")}
           >
-            <ScanQrCode size={24} color="#fff" strokeWidth={2.5} />
-            <Text style={styles.scanButtonText}>Receive Items</Text>
+            <ArrowLeft size={24} color="#fff" strokeWidth={2.5} />
+            <Text style={styles.scanButtonText}>Return to Requests</Text>
           </TouchableOpacity>
         </View>
+      ) : (
+        (request.status === "receiving" ||
+          request.status === "converted" ||
+          (request.status === "ingress_complete" && !isAllReceived)) && (
+          <View style={styles.footer}>
+            <TouchableOpacity
+              style={styles.scanButton}
+              onPress={() => setScanning(true)}
+            >
+              <ScanQrCode size={24} color="#fff" strokeWidth={2.5} />
+              <Text style={styles.scanButtonText}>Receive Items</Text>
+            </TouchableOpacity>
+          </View>
+        )
       )}
     </SafeAreaView>
   );
@@ -692,6 +723,24 @@ const styles = StyleSheet.create({
     padding: 24,
     paddingTop: 12,
     backgroundColor: "transparent",
+  },
+  successIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginBottom: 16,
+    backgroundColor: "#d1fae5",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+  },
+  successIndicatorText: {
+    color: "#065f46",
+    fontSize: 13,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   scanButton: {
     backgroundColor: theme.primary,
