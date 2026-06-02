@@ -1,3 +1,4 @@
+import { useAuth } from "@/context/AuthContext";
 import { db } from "@/lib/firebase";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
 import {
@@ -8,14 +9,14 @@ import {
   query,
   QueryDocumentSnapshot,
   startAfter,
-  where
+  where,
 } from "firebase/firestore";
 import {
   ArrowRight,
   ChevronLeft,
   ClipboardList,
-  Truck
-} from 'lucide-react-native';
+  Truck,
+} from "lucide-react-native";
 import React, { useCallback, useState } from "react";
 import {
   ActivityIndicator,
@@ -37,12 +38,18 @@ export default function PulloutRequestsScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [lastDoc, setLastDoc] = useState<QueryDocumentSnapshot | null>(null);
   const [hasMore, setHasMore] = useState(true);
-  const [selectedTab, setSelectedTab] = useState<"pending" | "in_progress" | "completed">("pending");
+  const [selectedTab, setSelectedTab] = useState<
+    "pending" | "in_progress" | "completed"
+  >("pending");
   const [refreshing, setRefreshing] = useState(false);
+  const { profile } = useAuth();
   const router = useRouter();
 
-  const fetchRequests = async (status: string = selectedTab, isRefresh = false) => {
-    if (loadingMore || (!hasMore && !isRefresh)) return;
+  const fetchRequests = async (
+    status: string = selectedTab,
+    isRefresh = false,
+  ) => {
+    if (loadingMore || (!hasMore && !isRefresh) || !profile) return;
 
     if (isRefresh) {
       setRefreshing(true);
@@ -53,20 +60,27 @@ export default function PulloutRequestsScreen() {
     }
 
     try {
+      const sourceIds = ["warehouse"];
+      if (profile.locationId) {
+        sourceIds.push(profile.locationId);
+      }
+
       let q = query(
         collection(db, "pullout_requests"),
         where("status", "==", status),
+        where("sourceStoreId", "in", sourceIds),
         orderBy("createdAt", "desc"),
-        limit(PAGE_SIZE)
+        limit(PAGE_SIZE),
       );
 
       if (!isRefresh && lastDoc) {
         q = query(
           collection(db, "pullout_requests"),
           where("status", "==", status),
+          where("sourceStoreId", "in", sourceIds),
           orderBy("createdAt", "desc"),
           startAfter(lastDoc),
-          limit(PAGE_SIZE)
+          limit(PAGE_SIZE),
         );
       }
 
@@ -81,7 +95,7 @@ export default function PulloutRequestsScreen() {
         setLastDoc(snap.docs[snap.docs.length - 1]);
         setHasMore(snap.docs.length === PAGE_SIZE);
       } else {
-        setRequests(prev => [...prev, ...data]);
+        setRequests((prev) => [...prev, ...data]);
         if (snap.docs.length > 0) {
           setLastDoc(snap.docs[snap.docs.length - 1]);
         }
@@ -98,8 +112,8 @@ export default function PulloutRequestsScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      fetchRequests(selectedTab, true);
-    }, [selectedTab])
+      if (profile) fetchRequests(selectedTab, true);
+    }, [selectedTab, profile]),
   );
 
   const onRefresh = useCallback(() => {
@@ -107,9 +121,13 @@ export default function PulloutRequestsScreen() {
   }, [selectedTab]);
 
   const renderItem = ({ item }: { item: PulloutRequest }) => {
-    const totalRequested = item.items.reduce((sum, i) => sum + i.requestedQty, 0);
+    const totalRequested = item.items.reduce(
+      (sum, i) => sum + i.requestedQty,
+      0,
+    );
     const totalPulled = item.items.reduce((sum, i) => sum + i.pulledQty, 0);
-    const progress = totalRequested > 0 ? (totalPulled / totalRequested) * 100 : 0;
+    const progress =
+      totalRequested > 0 ? (totalPulled / totalRequested) * 100 : 0;
 
     return (
       <TouchableOpacity
@@ -119,14 +137,25 @@ export default function PulloutRequestsScreen() {
         <View style={styles.cardHeader}>
           <View style={styles.idContainer}>
             <ClipboardList size={14} color="#64748b" />
-            <Text style={styles.requestId}>REQ: {item.id.slice(0, 8).toUpperCase()}</Text>
+            <Text style={styles.requestId}>
+              REQ: {item.id.slice(0, 8).toUpperCase()}
+            </Text>
           </View>
-          <View style={[
-            styles.statusBadge,
-            { backgroundColor: item.status === 'in_progress' ? '#3b82f6' : item.status === 'completed' ? '#10b981' : '#f59e0b' }
-          ]}>
+          <View
+            style={[
+              styles.statusBadge,
+              {
+                backgroundColor:
+                  item.status === "in_progress"
+                    ? "#3b82f6"
+                    : item.status === "completed"
+                      ? "#10b981"
+                      : "#f59e0b",
+              },
+            ]}
+          >
             <Text style={styles.statusText}>
-              {item.status.replace('_', ' ').toUpperCase()}
+              {item.status.replace("_", " ").toUpperCase()}
             </Text>
           </View>
         </View>
@@ -134,7 +163,9 @@ export default function PulloutRequestsScreen() {
         <View style={styles.progressSection}>
           <View style={styles.progressHeader}>
             <Text style={styles.progressLabel}>Task Progress</Text>
-            <Text style={styles.progressValue}>{totalPulled} / {totalRequested} bottles</Text>
+            <Text style={styles.progressValue}>
+              {totalPulled} / {totalRequested} bottles
+            </Text>
           </View>
           <View style={styles.progressBarBg}>
             <View style={[styles.progressBarFill, { width: `${progress}%` }]} />
@@ -145,19 +176,37 @@ export default function PulloutRequestsScreen() {
           <Text style={styles.summaryTitle}>Item List Overview</Text>
           {item.items.map((i, index) => (
             <Text key={index} style={styles.summaryItem} numberOfLines={2}>
-              • {i.wineName} <Text style={styles.summaryQty}>({i.requestedQty})</Text>
-              {"\n"}  <Text style={{ fontSize: 11, color: '#94a3b8' }}>{i.vintage} • {i.producer || "Independent Producer"} • {i.format}</Text>
+              • {i.wineName}{" "}
+              <Text style={styles.summaryQty}>({i.requestedQty})</Text>
+              {"\n"}{" "}
+              <Text style={{ fontSize: 11, color: "#94a3b8" }}>
+                {i.vintage} • {i.producer || "Independent Producer"} •{" "}
+                {i.format}
+              </Text>
             </Text>
           ))}
         </View>
 
         <View style={styles.cardFooter}>
-          <View style={[
-            styles.actionButton,
-            { backgroundColor: item.status === 'in_progress' ? '#4f46e5' : item.status === 'completed' ? '#10b981' : '#f59e0b' }
-          ]}>
+          <View
+            style={[
+              styles.actionButton,
+              {
+                backgroundColor:
+                  item.status === "in_progress"
+                    ? "#4f46e5"
+                    : item.status === "completed"
+                      ? "#10b981"
+                      : "#f59e0b",
+              },
+            ]}
+          >
             <Text style={styles.actionButtonText}>
-              {item.status === 'in_progress' ? 'Continue Task' : item.status === 'completed' ? 'View Summary' : 'Start Pulling'}
+              {item.status === "in_progress"
+                ? "Continue Task"
+                : item.status === "completed"
+                  ? "View Summary"
+                  : "Start Pulling"}
             </Text>
             <ArrowRight size={18} color="#fff" strokeWidth={3} />
           </View>
@@ -184,7 +233,10 @@ export default function PulloutRequestsScreen() {
     <SafeAreaView style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={styles.backButton}
+        >
           <ChevronLeft size={28} color="#fff" strokeWidth={2.5} />
         </TouchableOpacity>
         <View style={styles.titleContainer}>
@@ -214,11 +266,15 @@ export default function PulloutRequestsScreen() {
           contentContainerStyle={styles.listContent}
           onEndReached={() => fetchRequests(selectedTab, false)}
           onEndReachedThreshold={0.5}
-          ListFooterComponent={() => (
+          ListFooterComponent={() =>
             loadingMore ? (
-              <ActivityIndicator size="small" color="#4f46e5" style={{ marginVertical: 20 }} />
+              <ActivityIndicator
+                size="small"
+                color="#4f46e5"
+                style={{ marginVertical: 20 }}
+              />
             ) : null
-          )}
+          }
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -229,7 +285,9 @@ export default function PulloutRequestsScreen() {
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Truck size={64} color="#334155" strokeWidth={1} />
-              <Text style={styles.emptyText}>No {selectedTab.replace('_', ' ')} tasks found.</Text>
+              <Text style={styles.emptyText}>
+                No {selectedTab.replace("_", " ")} tasks found.
+              </Text>
             </View>
           }
         />
@@ -253,27 +311,27 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 12,
   },
   title: {
     fontSize: 24,
     fontWeight: "900",
     color: "#fff",
-    textTransform: 'uppercase',
+    textTransform: "uppercase",
     letterSpacing: -0.5,
   },
   badgeCount: {
-    backgroundColor: '#334155',
+    backgroundColor: "#334155",
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 6,
   },
   badgeCountText: {
-    color: '#94a3b8',
+    color: "#94a3b8",
     fontSize: 12,
-    fontWeight: '900',
+    fontWeight: "900",
   },
   loadingContainer: {
     flex: 1,
@@ -283,7 +341,7 @@ const styles = StyleSheet.create({
   loadingText: {
     color: "#64748b",
     marginTop: 16,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   listContent: {
     padding: 24,
@@ -314,7 +372,7 @@ const styles = StyleSheet.create({
     color: "#64748b",
     fontSize: 11,
     fontWeight: "900",
-    textTransform: 'uppercase',
+    textTransform: "uppercase",
   },
   activeTabText: {
     color: "#fff",
@@ -338,8 +396,8 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   idContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
   },
   requestId: {
@@ -397,19 +455,19 @@ const styles = StyleSheet.create({
     color: "#475569",
     fontSize: 10,
     fontWeight: "800",
-    textTransform: 'uppercase',
+    textTransform: "uppercase",
     marginBottom: 8,
     letterSpacing: 0.5,
   },
   summaryItem: {
     color: "#f1f5f9",
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: "600",
     marginBottom: 4,
   },
   summaryQty: {
     color: "#64748b",
-    fontWeight: '800',
+    fontWeight: "800",
   },
   cardFooter: {
     alignItems: "center",
@@ -445,5 +503,3 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 });
-
-
