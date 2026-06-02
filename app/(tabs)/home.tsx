@@ -50,6 +50,7 @@ export default function HomeScreen() {
   const [outboundRequests, setOutboundRequests] = useState<WineRequest[]>([]);
   const [pulloutTasks, setPulloutTasks] = useState<PulloutRequest[]>([]);
   const [incomingDeliveries, setIncomingDeliveries] = useState<Delivery[]>([]);
+  const [locations, setLocations] = useState<Record<string, string>>({});
   const [loadingRequests, setLoadingRequests] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -143,7 +144,7 @@ export default function HomeScreen() {
     }
     try {
       setLoadingRequests(true);
-      const [reqSnap, delSnap, pulloutSnap] = await Promise.all([
+      const [reqSnap, delSnap, pulloutSnap, storesSnap] = await Promise.all([
         getDocs(
           query(
             collection(db, "wine_requests"),
@@ -165,7 +166,13 @@ export default function HomeScreen() {
             where("status", "in", ["pending", "in_progress"]),
           ),
         ),
+        getDocs(collection(db, "stores")),
       ]);
+
+      const locMap: Record<string, string> = {};
+      storesSnap.docs.forEach((d) => (locMap[d.id] = d.data().name));
+      setLocations(locMap);
+
       const requests = reqSnap.docs.map(
         (doc) => ({ id: doc.id, ...doc.data() }) as WineRequest,
       );
@@ -183,7 +190,7 @@ export default function HomeScreen() {
     } finally {
       setLoadingRequests(false);
     }
-  }, [profile]);
+  }, [profile, refreshing]);
 
   const fetchSalesMetrics = useCallback(async () => {
     const storeId = profile?.locationId;
@@ -529,39 +536,49 @@ export default function HomeScreen() {
               <ActivityIndicator color={theme.primary} />
             ) : (
               <View style={{ gap: 12 }}>
-                {outboundRequests.map((req) => (
-                  <TouchableOpacity
-                    key={req.id}
-                    style={[
-                      styles.requestCard,
-                      {
-                        backgroundColor: theme.card,
-                        borderColor: theme.border,
-                      },
-                    ]}
-                    onPress={() =>
-                      router.push({
-                        pathname: "/wine-requests/[id]",
-                        params: { id: req.id },
-                      })
-                    }
-                  >
-                    <View style={styles.requestCardIcon}>
-                      <Truck size={20} color={theme.primary} />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text
-                        style={[styles.requestCardTitle, { color: theme.text }]}
-                      >
-                        Transfer from Warehouse (Request)
-                      </Text>
-                      <Text style={styles.requestCardSubtitle}>
-                        {req.items.reduce((acc, i) => acc + (i.qty || 0), 0)}{" "}
-                        items • REQ: {req.id.slice(0, 4).toUpperCase()}
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
-                ))}
+                {outboundRequests.map((req) => {
+                  const targetStoreName =
+                    req.targetStoreId === "warehouse"
+                      ? "Central Warehouse"
+                      : locations[req.targetStoreId || ""] || "Unknown Source";
+
+                  return (
+                    <TouchableOpacity
+                      key={req.id}
+                      style={[
+                        styles.requestCard,
+                        {
+                          backgroundColor: theme.card,
+                          borderColor: theme.border,
+                        },
+                      ]}
+                      onPress={() =>
+                        router.push({
+                          pathname: "/wine-requests/[id]",
+                          params: { id: req.id },
+                        })
+                      }
+                    >
+                      <View style={styles.requestCardIcon}>
+                        <Truck size={20} color={theme.primary} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={[
+                            styles.requestCardTitle,
+                            { color: theme.text },
+                          ]}
+                        >
+                          Transfer from {targetStoreName}
+                        </Text>
+                        <Text style={styles.requestCardSubtitle}>
+                          {req.items.reduce((acc, i) => acc + (i.qty || 0), 0)}{" "}
+                          items • REQ: {req.id.slice(0, 4).toUpperCase()}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
 
                 {incomingDeliveries.map((del) => (
                   <TouchableOpacity

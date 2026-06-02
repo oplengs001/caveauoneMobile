@@ -1,4 +1,5 @@
 import { Collapsible } from "@/components/ui/collapsible";
+import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { db } from "@/lib/firebase";
 import { CameraView, useCameraPermissions } from "expo-camera";
@@ -48,6 +49,7 @@ const SEARCH_PAGE_SIZE = 20;
 export default function PulloutDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { profile } = useAuth();
+  const theme = profile?.role === "store" ? Colors.store : Colors.warehouse;
   const [request, setRequest] = useState<PulloutRequest | null>(null);
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
@@ -259,7 +261,8 @@ export default function PulloutDetailScreen() {
         skippedQty: currentSkipped + skipCount,
         skippedAt: new Date(),
         // Keep skipped true if fully addressing remaining for backward compat
-        skipped: currentSkipped + skipCount + item.pulledQty >= item.requestedQty,
+        skipped:
+          currentSkipped + skipCount + item.pulledQty >= item.requestedQty,
       };
 
       await updateDoc(doc(db, "pullout_requests", id as string), {
@@ -293,10 +296,10 @@ export default function PulloutDetailScreen() {
         },
         remaining > 1
           ? {
-            text: `Skip All Remaining (${remaining})`,
-            style: "destructive",
-            onPress: () => processSkip(index, remaining),
-          }
+              text: `Skip All Remaining (${remaining})`,
+              style: "destructive",
+              onPress: () => processSkip(index, remaining),
+            }
           : null,
       ].filter(Boolean) as any,
     );
@@ -305,7 +308,9 @@ export default function PulloutDetailScreen() {
   const handleCompleteRequest = async () => {
     if (!request) return;
 
-    const hasSkipped = request.items.some((i) => (i.skippedQty || 0) > 0 || i.skipped);
+    const hasSkipped = request.items.some(
+      (i) => (i.skippedQty || 0) > 0 || i.skipped,
+    );
 
     Alert.alert(
       "Complete Request?",
@@ -530,10 +535,12 @@ export default function PulloutDetailScreen() {
   if (!permission) return <View />;
   if (!permission.granted && scanning) {
     return (
-      <View style={styles.container}>
-        <Text style={styles.permissionText}>Camera permission required</Text>
+      <View style={[styles.container, { backgroundColor: theme.background }]}>
+        <Text style={[styles.permissionText, { color: theme.textSecondary }]}>
+          Camera permission required
+        </Text>
         <TouchableOpacity
-          style={styles.permissionButton}
+          style={[styles.permissionButton, { backgroundColor: theme.primary }]}
           onPress={requestPermission}
         >
           <Text style={styles.permissionButtonText}>Grant Permission</Text>
@@ -551,13 +558,26 @@ export default function PulloutDetailScreen() {
           barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
         >
           <View style={styles.scannerOverlay}>
-            <View style={styles.scanTarget} />
+            <View
+              style={[
+                styles.scanTarget,
+                {
+                  borderColor: theme.primary,
+                  backgroundColor: theme.primary + "0D",
+                },
+              ]}
+            />
             <Text style={styles.scanText}>Scan bottle QR to pull</Text>
             <TouchableOpacity
               onPress={() => setScanning(false)}
-              style={styles.cancelScanButton}
+              style={[
+                styles.cancelScanButton,
+                { backgroundColor: theme.card, borderColor: theme.border },
+              ]}
             >
-              <Text style={styles.cancelScanText}>Cancel</Text>
+              <Text style={[styles.cancelScanText, { color: theme.text }]}>
+                Cancel
+              </Text>
             </TouchableOpacity>
           </View>
         </CameraView>
@@ -566,46 +586,79 @@ export default function PulloutDetailScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: theme.background }]}
+    >
       <Stack.Screen options={{ headerShown: false }} />
       <View style={styles.header}>
         <TouchableOpacity
           onPress={() => router.back()}
           style={styles.backButton}
         >
-          <ChevronLeft size={28} color="#fff" strokeWidth={2.5} />
+          <ChevronLeft size={28} color={theme.primary} strokeWidth={2.5} />
         </TouchableOpacity>
-        <Text style={styles.title}>Pullout Details</Text>
+        <Text style={[styles.title, { color: theme.text }]}>
+          Pullout Details
+        </Text>
       </View>
 
       {loading && !request ? (
-        <ActivityIndicator size="large" color="#4f46e5" style={{ flex: 1 }} />
+        <ActivityIndicator
+          size="large"
+          color={theme.primary}
+          style={{ flex: 1 }}
+        />
       ) : request ? (
         <>
           <ScrollView contentContainerStyle={styles.scrollContent}>
-            <View style={styles.statusCard}>
-              <Text style={styles.statusLabel}>TASK STATUS</Text>
-              <Text style={styles.statusValue}>
+            <View
+              style={[
+                styles.statusCard,
+                { backgroundColor: theme.card, borderLeftColor: theme.primary },
+              ]}
+            >
+              <Text
+                style={[styles.statusLabel, { color: theme.textSecondary }]}
+              >
+                TASK STATUS
+              </Text>
+              <Text style={[styles.statusValue, { color: theme.text }]}>
                 {request.status.replace("_", " ").toUpperCase()}
               </Text>
             </View>
-
-            <View style={styles.searchSection}>
+            <View
+              style={[
+                styles.searchSection,
+                { backgroundColor: theme.card, borderColor: theme.border },
+              ]}
+            >
               <View style={styles.sectionHeader}>
-                <MapPin size={16} color="#6366f1" />
-                <Text style={styles.sectionTitle}>Check Location</Text>
+                <MapPin size={16} color={theme.primary} />
+                <Text style={[styles.sectionTitle, { color: theme.text }]}>
+                  Check Location
+                </Text>
               </View>
               <View style={styles.searchBar}>
                 <TextInput
-                  style={styles.searchInput}
+                  style={[
+                    styles.searchInput,
+                    {
+                      backgroundColor: theme.background,
+                      borderColor: theme.border,
+                      color: theme.text,
+                    },
+                  ]}
                   placeholder="Enter SKU..."
-                  placeholderTextColor="#475569"
+                  placeholderTextColor={theme.textSecondary}
                   value={searchQuery}
                   onChangeText={setSearchQuery}
                   autoCapitalize="characters"
                 />
                 <TouchableOpacity
-                  style={styles.searchButton}
+                  style={[
+                    styles.searchButton,
+                    { backgroundColor: theme.primary },
+                  ]}
                   onPress={() => handleSearch()}
                   disabled={searchLoading}
                 >
@@ -626,27 +679,56 @@ export default function PulloutDetailScreen() {
                         title={`${locationName} (${bottles.length} bottles)`}
                       >
                         {bottles.map((res) => (
-                          <View key={res.id} style={styles.searchResultItem}>
+                          <View
+                            key={res.id}
+                            style={[
+                              styles.searchResultItem,
+                              {
+                                backgroundColor: theme.background,
+                                borderColor: theme.border,
+                              },
+                            ]}
+                          >
                             <View style={styles.resultInfo}>
-                              <Text style={styles.resultWineName}>
+                              <Text
+                                style={[
+                                  styles.resultWineName,
+                                  { color: theme.text },
+                                ]}
+                              >
                                 {res.wineName}
                               </Text>
                               <Text
                                 style={{
                                   fontSize: 12,
-                                  color: "#64748b",
+                                  color: theme.textSecondary,
                                   fontWeight: "500",
                                   marginBottom: 4,
                                 }}
                               >
                                 {res.vintage} • {res.producer} • {res.format}
                               </Text>
-                              <Text style={styles.resultId}>
+                              <Text
+                                style={[
+                                  styles.resultId,
+                                  { color: theme.textSecondary },
+                                ]}
+                              >
                                 Bottle ID: {res.readableId || res.id}
                               </Text>
                             </View>
-                            <View style={styles.resultBadge}>
-                              <Text style={styles.resultStatus}>
+                            <View
+                              style={[
+                                styles.resultBadge,
+                                { backgroundColor: theme.card },
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.resultStatus,
+                                  { color: theme.textSecondary },
+                                ]}
+                              >
                                 {res.status.toUpperCase()}
                               </Text>
                             </View>
@@ -657,7 +739,10 @@ export default function PulloutDetailScreen() {
                   )}
                   {lastVisible && (
                     <TouchableOpacity
-                      style={styles.loadMoreButton}
+                      style={[
+                        styles.loadMoreButton,
+                        { backgroundColor: theme.primary },
+                      ]}
                       onPress={handleLoadMore}
                       disabled={loadingMore}
                     >
@@ -673,26 +758,42 @@ export default function PulloutDetailScreen() {
             </View>
 
             <View style={styles.sectionHeader}>
-              <PackageSearch size={16} color="#6366f1" />
-              <Text style={styles.sectionTitle}>Items to Pull</Text>
+              <PackageSearch size={16} color={theme.primary} />
+              <Text style={[styles.sectionTitle, { color: theme.text }]}>
+                Items to Pull
+              </Text>
             </View>
             <View style={styles.itemsList}>
               {request.items.map((item, index) => {
-                const skippedCount = item.skippedQty || (item.skipped ? item.requestedQty - item.pulledQty : 0);
-                const isFullyAddressed = item.pulledQty + skippedCount >= item.requestedQty;
+                const skippedCount =
+                  item.skippedQty ||
+                  (item.skipped ? item.requestedQty - item.pulledQty : 0);
+                const isFullyAddressed =
+                  item.pulledQty + skippedCount >= item.requestedQty;
                 const isFullySkipped = skippedCount === item.requestedQty;
                 const isFullyPulled = item.pulledQty === item.requestedQty;
                 const isPartiallySkipped = skippedCount > 0 && !isFullySkipped;
-                const remaining = Math.max(0, item.requestedQty - item.pulledQty - skippedCount);
+                const remaining = Math.max(
+                  0,
+                  item.requestedQty - item.pulledQty - skippedCount,
+                );
 
                 return (
                   <View
                     key={index}
                     style={[
                       styles.itemCard,
+                      {
+                        backgroundColor: theme.card,
+                        borderColor: theme.border,
+                      },
                       isFullyPulled && styles.itemCardFulfilled,
                       isFullySkipped && styles.itemCardSkipped,
-                      isPartiallySkipped && isFullyAddressed && !isFullyPulled && !isFullySkipped && styles.itemCardWarning,
+                      isPartiallySkipped &&
+                        isFullyAddressed &&
+                        !isFullyPulled &&
+                        !isFullySkipped &&
+                        styles.itemCardWarning,
                     ]}
                   >
                     <View style={styles.itemMain}>
@@ -706,7 +807,7 @@ export default function PulloutDetailScreen() {
                           <View style={{ flex: 1, paddingRight: 10 }}>
                             <Text
                               style={[
-                                styles.itemName,
+                                [styles.itemName, { color: theme.text }],
                                 isFullySkipped && styles.textMuted,
                               ]}
                             >
@@ -716,7 +817,7 @@ export default function PulloutDetailScreen() {
                               style={[
                                 {
                                   fontSize: 12,
-                                  color: "#64748b",
+                                  color: theme.textSecondary,
                                   fontWeight: "600",
                                   marginTop: 2,
                                 },
@@ -731,29 +832,58 @@ export default function PulloutDetailScreen() {
                           <View style={styles.itemActions}>
                             {isFullyAddressed ? (
                               isFullyPulled ? (
-                                <CheckCircle2 size={20} color="#10b981" strokeWidth={2.5} />
+                                <CheckCircle2
+                                  size={20}
+                                  color="#10b981"
+                                  strokeWidth={2.5}
+                                />
                               ) : isFullySkipped ? (
-                                <AlertCircle size={20} color="#ef4444" strokeWidth={2.5} />
+                                <AlertCircle
+                                  size={20}
+                                  color="#ef4444"
+                                  strokeWidth={2.5}
+                                />
                               ) : (
-                                <CheckCircle2 size={20} color="#eab308" strokeWidth={2.5} />
+                                <CheckCircle2
+                                  size={20}
+                                  color="#eab308"
+                                  strokeWidth={2.5}
+                                />
                               )
                             ) : (
                               <View style={styles.actionButtons}>
                                 <TouchableOpacity
                                   onPress={() => handleSearch(item.sku)}
-                                  style={styles.actionIcon}
+                                  style={[
+                                    styles.actionIcon,
+                                    {
+                                      backgroundColor: theme.background,
+                                      borderColor: theme.border,
+                                    },
+                                  ]}
                                 >
                                   <Search
                                     size={18}
-                                    color="#6366f1"
+                                    color={theme.primary}
                                     strokeWidth={2}
                                   />
                                 </TouchableOpacity>
                                 <TouchableOpacity
                                   onPress={() => handleSkipItem(index)}
-                                  style={styles.skipButton}
+                                  style={[
+                                    styles.skipButton,
+                                    {
+                                      backgroundColor: theme.danger + "1A",
+                                      borderColor: theme.danger + "33",
+                                    },
+                                  ]}
                                 >
-                                  <Text style={styles.skipButtonText}>
+                                  <Text
+                                    style={[
+                                      styles.skipButtonText,
+                                      { color: theme.danger },
+                                    ]}
+                                  >
                                     Skip
                                   </Text>
                                 </TouchableOpacity>
@@ -763,19 +893,50 @@ export default function PulloutDetailScreen() {
                         </View>
 
                         <View style={styles.itemMetaRow}>
-                          <Text style={styles.itemSku}>SKU: {item.sku}</Text>
-                          <Text style={styles.itemProgress}>
-                            {item.pulledQty} PULLED • {skippedCount} SKIPPED • {item.requestedQty} REQ
+                          <Text
+                            style={[styles.itemSku, { color: theme.primary }]}
+                          >
+                            SKU: {item.sku}
+                          </Text>
+                          <Text
+                            style={[
+                              styles.itemProgress,
+                              { color: theme.textSecondary },
+                            ]}
+                          >
+                            {item.pulledQty} PULLED • {skippedCount} SKIPPED •{" "}
+                            {item.requestedQty} REQ
                           </Text>
                         </View>
 
                         <View style={styles.progressContainer}>
-                          <View style={styles.progressBarBg}>
+                          <View
+                            style={[
+                              styles.progressBarBg,
+                              { backgroundColor: theme.background },
+                            ]}
+                          >
                             {item.pulledQty > 0 && (
-                              <View style={[styles.progressBarFill, { flex: item.pulledQty }]} />
+                              <View
+                                style={[
+                                  styles.progressBarFill,
+                                  {
+                                    flex: item.pulledQty,
+                                    backgroundColor: theme.primary,
+                                  },
+                                ]}
+                              />
                             )}
                             {skippedCount > 0 && (
-                              <View style={[styles.progressBarSkipped, { flex: skippedCount }]} />
+                              <View
+                                style={[
+                                  styles.progressBarSkipped,
+                                  {
+                                    flex: skippedCount,
+                                    backgroundColor: theme.danger,
+                                  },
+                                ]}
+                              />
                             )}
                             {remaining > 0 && (
                               <View style={{ flex: remaining }} />
@@ -804,7 +965,13 @@ export default function PulloutDetailScreen() {
                 </TouchableOpacity>
               ) : (
                 <TouchableOpacity
-                  style={styles.scanButton}
+                  style={[
+                    styles.scanButton,
+                    {
+                      backgroundColor: theme.primary,
+                      shadowColor: theme.primary,
+                    },
+                  ]}
                   onPress={() => {
                     isProcessing.current = false;
                     setScanning(true);
@@ -818,7 +985,9 @@ export default function PulloutDetailScreen() {
           )}
         </>
       ) : (
-        <Text style={styles.errorText}>Task not found.</Text>
+        <Text style={[styles.errorText, { color: theme.danger }]}>
+          Task not found.
+        </Text>
       )}
     </SafeAreaView>
   );
@@ -827,7 +996,6 @@ export default function PulloutDetailScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0f172a",
   },
   header: {
     flexDirection: "row",
@@ -841,7 +1009,6 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: "900",
-    color: "#fff",
     textTransform: "uppercase",
     letterSpacing: -0.5,
   },
@@ -850,12 +1017,10 @@ const styles = StyleSheet.create({
     paddingTop: 8,
   },
   statusCard: {
-    backgroundColor: "#1e293b",
     padding: 24,
     borderRadius: 24,
     marginBottom: 32,
     borderLeftWidth: 6,
-    borderLeftColor: "#4f46e5",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.3,
@@ -863,14 +1028,12 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   statusLabel: {
-    color: "#64748b",
     fontSize: 10,
     fontWeight: "900",
     letterSpacing: 2,
     marginBottom: 8,
   },
   statusValue: {
-    color: "#fff",
     fontSize: 22,
     fontWeight: "900",
     letterSpacing: -0.5,
@@ -882,7 +1045,6 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   sectionTitle: {
-    color: "#fff",
     fontSize: 14,
     fontWeight: "900",
     textTransform: "uppercase",
@@ -893,23 +1055,9 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   itemCard: {
-    backgroundColor: "#1e293b",
     borderRadius: 24,
     borderWidth: 1,
-    borderColor: "#334155",
     overflow: "hidden",
-  },
-  itemCardFulfilled: {
-    borderColor: "rgba(16, 185, 129, 0.3)",
-    backgroundColor: "rgba(16, 185, 129, 0.05)",
-  },
-  itemCardSkipped: {
-    borderColor: "rgba(239, 68, 68, 0.3)",
-    backgroundColor: "rgba(239, 68, 68, 0.05)",
-  },
-  itemCardWarning: {
-    borderColor: "rgba(234, 179, 8, 0.3)",
-    backgroundColor: "rgba(234, 179, 8, 0.05)",
   },
   itemMain: {
     padding: 20,
@@ -922,7 +1070,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   itemName: {
-    color: "#fff",
     fontSize: 16,
     fontWeight: "800",
     flex: 1,
@@ -937,14 +1084,32 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 12,
   },
+  itemCardFulfilled: {
+    borderColor: "rgba(16, 185, 129, 0.3)",
+    backgroundColor: "rgba(16, 185, 129, 0.05)",
+  },
+  itemCardSkipped: {
+    borderColor: "rgba(239, 68, 68, 0.3)",
+    backgroundColor: "rgba(239, 68, 68, 0.05)",
+  },
+  itemCardWarning: {
+    borderColor: "rgba(234, 179, 8, 0.3)",
+    backgroundColor: "rgba(234, 179, 8, 0.05)",
+  },
+  progressBarFill: {
+    height: "100%",
+    backgroundColor: "#6366f1",
+  },
+  progressBarSkipped: {
+    height: "100%",
+    backgroundColor: "#ef4444",
+  },
   itemSku: {
-    color: "#6366f1",
     fontSize: 10,
     fontWeight: "900",
     letterSpacing: 1,
   },
   itemProgress: {
-    color: "#64748b",
     fontSize: 10,
     fontWeight: "900",
     letterSpacing: 0.5,
@@ -954,18 +1119,9 @@ const styles = StyleSheet.create({
   },
   progressBarBg: {
     height: 6,
-    backgroundColor: "#0f172a",
     borderRadius: 3,
     overflow: "hidden",
     flexDirection: "row",
-  },
-  progressBarFill: {
-    height: "100%",
-    backgroundColor: "#6366f1",
-  },
-  progressBarSkipped: {
-    height: "100%",
-    backgroundColor: "#ef4444",
   },
   itemActions: {
     flexDirection: "row",
@@ -980,22 +1136,17 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 12,
-    backgroundColor: "#0f172a",
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#334155",
   },
   skipButton: {
-    backgroundColor: "rgba(239, 68, 68, 0.1)",
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "rgba(239, 68, 68, 0.2)",
   },
   skipButtonText: {
-    color: "#ef4444",
     fontSize: 10,
     fontWeight: "900",
     textTransform: "uppercase",
@@ -1008,14 +1159,12 @@ const styles = StyleSheet.create({
     backgroundColor: "transparent",
   },
   scanButton: {
-    backgroundColor: "#4f46e5",
     height: 72,
     borderRadius: 24,
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
     gap: 12,
-    shadowColor: "#4f46e5",
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.3,
     shadowRadius: 20,
@@ -1029,14 +1178,12 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
   },
   completeButton: {
-    backgroundColor: "#10b981",
     height: 72,
     borderRadius: 24,
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
     gap: 12,
-    shadowColor: "#10b981",
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.3,
     shadowRadius: 20,
@@ -1059,10 +1206,8 @@ const styles = StyleSheet.create({
     width: 260,
     height: 260,
     borderWidth: 2,
-    borderColor: "#4f46e5",
     borderRadius: 32,
     marginBottom: 40,
-    backgroundColor: "rgba(79, 70, 229, 0.05)",
   },
   scanText: {
     color: "#fff",
@@ -1074,29 +1219,25 @@ const styles = StyleSheet.create({
   cancelScanButton: {
     position: "absolute",
     bottom: 60,
-    backgroundColor: "#1e293b",
     paddingHorizontal: 40,
     paddingVertical: 18,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: "#334155",
   },
   cancelScanText: {
-    color: "#fff",
     fontSize: 14,
     fontWeight: "900",
     textTransform: "uppercase",
     letterSpacing: 1,
   },
+
   permissionText: {
-    color: "#94a3b8",
     textAlign: "center",
     marginTop: 100,
     fontSize: 16,
     fontWeight: "600",
   },
   permissionButton: {
-    backgroundColor: "#4f46e5",
     margin: 32,
     padding: 18,
     borderRadius: 20,
@@ -1108,18 +1249,15 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   errorText: {
-    color: "#ef4444",
     textAlign: "center",
     marginTop: 40,
     fontWeight: "700",
   },
   searchSection: {
     marginBottom: 32,
-    backgroundColor: "#1e293b",
     padding: 24,
     borderRadius: 24,
     borderWidth: 1,
-    borderColor: "#334155",
   },
   searchBar: {
     flexDirection: "row",
@@ -1127,18 +1265,14 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    backgroundColor: "#0f172a",
     borderRadius: 16,
     paddingHorizontal: 20,
     height: 56,
-    color: "#fff",
     fontSize: 15,
     fontWeight: "600",
     borderWidth: 1,
-    borderColor: "#334155",
   },
   searchButton: {
-    backgroundColor: "#4f46e5",
     width: 56,
     height: 56,
     borderRadius: 16,
@@ -1153,40 +1287,33 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    backgroundColor: "#0f172a",
     padding: 16,
     marginVertical: 5,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#334155",
   },
   resultInfo: {
     flex: 1,
   },
   resultWineName: {
-    color: "#fff",
     fontSize: 14,
     fontWeight: "800",
   },
   resultBadge: {
-    backgroundColor: "#1e293b",
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 10,
   },
   resultStatus: {
-    color: "#64748b",
     fontSize: 9,
     fontWeight: "900",
     letterSpacing: 1,
   },
   resultId: {
-    color: "#64748b",
     fontSize: 10,
     fontWeight: "700",
   },
   loadMoreButton: {
-    backgroundColor: "#4f46e5",
     borderRadius: 12,
     padding: 12,
     alignItems: "center",
