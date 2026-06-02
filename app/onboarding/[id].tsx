@@ -506,6 +506,10 @@ export default function OnboardingDetailScreen() {
 
   if (!task) return null;
 
+  const isTaskComplete = task.items.every(
+    (item) => item.onboardedQty >= item.qty,
+  );
+
   return (
     <SafeAreaView style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
@@ -513,11 +517,15 @@ export default function OnboardingDetailScreen() {
       {/* HEADER */}
       <View style={styles.header}>
         <TouchableOpacity
-          onPress={() =>
-            currentStep === "overview"
-              ? router.back()
-              : setCurrentStep("overview")
-          }
+          onPress={() => {
+            if (currentStep === "overview") {
+              router.back();
+            } else if (isTaskComplete) {
+              router.dismissTo("/onboarding");
+            } else {
+              setCurrentStep("overview");
+            }
+          }}
           style={styles.backButton}
         >
           <ChevronLeft size={28} color="#fff" strokeWidth={2.5} />
@@ -1023,9 +1031,13 @@ export default function OnboardingDetailScreen() {
           <View style={styles.successCircle}>
             <CheckCircle2 size={80} color="#10b981" strokeWidth={3} />
           </View>
-          <Text style={styles.successTitle}>Bottle Verified!</Text>
+          <Text style={styles.successTitle}>
+            {isTaskComplete ? "Task Complete!" : "Bottle Verified!"}
+          </Text>
           <Text style={styles.successDesc}>
-            The bottle has been matched and the QR code is verified.
+            {isTaskComplete
+              ? "All bottles for this task have been successfully verified."
+              : "The bottle has been matched and the QR code is verified."}
           </Text>
 
           <TouchableOpacity
@@ -1051,9 +1063,15 @@ export default function OnboardingDetailScreen() {
 
           <TouchableOpacity
             style={styles.secondaryButton}
-            onPress={() => setCurrentStep("overview")}
+            onPress={() =>
+              isTaskComplete
+                ? router.dismissTo("/onboarding")
+                : setCurrentStep("overview")
+            }
           >
-            <Text style={styles.secondaryButtonText}>Next Bottle</Text>
+            <Text style={styles.secondaryButtonText}>
+              {isTaskComplete ? "Finish & View All Tasks" : "Next Bottle"}
+            </Text>
           </TouchableOpacity>
         </View>
       )}

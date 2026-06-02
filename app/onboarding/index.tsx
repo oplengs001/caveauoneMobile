@@ -5,14 +5,14 @@ import {
   onSnapshot,
   orderBy,
   query,
-  where
+  where,
 } from "firebase/firestore";
 import {
   ArrowRight,
   ChevronLeft,
   FileDown,
-  Package
-} from 'lucide-react-native';
+  Package,
+} from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -21,14 +21,16 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 import { OnboardingTask } from "../../types";
 
 export default function OnboardingTasksScreen() {
   const [tasks, setTasks] = useState<OnboardingTask[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedTab, setSelectedTab] = useState<"incoming" | "active" | "completed">("incoming");
+  const [selectedTab, setSelectedTab] = useState<
+    "incoming" | "active" | "completed"
+  >("incoming");
   const router = useRouter();
 
   useEffect(() => {
@@ -36,13 +38,13 @@ export default function OnboardingTasksScreen() {
     const statusMap = {
       incoming: "warehouse", // From admin: moves to warehouse status
       active: "warehouse", // We track "active" locally or by checking if any item has onboardedQty > 0
-      completed: "completed"
+      completed: "completed",
     };
 
     const q = query(
       collection(db, "onboarding_tasks"),
       where("status", "==", statusMap[selectedTab]),
-      orderBy("createdAt", "desc")
+      orderBy("createdAt", "desc"),
     );
 
     const unsubscribe = onSnapshot(q, (snap) => {
@@ -53,9 +55,17 @@ export default function OnboardingTasksScreen() {
 
       // Local filtering for "Active" vs "Incoming"
       if (selectedTab === "incoming") {
-        setTasks(data.filter(t => t.items.every(i => i.onboardedQty === 0)));
+        setTasks(
+          data.filter((t) => t.items.every((i) => i.onboardedQty === 0)),
+        );
       } else if (selectedTab === "active") {
-        setTasks(data.filter(t => t.items.some(i => i.onboardedQty > 0) && t.items.some(i => i.onboardedQty < i.qty)));
+        setTasks(
+          data.filter(
+            (t) =>
+              t.items.some((i) => i.onboardedQty > 0) &&
+              t.items.some((i) => i.onboardedQty < i.qty),
+          ),
+        );
       } else {
         setTasks(data);
       }
@@ -67,7 +77,10 @@ export default function OnboardingTasksScreen() {
 
   const renderItem = ({ item }: { item: OnboardingTask }) => {
     const totalQty = item.items.reduce((sum, i) => sum + i.qty, 0);
-    const totalOnboarded = item.items.reduce((sum, i) => sum + i.onboardedQty, 0);
+    const totalOnboarded = item.items.reduce(
+      (sum, i) => sum + i.onboardedQty,
+      0,
+    );
     const progress = totalQty > 0 ? (totalOnboarded / totalQty) * 100 : 0;
 
     return (
@@ -78,14 +91,21 @@ export default function OnboardingTasksScreen() {
         <View style={styles.cardHeader}>
           <View style={styles.idContainer}>
             <FileDown size={14} color="#64748b" />
-            <Text style={styles.requestId}>ONB: {item.id.slice(0, 8).toUpperCase()}</Text>
+            <Text style={styles.requestId}>
+              ONB: {item.id.slice(0, 8).toUpperCase()}
+            </Text>
           </View>
-          <View style={[
-            styles.statusBadge,
-            { backgroundColor: item.status === 'completed' ? '#10b981' : '#4f46e5' }
-          ]}>
+          <View
+            style={[
+              styles.statusBadge,
+              {
+                backgroundColor:
+                  item.status === "completed" ? "#10b981" : "#4f46e5",
+              },
+            ]}
+          >
             <Text style={styles.statusText}>
-              {item.status.replace('_', ' ').toUpperCase()}
+              {item.status.replace("_", " ").toUpperCase()}
             </Text>
           </View>
         </View>
@@ -93,7 +113,9 @@ export default function OnboardingTasksScreen() {
         <View style={styles.progressSection}>
           <View style={styles.progressHeader}>
             <Text style={styles.progressLabel}>Intake Progress</Text>
-            <Text style={styles.progressValue}>{totalOnboarded} / {totalQty} bottles</Text>
+            <Text style={styles.progressValue}>
+              {totalOnboarded} / {totalQty} bottles
+            </Text>
           </View>
           <View style={styles.progressBarBg}>
             <View style={[styles.progressBarFill, { width: `${progress}%` }]} />
@@ -111,7 +133,8 @@ export default function OnboardingTasksScreen() {
                     {i.wineName}
                   </Text>
                   <Text style={styles.summaryItemMeta} numberOfLines={1}>
-                    {i.producerName || 'Unknown Producer'} • {i.format || 'Standard'}
+                    {i.producerName || "Unknown Producer"} •{" "}
+                    {i.format || "Standard"}
                   </Text>
                 </View>
                 <View style={styles.summaryItemQtyBadge}>
@@ -121,17 +144,24 @@ export default function OnboardingTasksScreen() {
             ))}
           </View>
           {item.items.length > 3 && (
-            <Text style={styles.summaryMore}>+ {item.items.length - 3} more wines in this shipment</Text>
+            <Text style={styles.summaryMore}>
+              + {item.items.length - 3} more wines in this shipment
+            </Text>
           )}
         </View>
 
         <View style={styles.cardFooter}>
-          <View style={[
-            styles.actionButton,
-            { backgroundColor: item.status === 'completed' ? '#10b981' : '#4f46e5' }
-          ]}>
+          <View
+            style={[
+              styles.actionButton,
+              {
+                backgroundColor:
+                  item.status === "completed" ? "#10b981" : "#4f46e5",
+              },
+            ]}
+          >
             <Text style={styles.actionButtonText}>
-              {item.status === 'completed' ? 'View Details' : 'Continue Intake'}
+              {item.status === "completed" ? "View Details" : "Continue Intake"}
             </Text>
             <ArrowRight size={18} color="#fff" strokeWidth={3} />
           </View>
@@ -158,7 +188,10 @@ export default function OnboardingTasksScreen() {
     <SafeAreaView style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity
+          onPress={() => router.dismissTo("/home")}
+          style={styles.backButton}
+        >
           <ChevronLeft size={28} color="#fff" strokeWidth={2.5} />
         </TouchableOpacity>
         <View style={styles.titleContainer}>
@@ -189,7 +222,9 @@ export default function OnboardingTasksScreen() {
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Package size={64} color="#334155" strokeWidth={1} />
-              <Text style={styles.emptyText}>No {selectedTab} tasks found.</Text>
+              <Text style={styles.emptyText}>
+                No {selectedTab} tasks found.
+              </Text>
             </View>
           }
         />
@@ -213,27 +248,27 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 12,
   },
   title: {
     fontSize: 24,
     fontWeight: "900",
     color: "#fff",
-    textTransform: 'uppercase',
+    textTransform: "uppercase",
     letterSpacing: -0.5,
   },
   badgeCount: {
-    backgroundColor: '#334155',
+    backgroundColor: "#334155",
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 6,
   },
   badgeCountText: {
-    color: '#94a3b8',
+    color: "#94a3b8",
     fontSize: 12,
-    fontWeight: '900',
+    fontWeight: "900",
   },
   loadingContainer: {
     flex: 1,
@@ -243,7 +278,7 @@ const styles = StyleSheet.create({
   loadingText: {
     color: "#64748b",
     marginTop: 16,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   listContent: {
     padding: 24,
@@ -274,7 +309,7 @@ const styles = StyleSheet.create({
     color: "#64748b",
     fontSize: 11,
     fontWeight: "900",
-    textTransform: 'uppercase',
+    textTransform: "uppercase",
   },
   activeTabText: {
     color: "#fff",
@@ -293,8 +328,8 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   idContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
   },
   requestId: {
@@ -352,7 +387,7 @@ const styles = StyleSheet.create({
     color: "#475569",
     fontSize: 10,
     fontWeight: "800",
-    textTransform: 'uppercase',
+    textTransform: "uppercase",
     marginBottom: 8,
     letterSpacing: 0.5,
   },
