@@ -153,7 +153,9 @@ export default function PulloutDetailScreen() {
       // 2. Check if this wine is in the request
       const masterWineId = bottleData.masterWineRef.id;
       const itemIndex = request.items.findIndex(
-        (i) => i.masterWineId === masterWineId && i.pulledQty < i.requestedQty,
+        (i) =>
+          i.masterWineId === masterWineId &&
+          i.pulledQty + (i.skippedQty || 0) < i.requestedQty,
       );
 
       if (itemIndex === -1) {
@@ -205,7 +207,7 @@ export default function PulloutDetailScreen() {
       ];
 
       const allFulfilled = updatedItems.every(
-        (i) => i.pulledQty >= i.requestedQty || i.skipped,
+        (i) => i.pulledQty + (i.skippedQty || 0) >= i.requestedQty,
       );
 
       await updateDoc(doc(db, "pullout_requests", request.id), {
@@ -245,53 +247,70 @@ export default function PulloutDetailScreen() {
     }
   };
 
+  const processSkip = async (index: number, skipCount: number) => {
+    if (!request) return;
+    try {
+      const newItems = [...request.items];
+      const item = newItems[index];
+      const currentSkipped = item.skippedQty || 0;
+
+      newItems[index] = {
+        ...item,
+        skippedQty: currentSkipped + skipCount,
+        skippedAt: new Date(),
+        // Keep skipped true if fully addressing remaining for backward compat
+        skipped: currentSkipped + skipCount + item.pulledQty >= item.requestedQty,
+      };
+
+      await updateDoc(doc(db, "pullout_requests", id as string), {
+        items: newItems,
+        updatedAt: new Date(),
+      });
+
+      setRequest((prev) => (prev ? { ...prev, items: newItems } : null));
+    } catch (error) {
+      console.error("Error skipping item:", error);
+      Alert.alert("Error", "Failed to skip item.");
+    }
+  };
+
   const handleSkipItem = (index: number) => {
     if (!request) return;
+    const item = request.items[index];
+    const currentSkipped = item.skippedQty || 0;
+    const remaining = item.requestedQty - item.pulledQty - currentSkipped;
+
+    if (remaining <= 0) return;
 
     Alert.alert(
-      "Skip Item?",
-      "Mark this bottle as unavailable? You can still complete the request after skipping.",
+      "Skip Bottles",
+      `How many bottles of ${item.wineName} do you want to mark as unavailable?`,
       [
         { text: "Cancel", style: "cancel" },
         {
-          text: "Skip Item",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              const newItems = [...request.items];
-              newItems[index] = {
-                ...newItems[index],
-                skipped: true,
-                skippedAt: new Date(),
-              };
-
-              await updateDoc(doc(db, "pullout_requests", id as string), {
-                items: newItems,
-                updatedAt: new Date(),
-              });
-
-              setRequest((prev) =>
-                prev ? { ...prev, items: newItems } : null,
-              );
-            } catch (error) {
-              console.error("Error skipping item:", error);
-              Alert.alert("Error", "Failed to skip item.");
-            }
-          },
+          text: "Skip 1 Bottle",
+          onPress: () => processSkip(index, 1),
         },
-      ],
+        remaining > 1
+          ? {
+            text: `Skip All Remaining (${remaining})`,
+            style: "destructive",
+            onPress: () => processSkip(index, remaining),
+          }
+          : null,
+      ].filter(Boolean) as any,
     );
   };
 
   const handleCompleteRequest = async () => {
     if (!request) return;
 
-    const hasSkipped = request.items.some((i) => i.skipped);
+    const hasSkipped = request.items.some((i) => (i.skippedQty || 0) > 0 || i.skipped);
 
     Alert.alert(
       "Complete Request?",
       hasSkipped
-        ? "Warning: Some items were skipped. Are you sure you want to finalize this request?"
+        ? "Warning: Some bottles were skipped. Are you sure you want to finalize this request?"
         : "All items have been pulled. Ready to complete?",
       [
         { text: "Cancel", style: "cancel" },
@@ -326,6 +345,7 @@ export default function PulloutDetailScreen() {
                         return {
                           ...wineReqItem,
                           pulledQty: correspondingPulloutItem.pulledQty,
+                          skippedQty: correspondingPulloutItem.skippedQty || 0,
                         };
                       }
                       return wineReqItem;
@@ -658,27 +678,28 @@ export default function PulloutDetailScreen() {
             </View>
             <View style={styles.itemsList}>
               {request.items.map((item, index) => {
-                const isFulfilled = item.pulledQty >= item.requestedQty;
-                const isSkipped = item.skipped;
-                const progress = Math.min(
-                  1,
-                  item.pulledQty / item.requestedQty,
-                );
+                const skippedCount = item.skippedQty || (item.skipped ? item.requestedQty - item.pulledQty : 0);
+                const isFullyAddressed = item.pulledQty + skippedCount >= item.requestedQty;
+                const isFullySkipped = skippedCount === item.requestedQty;
+                const isFullyPulled = item.pulledQty === item.requestedQty;
+                const isPartiallySkipped = skippedCount > 0 && !isFullySkipped;
+                const remaining = Math.max(0, item.requestedQty - item.pulledQty - skippedCount);
 
                 return (
                   <View
                     key={index}
                     style={[
                       styles.itemCard,
-                      isFulfilled && styles.itemCardFulfilled,
-                      isSkipped && styles.itemCardSkipped,
+                      isFullyPulled && styles.itemCardFulfilled,
+                      isFullySkipped && styles.itemCardSkipped,
+                      isPartiallySkipped && isFullyAddressed && !isFullyPulled && !isFullySkipped && styles.itemCardWarning,
                     ]}
                   >
                     <View style={styles.itemMain}>
                       <TouchableOpacity
                         style={styles.itemInfo}
                         onPress={() =>
-                          !isFulfilled && !isSkipped && handleSearch(item.sku)
+                          !isFullyAddressed && handleSearch(item.sku)
                         }
                       >
                         <View style={styles.itemHeaderRow}>
@@ -686,7 +707,7 @@ export default function PulloutDetailScreen() {
                             <Text
                               style={[
                                 styles.itemName,
-                                isSkipped && styles.textMuted,
+                                isFullySkipped && styles.textMuted,
                               ]}
                             >
                               {item.wineName}
@@ -699,7 +720,7 @@ export default function PulloutDetailScreen() {
                                   fontWeight: "600",
                                   marginTop: 2,
                                 },
-                                isSkipped && styles.textMuted,
+                                isFullySkipped && styles.textMuted,
                               ]}
                             >
                               {item.vintage} •{" "}
@@ -708,18 +729,14 @@ export default function PulloutDetailScreen() {
                             </Text>
                           </View>
                           <View style={styles.itemActions}>
-                            {isFulfilled ? (
-                              <CheckCircle2
-                                size={20}
-                                color="#10b981"
-                                strokeWidth={2.5}
-                              />
-                            ) : isSkipped ? (
-                              <AlertCircle
-                                size={20}
-                                color="#ef4444"
-                                strokeWidth={2.5}
-                              />
+                            {isFullyAddressed ? (
+                              isFullyPulled ? (
+                                <CheckCircle2 size={20} color="#10b981" strokeWidth={2.5} />
+                              ) : isFullySkipped ? (
+                                <AlertCircle size={20} color="#ef4444" strokeWidth={2.5} />
+                              ) : (
+                                <CheckCircle2 size={20} color="#eab308" strokeWidth={2.5} />
+                              )
                             ) : (
                               <View style={styles.actionButtons}>
                                 <TouchableOpacity
@@ -747,32 +764,24 @@ export default function PulloutDetailScreen() {
 
                         <View style={styles.itemMetaRow}>
                           <Text style={styles.itemSku}>SKU: {item.sku}</Text>
-                          <Text
-                            style={[
-                              styles.itemProgress,
-                              isSkipped && { color: "#ef4444" },
-                              isFulfilled && { color: "#10b981" },
-                            ]}
-                          >
-                            {isSkipped
-                              ? "SKIPPED"
-                              : `${item.pulledQty} OF ${item.requestedQty} PULLED`}
+                          <Text style={styles.itemProgress}>
+                            {item.pulledQty} PULLED • {skippedCount} SKIPPED • {item.requestedQty} REQ
                           </Text>
                         </View>
 
-                        {!isSkipped && (
-                          <View style={styles.progressContainer}>
-                            <View style={styles.progressBarBg}>
-                              <View
-                                style={[
-                                  styles.progressBarFill,
-                                  { width: `${progress * 100}%` },
-                                  isFulfilled && { backgroundColor: "#10b981" },
-                                ]}
-                              />
-                            </View>
+                        <View style={styles.progressContainer}>
+                          <View style={styles.progressBarBg}>
+                            {item.pulledQty > 0 && (
+                              <View style={[styles.progressBarFill, { flex: item.pulledQty }]} />
+                            )}
+                            {skippedCount > 0 && (
+                              <View style={[styles.progressBarSkipped, { flex: skippedCount }]} />
+                            )}
+                            {remaining > 0 && (
+                              <View style={{ flex: remaining }} />
+                            )}
                           </View>
-                        )}
+                        </View>
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -784,7 +793,7 @@ export default function PulloutDetailScreen() {
           {request.status !== "completed" && (
             <View style={styles.footer}>
               {request.items.every(
-                (i) => i.pulledQty >= i.requestedQty || i.skipped,
+                (i) => i.pulledQty + (i.skippedQty || 0) >= i.requestedQty,
               ) ? (
                 <TouchableOpacity
                   style={[styles.completeButton]}
@@ -898,6 +907,10 @@ const styles = StyleSheet.create({
     borderColor: "rgba(239, 68, 68, 0.3)",
     backgroundColor: "rgba(239, 68, 68, 0.05)",
   },
+  itemCardWarning: {
+    borderColor: "rgba(234, 179, 8, 0.3)",
+    backgroundColor: "rgba(234, 179, 8, 0.05)",
+  },
   itemMain: {
     padding: 20,
   },
@@ -916,8 +929,7 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   textMuted: {
-    textDecorationLine: "line-through",
-    opacity: 0.3,
+    opacity: 0.4,
   },
   itemMetaRow: {
     flexDirection: "row",
@@ -945,11 +957,15 @@ const styles = StyleSheet.create({
     backgroundColor: "#0f172a",
     borderRadius: 3,
     overflow: "hidden",
+    flexDirection: "row",
   },
   progressBarFill: {
     height: "100%",
     backgroundColor: "#6366f1",
-    borderRadius: 3,
+  },
+  progressBarSkipped: {
+    height: "100%",
+    backgroundColor: "#ef4444",
   },
   itemActions: {
     flexDirection: "row",
@@ -1164,7 +1180,6 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     letterSpacing: 1,
   },
-
   resultId: {
     color: "#64748b",
     fontSize: 10,

@@ -25,7 +25,9 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+
 const theme = Colors.store;
+
 export default function WineRequestDetail() {
   const { id, openScanner } = useLocalSearchParams<{
     id: string;
@@ -125,12 +127,13 @@ export default function WineRequestDetail() {
 
       const item = request.items[itemIndex];
       const ingressedQty = item.ingressedQty || 0;
+      const skippedQty = item.skippedQty || 0;
       const targetQty = item.qty;
 
-      if (ingressedQty >= targetQty) {
+      if (ingressedQty + skippedQty >= targetQty) {
         Alert.alert(
-          "Fully Received",
-          "All units of this wine have been received for this request.",
+          "Fully Handled",
+          "All expected available units of this wine have been received.",
           [{ text: "OK", onPress: () => setScanning(true) }],
         );
         return;
@@ -149,7 +152,11 @@ export default function WineRequestDetail() {
         ...item,
         ingressedQty: (item.ingressedQty || 0) + 1,
       };
-      const allReceived = newItems.every((i) => (i.ingressedQty || 0) >= i.qty);
+
+      // Request is complete if every item's received + skipped quantity equals or exceeds what was asked
+      const allReceived = newItems.every(
+        (i) => (i.ingressedQty || 0) + (i.skippedQty || 0) >= i.qty,
+      );
       const newStatus = allReceived ? "ingress_complete" : "receiving";
 
       await updateDoc(doc(db, "wine_requests", request.id), {
@@ -398,62 +405,92 @@ export default function WineRequestDetail() {
             </Text>
           </View>
 
-          {request.items.map((wine, idx) => (
-            <View
-              key={idx}
-              style={[
-                styles.itemRow,
-                idx < request.items.length - 1 && {
-                  borderBottomWidth: 1,
-                  borderBottomColor: theme.border,
-                },
-              ]}
-            >
-              {/* Qty pill */}
+          {request.items.map((wine, idx) => {
+            const skippedQty = wine.skippedQty || 0;
+            // Calculate actual expected amount instead of full amount
+            const expectedQty = Math.max(0, wine.qty - skippedQty);
+            const isFullySkipped = expectedQty === 0;
+
+            return (
               <View
+                key={idx}
                 style={[
-                  styles.qtyPill,
-                  { backgroundColor: theme.primary + "18" },
+                  styles.itemRow,
+                  idx < request.items.length - 1 && {
+                    borderBottomWidth: 1,
+                    borderBottomColor: theme.border,
+                  },
                 ]}
               >
-                <Text style={[styles.qtyText, { color: theme.primary }]}>
-                  {wine.qty}x
-                </Text>
-              </View>
-
-              {/* Wine info */}
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.wineName, { color: theme.text }]}>
-                  {wine.wineName}
-                </Text>
-                <Text style={[styles.wineMeta, { color: theme.textSecondary }]}>
-                  {[wine.vintage, wine.format].filter(Boolean).join(" · ")}
-                </Text>
-                {wine.sku && wine.sku !== "N/A" && (
+                {/* Qty pill */}
+                <View
+                  style={[
+                    styles.qtyPill,
+                    {
+                      backgroundColor: isFullySkipped
+                        ? "#fee2e2"
+                        : theme.primary + "18",
+                    },
+                  ]}
+                >
                   <Text
                     style={[
-                      styles.wineSku,
-                      { color: theme.textSecondary + "88" },
+                      styles.qtyText,
+                      { color: isFullySkipped ? "#ef4444" : theme.primary },
                     ]}
                   >
-                    SKU: {wine.sku}
+                    {wine.qty}x
                   </Text>
+                </View>
+
+                {/* Wine info */}
+                <View style={{ flex: 1, paddingRight: 4 }}>
+                  <Text
+                    style={[
+                      styles.wineName,
+                      { color: theme.text },
+                      isFullySkipped && styles.textMuted,
+                    ]}
+                  >
+                    {wine.wineName}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.wineMeta,
+                      { color: theme.textSecondary },
+                      isFullySkipped && styles.textMuted,
+                    ]}
+                  >
+                    {[wine.vintage, wine.format].filter(Boolean).join(" · ")}
+                  </Text>
+                  {wine.sku && wine.sku !== "N/A" && (
+                    <Text
+                      style={[
+                        styles.wineSku,
+                        { color: theme.textSecondary + "88" },
+                      ]}
+                    >
+                      SKU: {wine.sku}
+                    </Text>
+                  )}
+                </View>
+
+                {/* Status indicators for converted requests */}
+                {(request.status === "converted" ||
+                  request.status === "receiving" ||
+                  request.status === "ingress_complete") && (
+                  <View style={{ alignItems: "flex-end", gap: 6 }}>
+                    <View style={styles.progressContainer}>
+                      <Text style={styles.progressText}>
+                        {wine.ingressedQty || 0} / {expectedQty}
+                      </Text>
+                      <Text style={styles.progressLabel}>RCVD</Text>
+                    </View>
+                  </View>
                 )}
               </View>
-
-              {/* Pulled qty indicator for converted requests */}
-              {(request.status === "converted" ||
-                request.status === "receiving" ||
-                request.status === "ingress_complete") && (
-                <View style={styles.progressContainer}>
-                  <Text style={styles.progressText}>
-                    {wine.ingressedQty || 0} / {wine.qty}
-                  </Text>
-                  <Text style={styles.progressLabel}>RECEIVED</Text>
-                </View>
-              )}
-            </View>
-          ))}
+            );
+          })}
         </View>
 
         {/* Summary */}
@@ -477,7 +514,11 @@ export default function WineRequestDetail() {
                 Total Bottles
               </Text>
               <Text style={[styles.summaryValue, { color: theme.text }]}>
-                {request.items.reduce((sum, i) => sum + i.qty, 0)} btls
+                {request.items.reduce(
+                  (sum, i) => sum + Math.max(0, i.qty - (i.skippedQty || 0)),
+                  0,
+                )}{" "}
+                btls
               </Text>
             </View>
           </View>
@@ -485,7 +526,9 @@ export default function WineRequestDetail() {
       </ScrollView>
       {(request.status === "receiving" ||
         (request.status === "ingress_complete" &&
-          !request.items.every((i) => (i.ingressedQty || 0) >= i.qty))) && (
+          !request.items.every(
+            (i) => (i.ingressedQty || 0) + (i.skippedQty || 0) >= i.qty,
+          ))) && (
         <View style={styles.footer}>
           <TouchableOpacity
             style={styles.scanButton}
@@ -605,24 +648,30 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontVariant: ["tabular-nums"],
   },
+  textMuted: {
+    opacity: 0.4,
+    textDecorationLine: "line-through",
+  },
   progressContainer: {
     alignItems: "center",
     paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
     backgroundColor: "rgba(16, 185, 129, 0.1)",
+    minWidth: 64,
   },
   progressText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "900",
     color: "#065f46",
   },
   progressLabel: {
-    fontSize: 9,
-    fontWeight: "700",
+    fontSize: 8,
+    fontWeight: "800",
     textTransform: "uppercase",
     letterSpacing: 0.5,
     color: "#065f46",
+    marginTop: 1,
   },
   summaryRow: {
     flexDirection: "row",

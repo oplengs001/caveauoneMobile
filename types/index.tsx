@@ -70,6 +70,7 @@ export interface PulloutRequestItem {
   pulledBottleIds: string[];
   skipped?: boolean;
   skippedAt?: any;
+  skippedQty?: number;
 }
 
 export interface PulloutRequest {
@@ -143,7 +144,6 @@ export interface Delivery {
   createdAt: any;
   updatedAt: any;
 }
-
 
 export type WineFormat =
   | "37.5cl"
