@@ -36,10 +36,12 @@ import {
   Text,
   TouchableOpacity,
   View,
+  useWindowDimensions,
 } from "react-native";
 
 export default function HomeScreen() {
   const router = useRouter();
+  const { width } = useWindowDimensions();
   const { profile, loading } = useAuth();
   const [dashboardMetrics, setDashboardMetrics] = useState({
     stockout: { wines: 0, bottles: 0 },
@@ -62,6 +64,13 @@ export default function HomeScreen() {
   const [salesPeriod, setSalesPeriod] = useState<"today" | "week" | "all">(
     "today",
   );
+
+  // --- Calculate Responsive Layout ---
+  const isTablet = width >= 768;
+  const cardsPerRow = isTablet ? 3 : 2;
+  const containerPadding = 48; // scrollContent padding (24 * 2)
+  const totalGap = 16 * (cardsPerRow - 1);
+  const cardWidth = (width - containerPadding - totalGap) / cardsPerRow;
 
   const fetchMetrics = useCallback(async () => {
     const storeId = profile?.locationId;
@@ -704,13 +713,14 @@ export default function HomeScreen() {
                 </TouchableOpacity>
               </View>
             </View>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.metricsGrid}
-            >
+
+            {/* Replaced ScrollView with Responsive Grid */}
+            <View style={styles.responsiveGrid}>
               <View
-                style={[styles.metricCard, { backgroundColor: theme.primary }]}
+                style={[
+                  styles.metricCard,
+                  { width: cardWidth, backgroundColor: theme.primary },
+                ]}
               >
                 <Banknote size={24} color="#ffffff" strokeWidth={2.5} />
                 <Text
@@ -739,7 +749,7 @@ export default function HomeScreen() {
               <View
                 style={[
                   styles.metricCard,
-                  { backgroundColor: theme.secondary },
+                  { width: cardWidth, backgroundColor: theme.secondary },
                 ]}
               >
                 <Wine size={24} color="#ffffff" strokeWidth={2.5} />
@@ -755,7 +765,15 @@ export default function HomeScreen() {
                       : "All Time"}
                 </Text>
               </View>
-              <View style={[styles.metricCard, { backgroundColor: "#64748b" }]}>
+              <View
+                style={[
+                  styles.metricCard,
+                  {
+                    width: isTablet ? cardWidth : "100%",
+                    backgroundColor: "#64748b",
+                  },
+                ]}
+              >
                 <LayoutList size={24} color="#ffffff" strokeWidth={2.5} />
                 <Text style={[styles.metricCount, { color: "#ffffff" }]}>
                   {salesDashboardMetrics.activeBottles}
@@ -763,7 +781,8 @@ export default function HomeScreen() {
                 <Text style={styles.metricLabel}>Active Inventory</Text>
                 <Text style={styles.metricSubLabel}>Current Stock</Text>
               </View>
-            </ScrollView>
+            </View>
+
             <TouchableOpacity
               style={[
                 styles.viewAllButton,
@@ -1032,12 +1051,17 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     paddingHorizontal: 4,
   },
+  responsiveGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 16,
+  },
   metricsGrid: {
     flexDirection: "row",
     gap: 16,
   },
   metricCard: {
-    width: 140,
+    width: 140, // Keeps original width for non-responsive scroll views (Inventory Alerts)
     height: 160,
     borderRadius: 24,
     padding: 16,
