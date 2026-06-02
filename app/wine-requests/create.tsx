@@ -11,6 +11,7 @@ import {
 } from "firebase/firestore";
 import {
   ChevronLeft,
+  Layers,
   Minus,
   Plus,
   Search,
@@ -582,6 +583,22 @@ export default function CreateWineRequest() {
             </TouchableOpacity>
           </View>
 
+          <View
+            style={[
+              styles.optimizationMessage,
+              {
+                backgroundColor: "rgba(16, 185, 129, 0.05)",
+                borderColor: "rgba(16, 185, 129, 0.1)",
+              },
+            ]}
+          >
+            <Layers size={16} color="#10b981" strokeWidth={2} />
+            <Text style={[styles.optimizationText, { color: "#065f46" }]}>
+              Optimizing fulfillment by grouping items from the best-stocked
+              locations.
+            </Text>
+          </View>
+
           <ScrollView
             style={styles.cartItemsContainer}
             showsVerticalScrollIndicator={true}
@@ -841,6 +858,21 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "900",
     letterSpacing: 1,
+  },
+  optimizationMessage: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    padding: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 12,
+  },
+  optimizationText: {
+    fontSize: 12,
+    fontWeight: "600",
+    lineHeight: 18,
+    flex: 1,
   },
   cartItemsContainer: {
     maxHeight: height * 0.35,
