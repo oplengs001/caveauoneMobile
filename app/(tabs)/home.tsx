@@ -1,7 +1,7 @@
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { auth, db } from "@/lib/firebase";
-import { WineRequest, Delivery } from "@/types";
+import { Delivery, PulloutRequest, WineRequest } from "@/types";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
 import { signOut } from "firebase/auth";
 import {
@@ -48,6 +48,7 @@ export default function HomeScreen() {
   });
   const [loadingMetrics, setLoadingMetrics] = useState(true);
   const [outboundRequests, setOutboundRequests] = useState<WineRequest[]>([]);
+  const [pulloutTasks, setPulloutTasks] = useState<PulloutRequest[]>([]);
   const [incomingDeliveries, setIncomingDeliveries] = useState<Delivery[]>([]);
   const [loadingRequests, setLoadingRequests] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -142,21 +143,28 @@ export default function HomeScreen() {
     }
     try {
       setLoadingRequests(true);
-      const [reqSnap, delSnap] = await Promise.all([
+      const [reqSnap, delSnap, pulloutSnap] = await Promise.all([
         getDocs(
           query(
             collection(db, "wine_requests"),
             where("storeId", "==", profile.locationId),
             where("status", "==", "receiving"),
-          )
+          ),
         ),
         getDocs(
           query(
             collection(db, "deliveries"),
             where("storeId", "==", profile.locationId),
             where("status", "in", ["dispatched", "receiving"]),
-          )
-        )
+          ),
+        ),
+        getDocs(
+          query(
+            collection(db, "pullout_requests"),
+            where("sourceStoreId", "==", profile.locationId),
+            where("status", "in", ["pending", "in_progress"]),
+          ),
+        ),
       ]);
       const requests = reqSnap.docs.map(
         (doc) => ({ id: doc.id, ...doc.data() }) as WineRequest,
@@ -164,8 +172,12 @@ export default function HomeScreen() {
       const deliveries = delSnap.docs.map(
         (doc) => ({ id: doc.id, ...doc.data() }) as Delivery,
       );
+      const pullouts = pulloutSnap.docs.map(
+        (doc) => ({ id: doc.id, ...doc.data() }) as PulloutRequest,
+      );
       setOutboundRequests(requests);
       setIncomingDeliveries(deliveries);
+      setPulloutTasks(pullouts);
     } catch (error) {
       console.error("Error fetching incoming requests/deliveries:", error);
     } finally {
@@ -298,7 +310,9 @@ export default function HomeScreen() {
     dashboardMetrics.stockout.wines > 0 ||
     dashboardMetrics.parAlert.wines > 0 ||
     dashboardMetrics.underSafety.wines > 0;
-  const hasDeliveries = outboundRequests.length > 0 || incomingDeliveries.length > 0;
+  const hasDeliveries =
+    outboundRequests.length > 0 || incomingDeliveries.length > 0;
+  const hasPulloutTasks = pulloutTasks.length > 0;
 
   return (
     <SafeAreaView
@@ -455,6 +469,59 @@ export default function HomeScreen() {
           </View>
         )}
 
+        {isStore && hasPulloutTasks && (
+          <View style={styles.metricsDashboard}>
+            <Text style={styles.metricsTitle}>Pullout Tasks</Text>
+            {loadingRequests ? (
+              <ActivityIndicator color={theme.primary} />
+            ) : (
+              <View style={{ gap: 12 }}>
+                {pulloutTasks.map((task) => (
+                  <TouchableOpacity
+                    key={task.id}
+                    style={[
+                      styles.requestCard,
+                      {
+                        backgroundColor: theme.card,
+                        borderColor: theme.border,
+                      },
+                    ]}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/pullout/[id]",
+                        params: { id: task.id },
+                      })
+                    }
+                  >
+                    <View
+                      style={[
+                        styles.requestCardIcon,
+                        { backgroundColor: "#f59e0b15" },
+                      ]}
+                    >
+                      <ClipboardList size={20} color="#f59e0b" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={[styles.requestCardTitle, { color: theme.text }]}
+                      >
+                        Pull Stock for Another Store
+                      </Text>
+                      <Text style={styles.requestCardSubtitle}>
+                        {task.items.reduce(
+                          (acc, i) => acc + (i.requestedQty || 0),
+                          0,
+                        )}{" "}
+                        items • REQ: {task.id.slice(0, 4).toUpperCase()}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          </View>
+        )}
+
         {isStore && hasDeliveries && (
           <View style={styles.metricsDashboard}>
             <Text style={styles.metricsTitle}>Incoming Deliveries</Text>
@@ -495,7 +562,7 @@ export default function HomeScreen() {
                     </View>
                   </TouchableOpacity>
                 ))}
-                
+
                 {incomingDeliveries.map((del) => (
                   <TouchableOpacity
                     key={del.id}
@@ -523,7 +590,8 @@ export default function HomeScreen() {
                         Admin Delivery
                       </Text>
                       <Text style={styles.requestCardSubtitle}>
-                        {del.totalBottles} items • DEL: {del.id.slice(0, 4).toUpperCase()}
+                        {del.totalBottles} items • DEL:{" "}
+                        {del.id.slice(0, 4).toUpperCase()}
                       </Text>
                     </View>
                   </TouchableOpacity>

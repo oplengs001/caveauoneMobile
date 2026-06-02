@@ -76,6 +76,7 @@ export interface PulloutRequestItem {
 export interface PulloutRequest {
   id: string;
   wineRequestId: string;
+  sourceStoreId?: string;
   outBoundStoreId?: string;
   items: PulloutRequestItem[];
   status: "pending" | "in_progress" | "completed";
