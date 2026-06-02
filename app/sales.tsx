@@ -1,7 +1,7 @@
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { db } from "@/lib/firebase";
-import { Stack, useRouter } from "expo-router";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { collection, getDocs, orderBy, query, where } from "firebase/firestore";
 import {
   Calendar,
@@ -67,10 +67,17 @@ export default function SalesScreen() {
   const { profile } = useAuth();
   const theme = profile?.role === "store" ? Colors.store : Colors.warehouse;
 
+  // Catch the period parameter passed from the HomeScreen
+  const { period: passedPeriod } = useLocalSearchParams();
+
   const [sales, setSales] = useState<Sale[]>([]);
   const [loading, setLoading] = useState(true);
   const [isFilterModalVisible, setFilterModalVisible] = useState(false);
-  const [period, setPeriod] = useState<PeriodType>("all");
+
+  // Initialize the state with the passed parameter, or default to "all"
+  const [period, setPeriod] = useState<PeriodType>(
+    (passedPeriod as PeriodType) || "all",
+  );
 
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");

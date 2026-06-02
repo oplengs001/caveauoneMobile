@@ -716,11 +716,19 @@ export default function HomeScreen() {
 
             {/* Replaced ScrollView with Responsive Grid */}
             <View style={styles.responsiveGrid}>
-              <View
+              {/* Card 1: Total Revenue (Clickable) */}
+              <TouchableOpacity
                 style={[
                   styles.metricCard,
                   { width: cardWidth, backgroundColor: theme.primary },
                 ]}
+                onPress={() =>
+                  router.push({
+                    pathname: "/sales",
+                    params: { period: salesPeriod },
+                  })
+                }
+                activeOpacity={0.8}
               >
                 <Banknote size={24} color="#ffffff" strokeWidth={2.5} />
                 <Text
@@ -745,12 +753,21 @@ export default function HomeScreen() {
                       ? "This Week"
                       : "All Time"}
                 </Text>
-              </View>
-              <View
+              </TouchableOpacity>
+
+              {/* Card 2: Bottles Sold (Clickable) */}
+              <TouchableOpacity
                 style={[
                   styles.metricCard,
                   { width: cardWidth, backgroundColor: theme.secondary },
                 ]}
+                onPress={() =>
+                  router.push({
+                    pathname: "/sales",
+                    params: { period: salesPeriod },
+                  })
+                }
+                activeOpacity={0.8}
               >
                 <Wine size={24} color="#ffffff" strokeWidth={2.5} />
                 <Text style={[styles.metricCount, { color: "#ffffff" }]}>
@@ -764,7 +781,9 @@ export default function HomeScreen() {
                       ? "This Week"
                       : "All Time"}
                 </Text>
-              </View>
+              </TouchableOpacity>
+
+              {/* Card 3: Active Inventory (Non-clickable as requested) */}
               <View
                 style={[
                   styles.metricCard,
