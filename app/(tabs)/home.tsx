@@ -61,9 +61,17 @@ export default function HomeScreen() {
     totalRevenue: 0,
     activeBottles: 0,
   });
+  const [loadingSales, setLoadingSales] = useState(true);
   const [salesPeriod, setSalesPeriod] = useState<"today" | "week" | "all">(
     "today",
   );
+  const [initialDataLoaded, setInitialDataLoaded] = useState(false);
+
+  useEffect(() => {
+    if (!loadingMetrics && !loadingRequests && !loadingSales) {
+      setInitialDataLoaded(true);
+    }
+  }, [loadingMetrics, loadingRequests, loadingSales]);
 
   // --- Calculate Responsive Layout ---
   const isTablet = width >= 768;
@@ -212,9 +220,13 @@ export default function HomeScreen() {
 
   const fetchSalesMetrics = useCallback(async () => {
     const storeId = profile?.locationId;
-    if (profile?.role !== "store" || !storeId) return;
+    if (profile?.role !== "store" || !storeId) {
+      setLoadingSales(false);
+      return;
+    }
 
     try {
+      setLoadingSales(true);
       const activeBottlesSnap = await getCountFromServer(
         query(
           collection(db, "inventory_bottles"),
@@ -260,6 +272,8 @@ export default function HomeScreen() {
       });
     } catch (err) {
       console.error("Failed to fetch sales metrics:", err);
+    } finally {
+      setLoadingSales(false);
     }
   }, [profile, salesPeriod]);
 
@@ -331,6 +345,23 @@ export default function HomeScreen() {
   const role = profile?.role || "warehouse";
   const theme = role === "store" ? Colors.store : Colors.warehouse;
   const isStore = role === "store";
+
+  if (!initialDataLoaded) {
+    return (
+      <View
+        style={[
+          styles.container,
+          { justifyContent: "center", alignItems: "center", backgroundColor: theme.background },
+        ]}
+      >
+        <View style={[styles.logoBadge, { backgroundColor: theme.logoBg, borderRadius: isStore ? 20 : 10 }]}>
+          <Wine size={32} color="#ffffff" strokeWidth={2.5} />
+        </View>
+        <ActivityIndicator color={theme.primary} style={{ marginTop: 24 }} size="large" />
+      </View>
+    );
+  }
+
   const hasAlerts =
     dashboardMetrics.stockout.wines > 0 ||
     dashboardMetrics.parAlert.wines > 0 ||
@@ -411,9 +442,6 @@ export default function HomeScreen() {
         {isStore && hasAlerts && (
           <View style={styles.metricsDashboard}>
             <Text style={styles.metricsTitle}>Inventory Alerts</Text>
-            {loadingMetrics ? (
-              <ActivityIndicator color={theme.primary} />
-            ) : (
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
@@ -490,16 +518,12 @@ export default function HomeScreen() {
                   </TouchableOpacity>
                 )}
               </ScrollView>
-            )}
           </View>
         )}
 
         {isStore && hasPulloutTasks && (
           <View style={styles.metricsDashboard}>
             <Text style={styles.metricsTitle}>Pullout Tasks</Text>
-            {loadingRequests ? (
-              <ActivityIndicator color={theme.primary} />
-            ) : (
               <View style={{ gap: 12 }}>
                 {pulloutTasks.map((task) => (
                   <TouchableOpacity
@@ -543,16 +567,12 @@ export default function HomeScreen() {
                   </TouchableOpacity>
                 ))}
               </View>
-            )}
           </View>
         )}
 
         {isStore && hasDeliveries && (
           <View style={styles.metricsDashboard}>
             <Text style={styles.metricsTitle}>Incoming Deliveries</Text>
-            {loadingRequests ? (
-              <ActivityIndicator color={theme.primary} />
-            ) : (
               <View style={{ gap: 12 }}>
                 {outboundRequests.map((req) => {
                   const targetStoreName =
@@ -632,7 +652,6 @@ export default function HomeScreen() {
                   </TouchableOpacity>
                 ))}
               </View>
-            )}
           </View>
         )}
 
