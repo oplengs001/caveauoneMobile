@@ -81,9 +81,13 @@ export default function HomeScreen() {
 
     try {
       setLoadingMetrics(true);
-      // Fetch pending requests to exclude them from metrics
+      // Fetch ACTIVE pending requests to exclude wines already being re-ordered
       const pendingRequestsSnap = await getDocs(
-        query(collection(db, "wine_requests"), where("storeId", "==", storeId)),
+        query(
+          collection(db, "wine_requests"),
+          where("storeId", "==", storeId),
+          where("status", "in", ["pending", "approved", "in_progress", "receiving"]),
+        ),
       );
       const pendingWineIds = new Set<string>();
       pendingRequestsSnap.docs.forEach((reqDoc) => {
@@ -126,18 +130,23 @@ export default function HomeScreen() {
             ),
           );
           const count = snap.data().count;
+
+          // Priority order: stockout → underSafety → parAlert
+          // Check safetyStock before parLevel, since safetyStock >= parLevel typically
           if (count === 0) {
             metrics.stockout.wines++;
-            metrics.stockout.bottles += safetyStock;
-          } else if (count <= parLevel) {
-            metrics.parAlert.wines++;
-            metrics.parAlert.bottles += parLevel - count;
+            // Report bottles needed to reach safetyStock (or parLevel if no safetyStock set)
+            metrics.stockout.bottles += safetyStock || parLevel;
           } else if (count < safetyStock) {
             metrics.underSafety.wines++;
             metrics.underSafety.bottles += safetyStock - count;
+          } else if (parLevel > 0 && count <= parLevel) {
+            metrics.parAlert.wines++;
+            metrics.parAlert.bottles += parLevel - count;
           }
         }),
       );
+
       setDashboardMetrics(metrics);
     } catch (err) {
       console.error("Failed to fetch dashboard metrics:", err);
@@ -231,10 +240,10 @@ export default function HomeScreen() {
         salesPeriod === "all"
           ? query(collection(db, "sales"), where("storeId", "==", storeId))
           : query(
-              collection(db, "sales"),
-              where("storeId", "==", storeId),
-              where("soldAt", ">=", startDate),
-            );
+            collection(db, "sales"),
+            where("storeId", "==", storeId),
+            where("soldAt", ">=", startDate),
+          );
 
       const salesSnap = await getDocs(salesQuery);
 
