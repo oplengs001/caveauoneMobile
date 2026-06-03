@@ -140,6 +140,12 @@ type MatchResult = {
 
 const MATCH_THRESHOLD = 0.52;
 const WEIGHTS = { wineName: 0.5, vintage: 0.25, format: 0.15, producer: 0.1 };
+const WEIGHTS_WITH_FORMAT = {
+  wineName: 0.4,
+  vintage: 0.1,
+  format: 0.4,
+  producer: 0.1,
+};
 
 function scoreMatch(
   item: OnboardingItem,
@@ -166,11 +172,14 @@ function scoreMatch(
   }
 
   // Format — normalize both sides to ml for reliable comparison
-  const targetFormat = selectedFormat ?? item.format;
-  if (!targetFormat) {
-    breakdown.format = 1.0;
+  const itemMl = normalizeFormatToMl(item.format);
+  if (selectedFormat) {
+    // User has specified the format. This is a strong signal.
+    // Compare the item's format directly with the user-selected format.
+    const selectedMl = normalizeFormatToMl(selectedFormat);
+    breakdown.format = itemMl === selectedMl ? 1.0 : 0.0;
   } else {
-    const itemMl = normalizeFormatToMl(targetFormat);
+    // User has not specified a format. Rely on AI detection vs item format.
     const aiMl = normalizeFormatToMl(ai.bottleSize);
     breakdown.format = itemMl === aiMl ? 1.0 : 0.0;
   }
@@ -181,11 +190,12 @@ function scoreMatch(
     ? tokenOverlapScore(item.wineName, producerStr)
     : 0.5;
 
+  const weights = selectedFormat ? WEIGHTS_WITH_FORMAT : WEIGHTS;
   const score =
-    breakdown.wineName * WEIGHTS.wineName +
-    breakdown.vintage * WEIGHTS.vintage +
-    breakdown.format * WEIGHTS.format +
-    breakdown.producer * WEIGHTS.producer;
+    breakdown.wineName * weights.wineName +
+    breakdown.vintage * weights.vintage +
+    breakdown.format * weights.format +
+    breakdown.producer * weights.producer;
 
   return { item, score, breakdown };
 }
