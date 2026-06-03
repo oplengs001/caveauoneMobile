@@ -131,8 +131,9 @@ export default function CreateWineRequest() {
 
   const filteredWines = masterWines.filter((w) => {
     const matchesSearch =
-      w.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      w.sku?.toLowerCase().includes(searchQuery.toLowerCase());
+      w.name?.toLowerCase()?.includes(searchQuery.toLowerCase()) ||
+      w.sku?.toLowerCase()?.includes(searchQuery.toLowerCase());
+
     if (!matchesSearch) return false;
 
     if (selectedLocationId === "all") {
@@ -254,7 +255,7 @@ export default function CreateWineRequest() {
               locId === "unfulfillable"
                 ? "Unfulfillable"
                 : allLocations.find((l) => l.id === locId)?.name ||
-                  "Unknown Location",
+                "Unknown Location",
           };
         }
         grouped[locId].items.push(item);
@@ -509,9 +510,9 @@ export default function CreateWineRequest() {
                 styles.pill,
                 selectedLocationId === loc.id
                   ? {
-                      backgroundColor: theme.primary,
-                      borderColor: theme.primary,
-                    }
+                    backgroundColor: theme.primary,
+                    borderColor: theme.primary,
+                  }
                   : { backgroundColor: theme.card, borderColor: theme.border },
               ]}
               onPress={() => setSelectedLocationId(loc.id)}
