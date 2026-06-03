@@ -411,6 +411,16 @@ export default function InventoryScreen() {
         const bottlesRef = collection(db, "inventory_bottles");
         const baseConstraints: any[] = [];
 
+        // Exclude consumed bottles
+        baseConstraints.push(
+          where("status", "in", [
+            "received",
+            "shelved",
+            "damaged",
+            "lost",
+          ]),
+        );
+
         // Apply Store Filter
         if (isStore && profile?.locationId) {
           baseConstraints.push(
@@ -493,13 +503,13 @@ export default function InventoryScreen() {
 
         const filteredResolved = isSearching
           ? resolved.filter((b) => {
-              const q = currentSearch.toLowerCase();
-              return (
-                b.sku?.toLowerCase().includes(q) ||
-                b.masterWineData?.name?.toLowerCase().includes(q) ||
-                b.masterWineData?.producer?.toLowerCase().includes(q)
-              );
-            })
+            const q = currentSearch.toLowerCase();
+            return (
+              b.sku?.toLowerCase().includes(q) ||
+              b.masterWineData?.name?.toLowerCase().includes(q) ||
+              b.masterWineData?.producer?.toLowerCase().includes(q)
+            );
+          })
           : resolved;
 
         const lastSnap = snap.docs[snap.docs.length - 1];
