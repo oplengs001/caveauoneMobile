@@ -32,7 +32,7 @@ import {
   Wine as WineIcon,
   X,
 } from "lucide-react-native";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
@@ -58,7 +58,7 @@ const PAGE_SIZE = 20;
 
 // ─── Expandable Wine Card ──────────────────────────────────────────────────────
 
-function WineCard({
+const WineCard = React.memo(function WineCard({
   item,
   theme,
 }: {
@@ -306,7 +306,11 @@ function WineCard({
       </Animated.View>
     </View>
   );
-}
+}, (prevProps, nextProps) => {
+  return prevProps.item.data.length === nextProps.item.data.length &&
+         prevProps.item.masterWineData?.id === nextProps.item.masterWineData?.id &&
+         prevProps.theme === nextProps.theme;
+});
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
@@ -764,15 +768,12 @@ export default function InventoryScreen() {
           contentContainerStyle={styles.listContent}
           onEndReached={() => fetchInventory(false)}
           onEndReachedThreshold={0.5}
-          ListFooterComponent={() =>
-            loadingMore ? (
-              <ActivityIndicator
-                size="small"
-                color={theme.primary}
-                style={{ marginVertical: 20 }}
-              />
-            ) : null
-          }
+          maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+          ListFooterComponent={() => (
+            <View style={{ height: 60, justifyContent: 'center', alignItems: 'center' }}>
+              {loadingMore && <ActivityIndicator size="small" color={theme.primary} />}
+            </View>
+          )}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
