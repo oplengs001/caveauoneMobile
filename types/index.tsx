@@ -218,3 +218,16 @@ export interface StoreWineSetting {
   isReserve: boolean;
   sellingPrice?: number;
 }
+
+export interface ActivityLog {
+  id: string;
+  action: string;
+  entity: string;           // Firestore collection name
+  entityId: string;         // Document ID that was mutated
+  summary: string;          // Human-readable one-liner
+  details?: Record<string, any>; // Optional extra payload
+  performedBy: string;      // email or uid
+  performedByRole: string;  // "admin" | "store" | "warehouse"
+  source: "admin" | "warehouse";
+  timestamp: any;           // Firestore Timestamp
+}

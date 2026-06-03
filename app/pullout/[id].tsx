@@ -16,6 +16,8 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
+import { logActivity } from "@/lib/utils/activityLogger";
+
 import {
   AlertCircle,
   CheckCircle2,
@@ -225,6 +227,27 @@ export default function PulloutDetailScreen() {
         });
       }
 
+      // Log the bottle scan at operation level
+      logActivity({
+        action: "PULLOUT_BOTTLE_SCANNED",
+        entity: "pullout_requests",
+        entityId: request.id,
+        summary: `Pulled bottle ${bottleData.id} (${updatedItems[itemIndex].wineName}) for pullout ${request.id}${
+          allFulfilled ? " — request now complete" : ""
+        }`,
+        details: {
+          bottleId: bottleData.id,
+          wineName: updatedItems[itemIndex].wineName,
+          pulledQty: updatedItems[itemIndex].pulledQty,
+          requestedQty: updatedItems[itemIndex].requestedQty,
+          allFulfilled,
+          wineRequestId: request.wineRequestId,
+        },
+        performedBy: profile?.email || "unknown",
+        performedByRole: profile?.role || "warehouse",
+        source: (profile?.role as any) || "warehouse",
+      });
+
       Alert.alert("Success", `Pulled ${updatedItems[itemIndex].wineName}`, [
         {
           text: allFulfilled ? "Finish" : "Scan Next",
@@ -364,6 +387,25 @@ export default function PulloutDetailScreen() {
                   });
                 }
               }
+
+              // Log the completion
+              logActivity({
+                action: "PULLOUT_COMPLETED",
+                entity: "pullout_requests",
+                entityId: id as string,
+                summary: `Pullout request ${id} completed by ${profile?.email} — ${
+                  request.items.reduce((s, i) => s + i.pulledQty, 0)
+                } bottle(s) pulled`,
+                details: {
+                  totalPulled: request.items.reduce((s, i) => s + i.pulledQty, 0),
+                  totalSkipped: request.items.reduce((s, i) => s + (i.skippedQty || 0), 0),
+                  wineRequestId: request.wineRequestId,
+                  hasSkipped,
+                },
+                performedBy: profile?.email || "unknown",
+                performedByRole: profile?.role || "warehouse",
+                source: (profile?.role as any) || "warehouse",
+              });
 
               router.back();
             } catch (error) {

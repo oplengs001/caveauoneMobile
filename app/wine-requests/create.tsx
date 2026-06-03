@@ -1,6 +1,7 @@
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { db } from "@/lib/firebase";
+import { logActivity } from "@/lib/utils/activityLogger";
 import { MasterWine } from "@/types";
 import { Stack, useRouter } from "expo-router";
 import {
@@ -9,6 +10,7 @@ import {
   getDocs,
   serverTimestamp,
 } from "firebase/firestore";
+
 import {
   ChevronLeft,
   Layers,
@@ -322,8 +324,29 @@ export default function CreateWineRequest() {
         return createRequestObject(group.items, locationId);
       });
 
-      await Promise.all(
+      const createdDocs = await Promise.all(
         requests.map((req) => addDoc(collection(db, "wine_requests"), req)),
+      );
+
+      // Log each created request at operation level
+      await Promise.all(
+        createdDocs.map((docRef, i) =>
+          logActivity({
+            action: "WINE_REQUEST_CREATED",
+            entity: "wine_requests",
+            entityId: docRef.id,
+            summary: `Wine request created by ${profile?.email} — ${requests[i].items.length} wine(s), ${requests[i].items.reduce((s: number, it: any) => s + it.qty, 0)} bottle(s) from ${Object.keys(groups)[i]}`,
+            details: {
+              storeId: profile?.locationId,
+              targetStoreId: requests[i].targetStoreId,
+              totalBottles: requests[i].items.reduce((s: number, it: any) => s + it.qty, 0),
+              wineCount: requests[i].items.length,
+            },
+            performedBy: profile?.email || "unknown",
+            performedByRole: profile?.role || "store",
+            source: (profile?.role as any) || "store",
+          }),
+        ),
       );
 
       Alert.alert(

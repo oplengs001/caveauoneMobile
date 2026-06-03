@@ -2,6 +2,7 @@ import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { db } from "@/lib/firebase";
 import { WineRequest } from "@/types";
+import { logActivity } from "@/lib/utils/activityLogger";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
 import {
   collection,
@@ -13,6 +14,9 @@ import {
   QueryDocumentSnapshot,
   startAfter,
   where,
+  doc,
+  updateDoc,
+  serverTimestamp,
 } from "firebase/firestore";
 import {
   ArrowRight,
@@ -37,6 +41,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Alert,
 } from "react-native";
 
 const PAGE_SIZE = 10;
@@ -155,6 +160,50 @@ export default function WineRequestsIndex() {
     setRequests([]);
   };
 
+  const handleCancelRequest = (requestId: string) => {
+    Alert.alert(
+      "Cancel Request",
+      "Are you sure you want to cancel this pending request?",
+      [
+        { text: "No", style: "cancel" },
+        {
+          text: "Yes, Cancel",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setLoading(true);
+              const requestRef = doc(db, "wine_requests", requestId);
+              await updateDoc(requestRef, {
+                status: "rejected",
+                rejectionReason: "Cancelled by user",
+                updatedAt: serverTimestamp(),
+              });
+
+              // Log activity
+              await logActivity({
+                action: "WINE_REQUEST_CANCELLED",
+                entity: "wine_requests",
+                entityId: requestId,
+                summary: `Cancelled wine request ${requestId}`,
+                performedBy: profile?.email || "unknown",
+                performedByRole: profile?.role || "store",
+                source: (profile?.role as any) || "store",
+              });
+
+              Alert.alert("Success", "Request has been cancelled.");
+              fetchRequests(false);
+            } catch (error) {
+              console.error("Error cancelling request:", error);
+              Alert.alert("Error", "Failed to cancel request.");
+            } finally {
+              setLoading(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const getStatusStyle = (status: string) => {
     switch (status) {
       case "pending":
@@ -211,90 +260,114 @@ export default function WineRequestsIndex() {
         : locations[item.targetStoreId || ""] || "Unknown";
 
     return (
-      <TouchableOpacity
+      <View
         style={[
           styles.card,
           { backgroundColor: theme.card, borderColor: theme.border },
         ]}
-        onPress={() =>
-          router.push({
-            pathname: "/wine-requests/[id]",
-            params: { id: item.id },
-          })
-        }
       >
-        <View style={styles.cardHeader}>
-          <View style={styles.dateRow}>
-            <Calendar size={14} color={theme.textSecondary} />
-            <Text style={[styles.dateText, { color: theme.textSecondary }]}>
-              {item.createdAt.toLocaleDateString("en-US", {
-                month: "short",
-                day: "numeric",
-                year: "numeric",
-              })}
-            </Text>
-          </View>
-          <View style={[styles.statusBadge, { backgroundColor: status.bg }]}>
-            <StatusIcon size={12} color={status.color} strokeWidth={2.5} />
-            <Text style={[styles.statusText, { color: status.color }]}>
-              {status.label}
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.itemsContainer}>
-          {item.items.map((wine, idx) => (
-            <View key={idx} style={styles.wineRow}>
-              <View
-                style={[
-                  styles.qtyBadge,
-                  { backgroundColor: theme.primary + "10" },
-                ]}
-              >
-                <Text style={[styles.qtyText, { color: theme.primary }]}>
-                  {wine.qty}x
-                </Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text
-                  style={[styles.wineName, { color: theme.text }]}
-                  numberOfLines={1}
-                >
-                  {wine.wineName}
-                </Text>
-                <Text style={[styles.wineMeta, { color: theme.textSecondary }]}>
-                  {wine.vintage}
-                  {wine.format && ` • ${wine.format}`}
-                </Text>
-              </View>
+        <TouchableOpacity
+          onPress={() =>
+            router.push({
+              pathname: "/wine-requests/[id]",
+              params: { id: item.id },
+            })
+          }
+          activeOpacity={0.7}
+        >
+          <View style={styles.cardHeader}>
+            <View style={styles.dateRow}>
+              <Calendar size={14} color={theme.textSecondary} />
+              <Text style={[styles.dateText, { color: theme.textSecondary }]}>
+                {item.createdAt.toLocaleDateString("en-US", {
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                })}
+              </Text>
             </View>
-          ))}
-        </View>
-        <View style={styles.targetStoreContainer}>
-          <Truck size={14} color={theme.textSecondary} />
-          <Text
-            style={[styles.targetStoreText, { color: theme.textSecondary }]}
-            numberOfLines={1}
-          >
-            {" "}
-            Requesting from:{" "}
-            <Text style={{ fontWeight: "800", color: theme.text }}>
-              {targetStoreName}
+            <View style={[styles.statusBadge, { backgroundColor: status.bg }]}>
+              <StatusIcon size={12} color={status.color} strokeWidth={2.5} />
+              <Text style={[styles.statusText, { color: status.color }]}>
+                {status.label}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.itemsContainer}>
+            {item.items.map((wine, idx) => (
+              <View key={idx} style={styles.wineRow}>
+                <View
+                  style={[
+                    styles.qtyBadge,
+                    { backgroundColor: theme.primary + "10" },
+                  ]}
+                >
+                  <Text style={[styles.qtyText, { color: theme.primary }]}>
+                    {wine.qty}x
+                  </Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text
+                    style={[styles.wineName, { color: theme.text }]}
+                    numberOfLines={1}
+                  >
+                    {wine.wineName}
+                  </Text>
+                  <Text style={[styles.wineMeta, { color: theme.textSecondary }]}>
+                    {wine.vintage}
+                    {wine.format && ` • ${wine.format}`}
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </View>
+          <View style={styles.targetStoreContainer}>
+            <Truck size={14} color={theme.textSecondary} />
+            <Text
+              style={[styles.targetStoreText, { color: theme.textSecondary }]}
+              numberOfLines={1}
+            >
+              {" "}
+              Requesting from:{" "}
+              <Text style={{ fontWeight: "800", color: theme.text }}>
+                {targetStoreName}
+              </Text>
             </Text>
-          </Text>
-        </View>
+          </View>
+        </TouchableOpacity>
+
         <View style={[styles.cardFooter, { borderTopColor: theme.border }]}>
           <Text style={[styles.idText, { color: theme.textSecondary }]}>
             REQ: {item.id.slice(0, 8).toUpperCase()}
           </Text>
-          <View style={styles.viewDetails}>
-            <Text style={[styles.detailsLabel, { color: theme.primary }]}>
-              Details
-            </Text>
-            <ArrowRight size={14} color={theme.primary} strokeWidth={2.5} />
+          <View style={styles.footerActions}>
+            {item.status === "pending" && (
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={() => handleCancelRequest(item.id)}
+              >
+                <Ban size={12} color="#ef4444" strokeWidth={2.5} />
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              style={styles.viewDetails}
+              onPress={() =>
+                router.push({
+                  pathname: "/wine-requests/[id]",
+                  params: { id: item.id },
+                })
+              }
+            >
+              <Text style={[styles.detailsLabel, { color: theme.primary }]}>
+                Details
+              </Text>
+              <ArrowRight size={14} color={theme.primary} strokeWidth={2.5} />
+            </TouchableOpacity>
           </View>
         </View>
-      </TouchableOpacity>
+      </View>
     );
   };
 
@@ -593,6 +666,27 @@ const styles = StyleSheet.create({
   detailsLabel: {
     fontSize: 12,
     fontWeight: "800",
+  },
+  footerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+  },
+  cancelButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: "#ef444415",
+  },
+  cancelButtonText: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: "#ef4444",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   center: {
     flex: 1,

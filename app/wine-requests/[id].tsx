@@ -4,6 +4,8 @@ import { InventoryBottle, WineRequest } from "@/types";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { doc, getDoc, serverTimestamp, updateDoc } from "firebase/firestore";
+import { logActivity } from "@/lib/utils/activityLogger";
+import { useAuth } from "@/context/AuthContext";
 import {
   ArrowLeft,
   Ban,
@@ -34,6 +36,7 @@ export default function WineRequestDetail() {
     openScanner?: string;
   }>();
   const router = useRouter();
+  const { profile } = useAuth();
 
   const [scanning, setScanning] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
@@ -163,6 +166,26 @@ export default function WineRequestDetail() {
         items: newItems,
         status: newStatus,
         updatedAt: serverTimestamp(),
+      });
+
+      // Log the receive operation
+      logActivity({
+        action: newStatus === "ingress_complete" ? "WINE_REQUEST_INGRESS_COMPLETE" : "BOTTLE_RECEIVED",
+        entity: "wine_requests",
+        entityId: request.id,
+        summary: `Received bottle ${data} (${item.wineName}) for wine request ${request.id}${
+          newStatus === "ingress_complete" ? " — all items received" : ""
+        }`,
+        details: {
+          bottleId: data,
+          wineName: item.wineName,
+          ingressedQty: (item.ingressedQty || 0) + 1,
+          targetQty: item.qty,
+          requestStatus: newStatus,
+        },
+        performedBy: profile?.email || "unknown",
+        performedByRole: profile?.role || "store",
+        source: (profile?.role as any) || "store",
       });
 
       const scannedBottleId = data;
