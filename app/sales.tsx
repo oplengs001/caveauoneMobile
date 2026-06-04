@@ -293,7 +293,7 @@ export default function SalesScreen() {
           {formatCurrency(netProfit)}
         </Text>
         <Text style={[styles.metricSubText, { color: theme.textSecondary, marginTop: 8 }]}>
-          Total Base Cost: {formatCurrency(totalCost)}
+          Total Purchase Cost: {formatCurrency(totalCost)}
         </Text>
       </View>
 
