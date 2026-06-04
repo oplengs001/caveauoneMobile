@@ -375,19 +375,22 @@ export default function TaggingScreen() {
           const setting = settingsSnap.docs[0].data();
           const fastMoving = setting.isFastMoving === true;
           setIsFastMoving(fastMoving);
+
           // Only auto-fill price for fast-moving wines
-          if (fastMoving && wine.price) {
-            setSalePrice(String(wine.price));
+          if (fastMoving && setting.sellingPrice) {
+            setSalePrice(String(setting.sellingPrice));
           } else {
             setSalePrice(""); // Leave blank — let staff decide
           }
         } else {
           setIsFastMoving(false);
+          setStorePrice(null);
           setSalePrice("");
         }
       } catch (err) {
         console.error("Error checking fast-moving setting:", err);
         setIsFastMoving(false);
+        setStorePrice(null);
         setSalePrice("");
       }
     };
@@ -1002,11 +1005,12 @@ export default function TaggingScreen() {
                   <Text style={styles.fastMovingChipText}>FAST MOVING</Text>
                 </View>
               )}
+
             </View>
-            <Text style={[styles.wineName, { color: theme.text }]}>
+            <Text style={[styles.wineName, { color: theme.text, paddingRight: mode === "sell" ? 80 : 0 }]}>
               {wine?.name || "Processing..."}
             </Text>
-            <View style={styles.wineMetaRow}>
+            <View style={[styles.wineMetaRow, { paddingRight: mode === "sell" ? 80 : 0 }]}>
               <Text
                 style={[styles.wineVintage, { color: theme.textSecondary }]}
               >
@@ -1033,6 +1037,27 @@ export default function TaggingScreen() {
                 </>
               )}
             </View>
+
+            {/* Positioned at the bottom right */}
+            {mode === "sell" && wine?.price ? (
+              <View
+                style={[
+                  styles.refPriceChip,
+                  {
+                    position: "absolute",
+                    right: 16,
+                    bottom: 16,
+                    backgroundColor: theme.primary + "15",
+                    borderColor: theme.primary + "40",
+                    marginLeft: 0, // Reset from style definition
+                  },
+                ]}
+              >
+                <Text style={[styles.refPriceChipText, { color: theme.primary }]}>
+                  UNIT COST: {formatCurrency(wine.price)}
+                </Text>
+              </View>
+            ) : null}
           </View>
 
           {/* ── Status-based content ── */}
@@ -1867,6 +1892,21 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: "900",
     letterSpacing: 0.5,
+  },
+  refPriceChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginLeft: "auto",
+  },
+  refPriceChipText: {
+    fontSize: 10,
+    fontWeight: "bold",
+    letterSpacing: 0.5,
+
   },
 
   // Sell mode
