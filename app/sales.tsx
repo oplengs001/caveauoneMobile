@@ -4,6 +4,7 @@ import { db } from "@/lib/firebase";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { collection, getDocs, orderBy, query, where } from "firebase/firestore";
 import {
+  Banknote,
   Calendar,
   ChevronLeft,
   Package,
@@ -194,27 +195,47 @@ export default function SalesScreen() {
         {getPeriodLabel()} Summary
       </Text>
 
-      {/* Row 1: Revenue and Bottles */}
+      {/* Row 1: Revenue Cards */}
       <View style={styles.metricsRow}>
+        {/* Gross Revenue */}
         <View
           style={[
             styles.metricCard,
             { backgroundColor: theme.card, borderColor: theme.border },
           ]}
         >
-          <TrendingUp
-            size={20}
-            color={theme.primary}
-            style={styles.metricIcon}
-          />
+          <TrendingUp size={20} color={theme.primary} style={styles.metricIcon} />
           <Text style={[styles.metricLabel, { color: theme.textSecondary }]}>
-            Gross Total
+            Gross Rev
           </Text>
-          <Text style={[styles.metricValue, { color: theme.text }]}>
+          <Text style={[styles.metricValue, { color: theme.text }]} numberOfLines={1} adjustsFontSizeToFit>
             {formatCurrency(grossSales)}
+          </Text>
+          <Text style={[styles.metricSubText, { color: theme.textSecondary }]}>
+            Inc. 12% VAT
           </Text>
         </View>
 
+        {/* Net Revenue */}
+        <View
+          style={[
+            styles.metricCard,
+            { backgroundColor: theme.card, borderColor: theme.border },
+          ]}
+        >
+          <Receipt size={20} color={theme.primary} style={styles.metricIcon} />
+          <Text style={[styles.metricLabel, { color: theme.textSecondary }]}>
+            Net Revenue
+          </Text>
+          <Text style={[styles.metricValue, { color: theme.text }]} numberOfLines={1} adjustsFontSizeToFit>
+            {formatCurrency(totalBaseSales)}
+          </Text>
+          <Text style={[styles.metricSubText, { color: theme.textSecondary }]}>
+            + {formatCurrency(vatAmount)} VAT
+          </Text>
+        </View>
+
+        {/* Bottles Sold */}
         <View
           style={[
             styles.metricCard,
@@ -223,10 +244,13 @@ export default function SalesScreen() {
         >
           <Package size={20} color={theme.primary} style={styles.metricIcon} />
           <Text style={[styles.metricLabel, { color: theme.textSecondary }]}>
-            Bottles Sold
+            Bottles
           </Text>
-          <Text style={[styles.metricValue, { color: theme.text }]}>
+          <Text style={[styles.metricValue, { color: "#f59e0b" }]} numberOfLines={1} adjustsFontSizeToFit>
             {totalBottles}
+          </Text>
+          <Text style={[styles.metricSubText, { color: theme.textSecondary }]}>
+            Total Sold
           </Text>
         </View>
       </View>
@@ -236,24 +260,20 @@ export default function SalesScreen() {
         style={[
           styles.metricCard,
           {
-            backgroundColor: theme.card,
-            borderColor: theme.border,
+            backgroundColor: netProfit >= 0 ? (Colors.store.success + "15" || "#10b98115") : (Colors.store.danger + "15" || "#ef444415"),
+            borderColor: netProfit >= 0 ? (Colors.store.success + "40" || "#10b98140") : (Colors.store.danger + "40" || "#ef444440"),
             marginBottom: 12,
-            borderLeftWidth: 4,
-            borderLeftColor:
-              netProfit >= 0
-                ? Colors.store.success || "#10b981"
-                : Colors.store.danger || "#ef4444",
           },
         ]}
       >
+        <Banknote size={24} color={netProfit >= 0 ? (Colors.store.success || "#10b981") : (Colors.store.danger || "#ef4444")} style={styles.metricIcon} />
         <Text
           style={[
             styles.metricLabel,
             { color: theme.textSecondary, marginBottom: 8 },
           ]}
         >
-          Net Profit (Subtotal - Cost)
+          Net Profit
         </Text>
         <Text
           style={[
@@ -263,60 +283,21 @@ export default function SalesScreen() {
                 netProfit >= 0
                   ? Colors.store.success || "#10b981"
                   : Colors.store.danger || "#ef4444",
-              fontSize: 22,
+              fontSize: 32,
             },
           ]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
         >
           {netProfit >= 0 ? "+" : ""}
           {formatCurrency(netProfit)}
         </Text>
+        <Text style={[styles.metricSubText, { color: theme.textSecondary, marginTop: 8 }]}>
+          Total Base Cost: {formatCurrency(totalCost)}
+        </Text>
       </View>
 
-      {/* Breakdown Details */}
-      <View
-        style={[
-          styles.breakdownCard,
-          { backgroundColor: theme.card, borderColor: theme.border },
-        ]}
-      >
-        <View style={styles.breakdownRow}>
-          <Text style={[styles.breakdownLabel, { color: theme.textSecondary }]}>
-            Subtotal
-          </Text>
-          <Text style={[styles.breakdownValue, { color: theme.text }]}>
-            {formatCurrency(totalBaseSales)}
-          </Text>
-        </View>
-        <View style={styles.breakdownRow}>
-          <Text style={[styles.breakdownLabel, { color: theme.textSecondary }]}>
-            VAT (12%)
-          </Text>
-          <Text style={[styles.breakdownValue, { color: theme.text }]}>
-            + {formatCurrency(vatAmount)}
-          </Text>
-        </View>
-        <View
-          style={[styles.breakdownDivider, { backgroundColor: theme.border }]}
-        />
-        <View style={styles.breakdownRow}>
-          <Text
-            style={[
-              styles.breakdownLabel,
-              { color: theme.text, fontWeight: "bold" },
-            ]}
-          >
-            Total Revenue
-          </Text>
-          <Text
-            style={[
-              styles.breakdownValue,
-              { color: theme.primary, fontWeight: "bold", fontSize: 16 },
-            ]}
-          >
-            {formatCurrency(grossSales)}
-          </Text>
-        </View>
-      </View>
+
 
       <Text
         style={[
@@ -592,24 +573,32 @@ const styles = StyleSheet.create({
   },
   metricCard: {
     flex: 1,
-    padding: 16,
+    padding: 12,
     borderRadius: 16,
     borderWidth: 1,
-    alignItems: "flex-start",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  metricIcon: { marginBottom: 8 },
-  metricLabel: { fontSize: 13, marginBottom: 4 },
-  metricValue: { fontSize: 18, fontWeight: "bold" },
-  breakdownCard: { padding: 16, borderRadius: 16, borderWidth: 1 },
-  breakdownRow: {
-    flexDirection: "row",
-    justifyContext: "space-between",
-    paddingVertical: 4,
-    justifyContent: "space-between",
+  metricIcon: { marginBottom: 6 },
+  metricLabel: {
+    fontSize: 10,
+    marginBottom: 6,
+    textTransform: "uppercase",
+    fontWeight: "bold",
+    letterSpacing: 0.5,
+    textAlign: "center"
   },
-  breakdownLabel: { fontSize: 14 },
-  breakdownValue: { fontSize: 14 },
-  breakdownDivider: { height: 1, marginVertical: 12 },
+  metricValue: {
+    fontSize: 20,
+    fontWeight: "900",
+    letterSpacing: -0.5,
+    textAlign: "center"
+  },
+  metricSubText: {
+    fontSize: 10,
+    marginTop: 6,
+    textAlign: "center"
+  },
 
   // List Item Styles
   saleCard: {

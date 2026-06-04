@@ -22,6 +22,7 @@ export const Colors = {
     accent: '#a16207', // Burnished Gold
     danger: '#991b1b',
     logoBg: '#4c0519',
+    success: '#10b981'
   }
 };
 

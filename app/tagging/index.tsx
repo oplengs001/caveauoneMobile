@@ -119,7 +119,7 @@ function VatBreakdownCard({
       {/* Rows */}
       <View style={vatStyles.row}>
         <Text style={[vatStyles.rowLabel, { color: theme.textSecondary }]}>
-          Base Price
+          Selling Price
         </Text>
         <Text style={[vatStyles.rowValue, { color: theme.text }]}>
           {hasValue ? formatCurrency(numericBase) : "—"}
@@ -156,7 +156,7 @@ function VatBreakdownCard({
         style={[vatStyles.totalRow, { backgroundColor: theme.primary + "0C" }]}
       >
         <Text style={[vatStyles.totalLabel, { color: theme.text }]}>
-          TOTAL (VAT-IN)
+          TOTAL (VAT-INC)
         </Text>
         <Text
           style={[
@@ -1368,7 +1368,7 @@ export default function TaggingScreen() {
                         styles.locationName,
                         { color: theme.text },
                         selectedLocationId === item.id &&
-                          styles.locationNameSelected,
+                        styles.locationNameSelected,
                       ]}
                     >
                       {item.name}
@@ -1496,7 +1496,7 @@ export default function TaggingScreen() {
                             : "#10b981",
                         },
                         (!selectedLocationId || state === "updating") &&
-                          styles.buttonDisabled,
+                        styles.buttonDisabled,
                       ]}
                       onPress={handleConfirmTagging}
                       disabled={!selectedLocationId || state === "updating"}

@@ -442,147 +442,94 @@ export default function HomeScreen() {
         {isStore && hasAlerts && (
           <View style={styles.metricsDashboard}>
             <Text style={styles.metricsTitle}>Inventory Alerts</Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.metricsGrid}
-              >
-                {dashboardMetrics.stockout.wines > 0 && (
-                  <TouchableOpacity
-                    style={[styles.metricCard, { backgroundColor: "#ef4444" }]}
-                    onPress={() =>
-                      router.push({
-                        pathname: "/store-master-list",
-                        params: { filter: "stockout" },
-                      })
-                    }
-                  >
-                    <AlertOctagon size={24} color="#ffffff" strokeWidth={2.5} />
-                    <Text style={[styles.metricCount, { color: "#ffffff" }]}>
-                      {dashboardMetrics.stockout.wines}
-                    </Text>
-                    <Text style={styles.metricLabel}>Stockout Wines</Text>
-                    <Text style={styles.metricSubLabel}>
-                      {dashboardMetrics.stockout.bottles} bottles needed
-                    </Text>
-                  </TouchableOpacity>
-                )}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.metricsGrid}
+            >
+              {dashboardMetrics.stockout.wines > 0 && (
+                <TouchableOpacity
+                  style={[styles.metricCard, { backgroundColor: "#ef4444" }]}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/store-master-list",
+                      params: { filter: "stockout" },
+                    })
+                  }
+                >
+                  <AlertOctagon size={24} color="#ffffff" strokeWidth={2.5} />
+                  <Text style={[styles.metricCount, { color: "#ffffff" }]}>
+                    {dashboardMetrics.stockout.wines}
+                  </Text>
+                  <Text style={styles.metricLabel}>Stockout Wines</Text>
+                  <Text style={styles.metricSubLabel}>
+                    {dashboardMetrics.stockout.bottles} bottles needed
+                  </Text>
+                </TouchableOpacity>
+              )}
 
-                {dashboardMetrics.parAlert.wines > 0 && (
-                  <TouchableOpacity
-                    style={[styles.metricCard, { backgroundColor: "#f97316" }]}
-                    onPress={() =>
-                      router.push({
-                        pathname: "/store-master-list",
-                        params: { filter: "alerts" },
-                      })
-                    }
-                  >
-                    <AlertTriangle
-                      size={24}
-                      color="#ffffff"
-                      strokeWidth={2.5}
-                    />
-                    <Text style={[styles.metricCount, { color: "#ffffff" }]}>
-                      {dashboardMetrics.parAlert.wines}
-                    </Text>
-                    <Text style={styles.metricLabel}>PAR Alert Wines</Text>
-                    <Text style={styles.metricSubLabel}>
-                      {dashboardMetrics.parAlert.bottles} bottles needed
-                    </Text>
-                  </TouchableOpacity>
-                )}
+              {dashboardMetrics.parAlert.wines > 0 && (
+                <TouchableOpacity
+                  style={[styles.metricCard, { backgroundColor: "#f97316" }]}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/store-master-list",
+                      params: { filter: "alerts" },
+                    })
+                  }
+                >
+                  <AlertTriangle
+                    size={24}
+                    color="#ffffff"
+                    strokeWidth={2.5}
+                  />
+                  <Text style={[styles.metricCount, { color: "#ffffff" }]}>
+                    {dashboardMetrics.parAlert.wines}
+                  </Text>
+                  <Text style={styles.metricLabel}>PAR Alert Wines</Text>
+                  <Text style={styles.metricSubLabel}>
+                    {dashboardMetrics.parAlert.bottles} bottles needed
+                  </Text>
+                </TouchableOpacity>
+              )}
 
-                {dashboardMetrics.underSafety.wines > 0 && (
-                  <TouchableOpacity
-                    style={[styles.metricCard, { backgroundColor: "#eab308" }]}
-                    onPress={() =>
-                      router.push({
-                        pathname: "/store-master-list",
-                        params: { filter: "under_safety" },
-                      })
-                    }
-                  >
-                    <AlertTriangle
-                      size={24}
-                      color="#ffffff"
-                      strokeWidth={2.5}
-                    />
-                    <Text style={[styles.metricCount, { color: "#ffffff" }]}>
-                      {dashboardMetrics.underSafety.wines}
-                    </Text>
-                    <Text style={styles.metricLabel}>Under Safety</Text>
-                    <Text style={styles.metricSubLabel}>
-                      {dashboardMetrics.underSafety.bottles} bottles needed
-                    </Text>
-                  </TouchableOpacity>
-                )}
-              </ScrollView>
+              {dashboardMetrics.underSafety.wines > 0 && (
+                <TouchableOpacity
+                  style={[styles.metricCard, { backgroundColor: "#eab308" }]}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/store-master-list",
+                      params: { filter: "under_safety" },
+                    })
+                  }
+                >
+                  <AlertTriangle
+                    size={24}
+                    color="#ffffff"
+                    strokeWidth={2.5}
+                  />
+                  <Text style={[styles.metricCount, { color: "#ffffff" }]}>
+                    {dashboardMetrics.underSafety.wines}
+                  </Text>
+                  <Text style={styles.metricLabel}>Under Safety</Text>
+                  <Text style={styles.metricSubLabel}>
+                    {dashboardMetrics.underSafety.bottles} bottles needed
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </ScrollView>
           </View>
         )}
 
-        {isStore && hasPulloutTasks && (
-          <View style={styles.metricsDashboard}>
-            <Text style={styles.metricsTitle}>Pullout Tasks</Text>
-              <View style={{ gap: 12 }}>
-                {pulloutTasks.map((task) => (
-                  <TouchableOpacity
-                    key={task.id}
-                    style={[
-                      styles.requestCard,
-                      {
-                        backgroundColor: theme.card,
-                        borderColor: theme.border,
-                      },
-                    ]}
-                    onPress={() =>
-                      router.push({
-                        pathname: "/pullout/[id]",
-                        params: { id: task.id },
-                      })
-                    }
-                  >
-                    <View
-                      style={[
-                        styles.requestCardIcon,
-                        { backgroundColor: "#f59e0b15" },
-                      ]}
-                    >
-                      <ClipboardList size={20} color="#f59e0b" />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text
-                        style={[styles.requestCardTitle, { color: theme.text }]}
-                      >
-                        Pull Stock for Another Store
-                      </Text>
-                      <Text style={styles.requestCardSubtitle}>
-                        {task.items.reduce(
-                          (acc, i) => acc + (i.requestedQty || 0),
-                          0,
-                        )}{" "}
-                        items • REQ: {task.id.slice(0, 4).toUpperCase()}
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
-                ))}
-              </View>
-          </View>
-        )}
-
-        {isStore && hasDeliveries && (
-          <View style={styles.metricsDashboard}>
-            <Text style={styles.metricsTitle}>Incoming Deliveries</Text>
-              <View style={{ gap: 12 }}>
-                {outboundRequests.map((req) => {
-                  const targetStoreName =
-                    req.targetStoreId === "warehouse"
-                      ? "Central Warehouse"
-                      : locations[req.targetStoreId || ""] || "Unknown Source";
-
-                  return (
+        {isStore && (hasPulloutTasks || hasDeliveries) && (
+          <View style={isTablet ? styles.tasksRow : undefined}>
+            {hasPulloutTasks && (
+              <View style={[styles.metricsDashboard, isTablet ? styles.taskColumn : undefined]}>
+                <Text style={styles.metricsTitle}>Pullout Tasks</Text>
+                <View style={{ gap: 12 }}>
+                  {pulloutTasks.map((task) => (
                     <TouchableOpacity
-                      key={req.id}
+                      key={task.id}
                       style={[
                         styles.requestCard,
                         {
@@ -592,66 +539,123 @@ export default function HomeScreen() {
                       ]}
                       onPress={() =>
                         router.push({
-                          pathname: "/wine-requests/[id]",
-                          params: { id: req.id },
+                          pathname: "/pullout/[id]",
+                          params: { id: task.id },
+                        })
+                      }
+                    >
+                      <View
+                        style={[
+                          styles.requestCardIcon,
+                          { backgroundColor: "#f59e0b15" },
+                        ]}
+                      >
+                        <ClipboardList size={20} color="#f59e0b" />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={[styles.requestCardTitle, { color: theme.text }]}
+                        >
+                          Pull Stock for Another Store
+                        </Text>
+                        <Text style={styles.requestCardSubtitle}>
+                          {task.items.reduce(
+                            (acc, i) => acc + (i.requestedQty || 0),
+                            0,
+                          )}{" "}
+                          items • REQ: {task.id.slice(0, 4).toUpperCase()}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            {hasDeliveries && (
+              <View style={[styles.metricsDashboard, isTablet ? styles.taskColumn : undefined]}>
+                <Text style={styles.metricsTitle}>Incoming Deliveries</Text>
+                <View style={{ gap: 12 }}>
+                  {outboundRequests.map((req) => {
+                    const targetStoreName =
+                      req.targetStoreId === "warehouse"
+                        ? "Central Warehouse"
+                        : locations[req.targetStoreId || ""] || "Unknown Source";
+
+                    return (
+                      <TouchableOpacity
+                        key={req.id}
+                        style={[
+                          styles.requestCard,
+                          {
+                            backgroundColor: theme.card,
+                            borderColor: theme.border,
+                          },
+                        ]}
+                        onPress={() =>
+                          router.push({
+                            pathname: "/wine-requests/[id]",
+                            params: { id: req.id },
+                          })
+                        }
+                      >
+                        <View style={styles.requestCardIcon}>
+                          <Truck size={20} color={theme.primary} />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text
+                            style={[
+                              styles.requestCardTitle,
+                              { color: theme.text },
+                            ]}
+                          >
+                            Transfer from {targetStoreName}
+                          </Text>
+                          <Text style={styles.requestCardSubtitle}>
+                            {req.items.reduce((acc, i) => acc + (i.qty || 0), 0)}{" "}
+                            items • REQ: {req.id.slice(0, 4).toUpperCase()}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+
+                  {incomingDeliveries.map((del) => (
+                    <TouchableOpacity
+                      key={del.id}
+                      style={[
+                        styles.requestCard,
+                        {
+                          backgroundColor: theme.card,
+                          borderColor: theme.border,
+                        },
+                      ]}
+                      onPress={() =>
+                        router.push({
+                          pathname: "/deliveries/[id]",
+                          params: { id: del.id },
                         })
                       }
                     >
                       <View style={styles.requestCardIcon}>
-                        <Truck size={20} color={theme.primary} />
+                        <Truck size={20} color="#8b5cf6" />
                       </View>
                       <View style={{ flex: 1 }}>
                         <Text
-                          style={[
-                            styles.requestCardTitle,
-                            { color: theme.text },
-                          ]}
+                          style={[styles.requestCardTitle, { color: theme.text }]}
                         >
-                          Transfer from {targetStoreName}
+                          Admin Delivery
                         </Text>
                         <Text style={styles.requestCardSubtitle}>
-                          {req.items.reduce((acc, i) => acc + (i.qty || 0), 0)}{" "}
-                          items • REQ: {req.id.slice(0, 4).toUpperCase()}
+                          {del.totalBottles} items • DEL:{" "}
+                          {del.id.slice(0, 4).toUpperCase()}
                         </Text>
                       </View>
                     </TouchableOpacity>
-                  );
-                })}
-
-                {incomingDeliveries.map((del) => (
-                  <TouchableOpacity
-                    key={del.id}
-                    style={[
-                      styles.requestCard,
-                      {
-                        backgroundColor: theme.card,
-                        borderColor: theme.border,
-                      },
-                    ]}
-                    onPress={() =>
-                      router.push({
-                        pathname: "/deliveries/[id]",
-                        params: { id: del.id },
-                      })
-                    }
-                  >
-                    <View style={styles.requestCardIcon}>
-                      <Truck size={20} color="#8b5cf6" />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text
-                        style={[styles.requestCardTitle, { color: theme.text }]}
-                      >
-                        Admin Delivery
-                      </Text>
-                      <Text style={styles.requestCardSubtitle}>
-                        {del.totalBottles} items • DEL:{" "}
-                        {del.id.slice(0, 4).toUpperCase()}
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
-                ))}
+                  ))}
+                </View>
               </View>
+            )}
           </View>
         )}
 
@@ -1226,5 +1230,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#64748b",
     marginTop: 2,
+  },
+  tasksRow: {
+    flexDirection: "row",
+    gap: 20,
+    width: "100%",
+    marginBottom: 32,
+  },
+  taskColumn: {
+    flex: 1,
+    marginBottom: 0,
   },
 });

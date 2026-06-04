@@ -1,11 +1,11 @@
 import { Colors } from "@/constants/theme";
+import { useAuth } from "@/context/AuthContext";
 import { db } from "@/lib/firebase";
+import { logActivity } from "@/lib/utils/activityLogger";
 import { InventoryBottle, WineRequest } from "@/types";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { doc, getDoc, serverTimestamp, updateDoc } from "firebase/firestore";
-import { logActivity } from "@/lib/utils/activityLogger";
-import { useAuth } from "@/context/AuthContext";
 import {
   ArrowLeft,
   Ban,
@@ -173,9 +173,8 @@ export default function WineRequestDetail() {
         action: newStatus === "ingress_complete" ? "WINE_REQUEST_INGRESS_COMPLETE" : "BOTTLE_RECEIVED",
         entity: "wine_requests",
         entityId: request.id,
-        summary: `Received bottle ${data} (${item.wineName}) for wine request ${request.id}${
-          newStatus === "ingress_complete" ? " — all items received" : ""
-        }`,
+        summary: `Received bottle ${data} (${item.wineName}) for wine request ${request.id}${newStatus === "ingress_complete" ? " — all items received" : ""
+          }`,
         details: {
           bottleId: data,
           wineName: item.wineName,
@@ -510,20 +509,20 @@ export default function WineRequestDetail() {
                 {(request.status === "converted" ||
                   request.status === "receiving" ||
                   request.status === "ingress_complete") && (
-                  <View style={{ alignItems: "flex-end", gap: 6 }}>
-                    <View
-                      style={[
-                        styles.progressContainer,
-                        isItemFulfilled && { backgroundColor: "#d1fae5" }, // Turn purely green when fulfilled
-                      ]}
-                    >
-                      <Text style={styles.progressText}>
-                        {wine.ingressedQty || 0} / {expectedQty}
-                      </Text>
-                      <Text style={styles.progressLabel}>RCVD</Text>
+                    <View style={{ alignItems: "flex-end", gap: 6 }}>
+                      <View
+                        style={[
+                          styles.progressContainer,
+                          isItemFulfilled && { backgroundColor: "#d1fae5" }, // Turn purely green when fulfilled
+                        ]}
+                      >
+                        <Text style={styles.progressText}>
+                          {wine.ingressedQty || 0} / {expectedQty}
+                        </Text>
+                        <Text style={styles.progressLabel}>RCVD</Text>
+                      </View>
                     </View>
-                  </View>
-                )}
+                  )}
               </View>
             );
           })}
@@ -580,7 +579,6 @@ export default function WineRequestDetail() {
         </View>
       ) : (
         (request.status === "receiving" ||
-          request.status === "converted" ||
           (request.status === "ingress_complete" && !isAllReceived)) && (
           <View style={styles.footer}>
             <TouchableOpacity

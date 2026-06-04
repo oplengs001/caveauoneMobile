@@ -32,7 +32,7 @@ import {
   Wine as WineIcon,
   X,
 } from "lucide-react-native";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
@@ -58,7 +58,7 @@ const PAGE_SIZE = 20;
 
 // ─── Expandable Wine Card ──────────────────────────────────────────────────────
 
-const WineCard = React.memo(function WineCard({
+const WineCard = memo(function WineCard({
   item,
   theme,
 }: {
@@ -308,8 +308,8 @@ const WineCard = React.memo(function WineCard({
   );
 }, (prevProps, nextProps) => {
   return prevProps.item.data.length === nextProps.item.data.length &&
-         prevProps.item.masterWineData?.id === nextProps.item.masterWineData?.id &&
-         prevProps.theme === nextProps.theme;
+    prevProps.item.masterWineData?.id === nextProps.item.masterWineData?.id &&
+    prevProps.theme === nextProps.theme;
 });
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
