@@ -54,7 +54,7 @@ type BottleView = InventoryBottle & {
   locationData?: Location;
 };
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 100;
 
 // ─── Expandable Wine Card ──────────────────────────────────────────────────────
 
@@ -505,8 +505,77 @@ export default function InventoryScreen() {
           }),
         );
 
+        // --- PREFETCH FULL GROUPS FOR DISCOVERED WINES ---
+        const uniqueWineIds = Array.from(new Set(
+          snap.docs.map(docSnap => docSnap.data().masterWineRef?.id).filter(Boolean)
+        )) as string[];
+
+        let allPrefetchedBottles: BottleView[] = [];
+
+        if (uniqueWineIds.length > 0) {
+          const winePromises = uniqueWineIds.map(async (wineId) => {
+            let wineQuery = query(bottlesRef, where("masterWineRef", "==", doc(db, "master_wines", wineId)));
+
+            // Re-apply other base constraints (status, storeRef)
+            wineQuery = query(wineQuery, where("status", "in", [
+              "received",
+              "shelved",
+              "damaged",
+              "lost",
+            ]));
+
+            if (isStore && profile?.locationId) {
+              wineQuery = query(wineQuery, where("storeRef", "==", doc(db, "stores", profile.locationId)));
+            }
+
+            const wineSnap = await getDocs(wineQuery);
+            return await Promise.all(
+              wineSnap.docs.map(async (docSnap) => {
+                const data = docSnap.data();
+                let masterWineData = wineCache.get(data.masterWineRef?.id);
+                let locationData = locationCache.get(data.locationRef?.id);
+
+                if (!masterWineData && data.masterWineRef) {
+                  const wSnap = await getDoc(data.masterWineRef);
+                  if (wSnap.exists()) {
+                    masterWineData = { id: wSnap.id, ...(wSnap.data() as object) } as MasterWine;
+                    wineCache.set(wSnap.id, masterWineData);
+                  }
+                }
+
+                if (!locationData && data.locationRef) {
+                  const lSnap = await getDoc(data.locationRef);
+                  if (lSnap.exists()) {
+                    locationData = { id: lSnap.id, ...(lSnap.data() as object) } as Location;
+                    locationCache.set(lSnap.id, locationData);
+                  }
+                }
+
+                return {
+                  id: docSnap.id,
+                  ...(data as object),
+                  createdAt: data.createdAt?.toDate() || new Date(),
+                  updatedAt: data.updatedAt?.toDate() || new Date(),
+                  masterWineData,
+                  locationData,
+                } as BottleView;
+              })
+            );
+          });
+
+          const wineResults = await Promise.all(winePromises);
+          allPrefetchedBottles = wineResults.flat();
+        }
+
+        // Deduplicate
+        const mergedMap = new Map<string, BottleView>();
+        resolved.forEach(b => mergedMap.set(b.id, b));
+        allPrefetchedBottles.forEach(b => mergedMap.set(b.id, b));
+
+        const finalResolved = Array.from(mergedMap.values());
+
         const filteredResolved = isSearching
-          ? resolved.filter((b) => {
+          ? finalResolved.filter((b) => {
             const q = currentSearch.toLowerCase();
             return (
               b.sku?.toLowerCase().includes(q) ||
@@ -514,15 +583,19 @@ export default function InventoryScreen() {
               b.masterWineData?.producer?.toLowerCase().includes(q)
             );
           })
-          : resolved;
+          : finalResolved;
 
+        // Base bounds logic for pagination
         const lastSnap = snap.docs[snap.docs.length - 1];
         if (lastSnap) lastDocRef.current = lastSnap;
-        hasMoreRef.current = !isSearching && snap.docs.length === PAGE_SIZE;
+        hasMoreRef.current = !isSearching && snap.docs.length === fetchLimit;
 
-        setBottles((prev) =>
-          isRefresh ? filteredResolved : [...prev, ...filteredResolved],
-        );
+        setBottles((prev) => {
+          if (isRefresh) return filteredResolved;
+          const all = [...prev, ...filteredResolved];
+          const unique = new Map(all.map((b) => [b.id, b]));
+          return Array.from(unique.values());
+        });
         setHasMore(hasMoreRef.current);
       } catch (error) {
         console.error("Error fetching inventory:", error);
