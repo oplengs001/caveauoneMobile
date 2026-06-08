@@ -139,7 +139,7 @@ type MatchResult = {
 };
 
 const MATCH_THRESHOLD = 0.52;
-const WEIGHTS = { wineName: 0.5, vintage: 0.25, format: 0.15, producer: 0.1 };
+const WEIGHTS = { wineName: .25, vintage: 0.25, format: 0.25, producer: 0.25 };
 const WEIGHTS_WITH_FORMAT = {
   wineName: 0.4,
   vintage: 0.1,
@@ -184,11 +184,21 @@ function scoreMatch(
     breakdown.format = itemMl === aiMl ? 1.0 : 0.0;
   }
 
-  // Producer (tiebreaker)
+  // Producer: compare AI-extracted producer against the item's actual producer field.
+  // Also check if the producer name appears inside the wine name as a secondary signal.
   const producerStr = ai.producerName ?? ai.producer ?? "";
-  breakdown.producer = producerStr
-    ? tokenOverlapScore(item.wineName, producerStr)
-    : 0.5;
+  if (!producerStr) {
+    // AI returned no producer — neutral signal
+    breakdown.producer = 0.5;
+  } else if (!item.producerName) {
+    // Item has no producer on file — fall back to checking the wine name
+    breakdown.producer = tokenOverlapScore(item.wineName, producerStr) * 0.5;
+  } else {
+    // Compare directly against the stored producer name
+    const directMatch = similarityScore(item.producerName, producerStr);
+    const nameOverlap = tokenOverlapScore(item.wineName, producerStr);
+    breakdown.producer = Math.max(directMatch, nameOverlap * 0.6);
+  }
 
   const weights = selectedFormat ? WEIGHTS_WITH_FORMAT : WEIGHTS;
   const score =
@@ -558,11 +568,10 @@ export default function OnboardingDetailScreen() {
                 style={[
                   styles.progressBarFill,
                   {
-                    width: `${
-                      (task.items.reduce((s, i) => s + i.onboardedQty, 0) /
-                        task.items.reduce((s, i) => s + i.qty, 0)) *
+                    width: `${(task.items.reduce((s, i) => s + i.onboardedQty, 0) /
+                      task.items.reduce((s, i) => s + i.qty, 0)) *
                       100
-                    }%`,
+                      }%`,
                   },
                 ]}
               />
@@ -767,7 +776,7 @@ export default function OnboardingDetailScreen() {
                                   style={[
                                     styles.formatChip,
                                     selectedFormat === fmt &&
-                                      styles.formatChipSelected,
+                                    styles.formatChipSelected,
                                   ]}
                                   onPress={() => {
                                     setSelectedFormat(
@@ -780,7 +789,7 @@ export default function OnboardingDetailScreen() {
                                     style={[
                                       styles.formatChipText,
                                       selectedFormat === fmt &&
-                                        styles.formatChipTextSelected,
+                                      styles.formatChipTextSelected,
                                     ]}
                                   >
                                     {fmt}
