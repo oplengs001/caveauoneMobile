@@ -139,7 +139,7 @@ type MatchResult = {
 };
 
 const MATCH_THRESHOLD = 0.52;
-const WEIGHTS = { wineName: .25, vintage: 0.25, format: 0.25, producer: 0.25 };
+const WEIGHTS = { wineName: 0.45, vintage: 0.25, format: 0.15, producer: 0.15 };
 const WEIGHTS_WITH_FORMAT = {
   wineName: 0.4,
   vintage: 0.1,
@@ -200,13 +200,13 @@ function scoreMatch(
     breakdown.producer = Math.max(directMatch, nameOverlap * 0.6);
   }
 
+
   const weights = selectedFormat ? WEIGHTS_WITH_FORMAT : WEIGHTS;
   const score =
     breakdown.wineName * weights.wineName +
     breakdown.vintage * weights.vintage +
     breakdown.format * weights.format +
     breakdown.producer * weights.producer;
-
   return { item, score, breakdown };
 }
 
