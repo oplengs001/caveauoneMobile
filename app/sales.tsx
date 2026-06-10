@@ -2,7 +2,7 @@ import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { db } from "@/lib/firebase";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { collection, getDocs, orderBy, query, where } from "firebase/firestore";
+import { collection, getDocs, orderBy, query, where, limit, startAfter, getAggregateFromServer, sum, count } from "firebase/firestore";
 import {
   Banknote,
   Calendar,
@@ -12,7 +12,7 @@ import {
   Sliders,
   TrendingUp,
 } from "lucide-react-native";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -75,6 +75,12 @@ export default function SalesScreen() {
   const [loading, setLoading] = useState(true);
   const [isFilterModalVisible, setFilterModalVisible] = useState(false);
 
+  // Pagination and aggregate states
+  const [lastDoc, setLastDoc] = useState<any>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [aggregates, setAggregates] = useState({ totalBaseSales: 0, totalCost: 0, totalBottles: 0 });
+
   // Initialize the state with the passed parameter, or default to "all"
   const [period, setPeriod] = useState<PeriodType>(
     (passedPeriod as PeriodType) || "all",
@@ -83,104 +89,147 @@ export default function SalesScreen() {
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
 
-  useEffect(() => {
-    const fetchSales = async () => {
-      if (!profile?.locationId) {
-        setLoading(false);
-        return;
-      }
-      setLoading(true);
-      try {
-        let startDate: Date | null = null;
-        let endDate: Date | null = null;
-        const now = new Date();
+  const buildBaseQuery = useCallback(() => {
+    let startDate: Date | null = null;
+    let endDate: Date | null = null;
+    const now = new Date();
 
-        if (period === "today") {
-          startDate = new Date(
-            now.getFullYear(),
-            now.getMonth(),
-            now.getDate(),
-          );
-        } else if (period === "week") {
-          startDate = new Date();
-          startDate.setDate(startDate.getDate() - startDate.getDay());
-          startDate.setHours(0, 0, 0, 0);
-        } else if (period === "month") {
-          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-        } else if (period === "lastMonth") {
-          startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-          endDate = new Date(
-            now.getFullYear(),
-            now.getMonth(),
-            0,
-            23,
-            59,
-            59,
-            999,
-          );
-        } else if (period === "custom") {
-          startDate = customStart ? new Date(customStart) : null;
-          if (startDate) startDate.setHours(0, 0, 0, 0);
+    if (period === "today") {
+      startDate = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate(),
+      );
+    } else if (period === "week") {
+      startDate = new Date();
+      startDate.setDate(startDate.getDate() - startDate.getDay());
+      startDate.setHours(0, 0, 0, 0);
+    } else if (period === "month") {
+      startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+    } else if (period === "lastMonth") {
+      startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      endDate = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        0,
+        23,
+        59,
+        59,
+        999,
+      );
+    } else if (period === "custom") {
+      startDate = customStart ? new Date(customStart) : null;
+      if (startDate) startDate.setHours(0, 0, 0, 0);
 
-          endDate = customEnd ? new Date(customEnd) : null;
-          if (endDate) endDate.setHours(23, 59, 59, 999);
-        }
+      endDate = customEnd ? new Date(customEnd) : null;
+      if (endDate) endDate.setHours(23, 59, 59, 999);
+    }
 
-        let salesQuery;
-        const baseConstraints = [where("storeId", "==", profile.locationId)];
+    const baseConstraints = [where("storeId", "==", profile?.locationId)];
+    let salesQuery;
 
-        if (period === "all" || (!startDate && period === "custom")) {
-          salesQuery = query(
-            collection(db, "sales"),
-            ...baseConstraints,
-            orderBy("soldAt", "desc"),
-          );
-        } else if (startDate && endDate) {
-          salesQuery = query(
-            collection(db, "sales"),
-            ...baseConstraints,
-            where("soldAt", ">=", startDate),
-            where("soldAt", "<=", endDate),
-            orderBy("soldAt", "desc"),
-          );
-        } else {
-          salesQuery = query(
-            collection(db, "sales"),
-            ...baseConstraints,
-            where("soldAt", ">=", startDate),
-            orderBy("soldAt", "desc"),
-          );
-        }
+    if (period === "all" || (!startDate && period === "custom")) {
+      salesQuery = query(
+        collection(db, "sales"),
+        ...baseConstraints,
+        orderBy("soldAt", "desc"),
+      );
+    } else if (startDate && endDate) {
+      salesQuery = query(
+        collection(db, "sales"),
+        ...baseConstraints,
+        where("soldAt", ">=", startDate),
+        where("soldAt", "<=", endDate),
+        orderBy("soldAt", "desc"),
+      );
+    } else {
+      salesQuery = query(
+        collection(db, "sales"),
+        ...baseConstraints,
+        where("soldAt", ">=", startDate),
+        orderBy("soldAt", "desc"),
+      );
+    }
+    return salesQuery;
+  }, [period, customStart, customEnd, profile]);
 
-        const querySnapshot = await getDocs(salesQuery);
-        const salesData = querySnapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        })) as Sale[];
-        setSales(salesData);
-      } catch (error) {
-        console.error("Error fetching sales:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
+  const fetchSales = async () => {
+    if (!profile?.locationId) {
+      setLoading(false);
+      return;
+    }
     if (period === "custom" && !customStart) return;
 
+    setLoading(true);
+    try {
+      const baseQuery = buildBaseQuery();
+
+      // Fetch Aggregates first
+      const aggregateSnapshot = await getAggregateFromServer(baseQuery, {
+        totalBaseSales: sum("price"),
+        totalCost: sum("masterWinePrice"),
+        totalBottles: count()
+      });
+      setAggregates({
+        totalBaseSales: aggregateSnapshot.data().totalBaseSales || 0,
+        totalCost: aggregateSnapshot.data().totalCost || 0,
+        totalBottles: aggregateSnapshot.data().totalBottles || 0
+      });
+
+      // Fetch Paginated List
+      const paginatedQuery = query(baseQuery, limit(20));
+      const querySnapshot = await getDocs(paginatedQuery);
+      
+      const salesData = querySnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as Sale[];
+      
+      setSales(salesData);
+      setLastDoc(querySnapshot.docs[querySnapshot.docs.length - 1]);
+      setHasMore(querySnapshot.docs.length === 20);
+    } catch (error) {
+      console.error("Error fetching sales:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadMoreSales = async () => {
+    if (loadingMore || !hasMore || !lastDoc) return;
+    setLoadingMore(true);
+    try {
+      const baseQuery = buildBaseQuery();
+      const paginatedQuery = query(baseQuery, startAfter(lastDoc), limit(20));
+      const querySnapshot = await getDocs(paginatedQuery);
+      
+      const newSalesData = querySnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as Sale[];
+      
+      setSales(prev => [...prev, ...newSalesData]);
+      setLastDoc(querySnapshot.docs[querySnapshot.docs.length - 1]);
+      setHasMore(querySnapshot.docs.length === 20);
+    } catch (error) {
+      console.error("Error loading more sales:", error);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
+  useEffect(() => {
     fetchSales();
   }, [profile, period, customStart, customEnd]);
 
   // Calculations
-  const totalBaseSales = sales.reduce((sum, sale) => sum + sale.price, 0);
+  const totalBaseSales = aggregates.totalBaseSales;
   const vatAmount = totalBaseSales * 0.12;
   const grossSales = totalBaseSales + vatAmount;
-  const totalBottles = sales.length;
+  const totalBottles = aggregates.totalBottles;
 
-  // New Profit Calculation (Assuming masterWinePrice holds the cost)
-  const totalCost = sales.reduce(
-    (sum, sale) => sum + (sale.masterWinePrice || 0),
-    0,
-  );
+  // Profit Calculation
+  const totalCost = aggregates.totalCost;
   const netProfit = totalBaseSales - totalCost;
 
   const getPeriodLabel = () => {
@@ -422,6 +471,15 @@ export default function SalesScreen() {
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContainer}
           showsVerticalScrollIndicator={false}
+          onEndReached={loadMoreSales}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={
+            loadingMore ? (
+              <View style={{ padding: 16, alignItems: 'center' }}>
+                <ActivityIndicator color={theme.primary} />
+              </View>
+            ) : null
+          }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Receipt
