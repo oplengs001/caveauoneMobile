@@ -5,12 +5,12 @@ export async function getSalesByPeriod(storeId: string, periodStart: Date, perio
   const q = query(
     collection(db, "sales"),
     where("storeId", "==", storeId),
-    where("createdAt", ">=", periodStart),
-    where("createdAt", "<=", periodEnd)
+    where("soldAt", ">=", periodStart),
+    where("soldAt", "<=", periodEnd)
   );
   
   const snapshot = await getAggregateFromServer(q, {
-    totalRevenue: sum("price"),
+    totalRevenue: sum("totalAmount"),
     totalItems: count()
   });
   

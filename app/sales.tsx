@@ -75,11 +75,13 @@ export default function SalesScreen() {
   const [loading, setLoading] = useState(true);
   const [isFilterModalVisible, setFilterModalVisible] = useState(false);
 
-  // Pagination and aggregate states
-  const [lastDoc, setLastDoc] = useState<any>(null);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
-  const [aggregates, setAggregates] = useState({ totalBaseSales: 0, totalCost: 0, totalBottles: 0 });
+  // Aggregate state
+  const [aggregates, setAggregates] = useState({ 
+    totalBaseSales: 0, 
+    totalGrossSales: 0,
+    totalCost: 0, 
+    totalBottles: 0 
+  });
 
   // Initialize the state with the passed parameter, or default to "all"
   const [period, setPeriod] = useState<PeriodType>(
@@ -167,54 +169,29 @@ export default function SalesScreen() {
       // Fetch Aggregates first
       const aggregateSnapshot = await getAggregateFromServer(baseQuery, {
         totalBaseSales: sum("price"),
+        totalGrossSales: sum("totalAmount"),
         totalCost: sum("masterWinePrice"),
         totalBottles: count()
       });
+      
       setAggregates({
         totalBaseSales: aggregateSnapshot.data().totalBaseSales || 0,
+        totalGrossSales: aggregateSnapshot.data().totalGrossSales || 0,
         totalCost: aggregateSnapshot.data().totalCost || 0,
         totalBottles: aggregateSnapshot.data().totalBottles || 0
       });
 
-      // Fetch Paginated List
-      const paginatedQuery = query(baseQuery, limit(20));
-      const querySnapshot = await getDocs(paginatedQuery);
-      
+      const querySnapshot = await getDocs(baseQuery);
       const salesData = querySnapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
       })) as Sale[];
       
       setSales(salesData);
-      setLastDoc(querySnapshot.docs[querySnapshot.docs.length - 1]);
-      setHasMore(querySnapshot.docs.length === 20);
     } catch (error) {
       console.error("Error fetching sales:", error);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const loadMoreSales = async () => {
-    if (loadingMore || !hasMore || !lastDoc) return;
-    setLoadingMore(true);
-    try {
-      const baseQuery = buildBaseQuery();
-      const paginatedQuery = query(baseQuery, startAfter(lastDoc), limit(20));
-      const querySnapshot = await getDocs(paginatedQuery);
-      
-      const newSalesData = querySnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as Sale[];
-      
-      setSales(prev => [...prev, ...newSalesData]);
-      setLastDoc(querySnapshot.docs[querySnapshot.docs.length - 1]);
-      setHasMore(querySnapshot.docs.length === 20);
-    } catch (error) {
-      console.error("Error loading more sales:", error);
-    } finally {
-      setLoadingMore(false);
     }
   };
 
@@ -224,8 +201,8 @@ export default function SalesScreen() {
 
   // Calculations
   const totalBaseSales = aggregates.totalBaseSales;
-  const vatAmount = totalBaseSales * 0.12;
-  const grossSales = totalBaseSales + vatAmount;
+  const grossSales = aggregates.totalGrossSales;
+  const vatAmount = grossSales - totalBaseSales;
   const totalBottles = aggregates.totalBottles;
 
   // Profit Calculation
@@ -471,15 +448,9 @@ export default function SalesScreen() {
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContainer}
           showsVerticalScrollIndicator={false}
-          onEndReached={loadMoreSales}
-          onEndReachedThreshold={0.5}
-          ListFooterComponent={
-            loadingMore ? (
-              <View style={{ padding: 16, alignItems: 'center' }}>
-                <ActivityIndicator color={theme.primary} />
-              </View>
-            ) : null
-          }
+          initialNumToRender={20}
+          maxToRenderPerBatch={10}
+          windowSize={5}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Receipt
