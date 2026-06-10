@@ -12,6 +12,8 @@ import {
   query,
   where,
 } from "firebase/firestore";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { countBottlesForStoreDashboard, getStores, getSalesByPeriod } from "@/lib/queries";
 import {
   AlertOctagon,
   AlertTriangle,
@@ -25,7 +27,7 @@ import {
   Truck,
   Wine,
 } from "lucide-react-native";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState, useRef } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -80,6 +82,9 @@ export default function HomeScreen() {
   const totalGap = 16 * (cardsPerRow - 1);
   const cardWidth = (width - containerPadding - totalGap) / cardsPerRow;
 
+  const metricsCache = useRef<{ data: any; storeId: string; fetchedAt: number } | null>(null);
+  const METRICS_TTL_MS = 5 * 60 * 1000;
+
   const fetchMetrics = useCallback(async () => {
     const storeId = profile?.locationId;
     if (profile?.role !== "store" || !storeId) {
@@ -87,8 +92,37 @@ export default function HomeScreen() {
       return;
     }
 
+    if (!refreshing) {
+      const cached = metricsCache.current;
+      if (
+        cached &&
+        cached.storeId === storeId &&
+        Date.now() - cached.fetchedAt < METRICS_TTL_MS
+      ) {
+        setDashboardMetrics(cached.data);
+        setLoadingMetrics(false);
+        return;
+      }
+    }
+
     try {
       setLoadingMetrics(true);
+      const storageKey = `dashboard_metrics_${storeId}`;
+      if (!refreshing && !metricsCache.current) {
+        const raw = await AsyncStorage.getItem(storageKey);
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw);
+            if (Date.now() - parsed.ts < METRICS_TTL_MS) {
+              setDashboardMetrics(parsed.data);
+              setLoadingMetrics(false);
+            }
+          } catch (e) {
+            console.warn("Invalid storage cache", e);
+          }
+        }
+      }
+
       // Fetch ACTIVE pending requests to exclude wines already being re-ordered
       const pendingRequestsSnap = await getDocs(
         query(
@@ -120,57 +154,65 @@ export default function HomeScreen() {
         underSafety: { wines: 0, bottles: 0 },
       };
 
-      await Promise.all(
-        settingsSnap.docs.map(async (d) => {
-          const { masterWineId, parLevel = 0, safetyStock = 0 } = d.data();
+      const storeRef = doc(db, "stores", storeId);
+      const validSettings = settingsSnap.docs.map(d => d.data()).filter(s => !pendingWineIds.has(s.masterWineId));
 
-          if (pendingWineIds.has(masterWineId)) {
-            return;
-          }
+      const counts = await countBottlesForStoreDashboard(storeRef, validSettings);
 
-          const wineRef = doc(db, "master_wines", masterWineId);
-          const snap = await getCountFromServer(
-            query(
-              collection(db, "inventory_bottles"),
-              where("storeRef", "==", doc(db, "stores", storeId)),
-              where("masterWineRef", "==", wineRef),
-              where("status", "in", ["received", "shelved"]),
-            ),
-          );
-          const count = snap.data().count;
+      validSettings.forEach((setting, index) => {
+        const { parLevel = 0, safetyStock = 0 } = setting;
+        const count = counts[index];
 
-          // Priority order: stockout → underSafety → parAlert
-          // Check safetyStock before parLevel, since safetyStock >= parLevel typically
-          if (count === 0) {
-            metrics.stockout.wines++;
-            // Report bottles needed to reach safetyStock (or parLevel if no safetyStock set)
-            metrics.stockout.bottles += safetyStock || parLevel;
-          } else if (count < safetyStock) {
-            metrics.underSafety.wines++;
-            metrics.underSafety.bottles += safetyStock - count;
-          } else if (parLevel > 0 && count <= parLevel) {
-            metrics.parAlert.wines++;
-            metrics.parAlert.bottles += parLevel - count;
-          }
-        }),
-      );
+        if (count === 0) {
+          metrics.stockout.wines++;
+          metrics.stockout.bottles += safetyStock || parLevel;
+        } else if (count < safetyStock) {
+          metrics.underSafety.wines++;
+          metrics.underSafety.bottles += safetyStock - count;
+        } else if (parLevel > 0 && count <= parLevel) {
+          metrics.parAlert.wines++;
+          metrics.parAlert.bottles += parLevel - count;
+        }
+      });
 
+      metricsCache.current = { data: metrics, storeId, fetchedAt: Date.now() };
+      await AsyncStorage.setItem(storageKey, JSON.stringify({ data: metrics, ts: Date.now() }));
       setDashboardMetrics(metrics);
     } catch (err) {
       console.error("Failed to fetch dashboard metrics:", err);
     } finally {
       setLoadingMetrics(false);
     }
-  }, [profile]);
+  }, [profile, refreshing]);
+
+  const outboundCache = useRef<{ data: any; storeId: string; fetchedAt: number } | null>(null);
+  const OUTBOUND_TTL_MS = 2 * 60 * 1000;
 
   const fetchOutboundRequests = useCallback(async () => {
     if (profile?.role !== "store" || !profile.locationId) {
       setLoadingRequests(false);
       return;
     }
+
+    if (!refreshing) {
+      const cached = outboundCache.current;
+      if (
+        cached &&
+        cached.storeId === profile.locationId &&
+        Date.now() - cached.fetchedAt < OUTBOUND_TTL_MS
+      ) {
+        setOutboundRequests(cached.data.requests);
+        setIncomingDeliveries(cached.data.deliveries);
+        setPulloutTasks(cached.data.pullouts);
+        setLocations(cached.data.locMap);
+        setLoadingRequests(false);
+        return;
+      }
+    }
+
     try {
       setLoadingRequests(true);
-      const [reqSnap, delSnap, pulloutSnap, storesSnap] = await Promise.all([
+      const [reqSnap, delSnap, pulloutSnap, storesData] = await Promise.all([
         getDocs(
           query(
             collection(db, "wine_requests"),
@@ -192,12 +234,11 @@ export default function HomeScreen() {
             where("status", "in", ["pending", "in_progress"]),
           ),
         ),
-        getDocs(collection(db, "stores")),
+        getStores(),
       ]);
 
       const locMap: Record<string, string> = {};
-      storesSnap.docs.forEach((d) => (locMap[d.id] = d.data().name));
-      setLocations(locMap);
+      storesData.forEach((d) => (locMap[d.id] = d.name));
 
       const requests = reqSnap.docs.map(
         (doc) => ({ id: doc.id, ...doc.data() }) as WineRequest,
@@ -208,6 +249,14 @@ export default function HomeScreen() {
       const pullouts = pulloutSnap.docs.map(
         (doc) => ({ id: doc.id, ...doc.data() }) as PulloutRequest,
       );
+
+      outboundCache.current = {
+        data: { requests, deliveries, pullouts, locMap },
+        storeId: profile.locationId,
+        fetchedAt: Date.now()
+      };
+
+      setLocations(locMap);
       setOutboundRequests(requests);
       setIncomingDeliveries(deliveries);
       setPulloutTasks(pullouts);
@@ -248,26 +297,10 @@ export default function HomeScreen() {
         startDate = new Date(0); // for 'all'
       }
 
-      const salesQuery =
-        salesPeriod === "all"
-          ? query(collection(db, "sales"), where("storeId", "==", storeId))
-          : query(
-            collection(db, "sales"),
-            where("storeId", "==", storeId),
-            where("soldAt", ">=", startDate),
-          );
-
-      const salesSnap = await getDocs(salesQuery);
-
-      const soldCount = salesSnap.size;
-      const totalRevenue = salesSnap.docs.reduce(
-        (sum, doc) => sum + (doc.data().price || 0),
-        0,
-      );
-
+      const salesResult = await getSalesByPeriod(storeId, startDate, new Date());
       setSalesDashboardMetrics({
-        soldCount,
-        totalRevenue,
+        soldCount: salesResult.totalItems,
+        totalRevenue: salesResult.totalRevenue,
         activeBottles,
       });
     } catch (err) {

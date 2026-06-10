@@ -1,5 +1,6 @@
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { db } from "@/lib/firebase";
 import { logActivity } from "@/lib/utils/activityLogger";
 import { InventoryBottle, WineRequest } from "@/types";
@@ -167,6 +168,9 @@ export default function WineRequestDetail() {
         status: newStatus,
         updatedAt: serverTimestamp(),
       });
+
+      // Invalidate dashboard metrics cache for this store
+      await AsyncStorage.removeItem(`dashboard_metrics_${request.storeId}`);
 
       // Log the receive operation
       logActivity({

@@ -7,9 +7,12 @@ import { Stack, useRouter } from "expo-router";
 import {
   addDoc,
   collection,
-  getDocs,
   serverTimestamp,
 } from "firebase/firestore";
+import { getMasterWines } from "@/lib/queries/masterWines";
+import { getStores } from "@/lib/queries/stores";
+import { getReceivedAndShelvedBottles } from "@/lib/queries/inventoryBottles";
+
 
 import {
   ChevronLeft,
@@ -75,26 +78,18 @@ export default function CreateWineRequest() {
   const fetchWines = async (isRefresh = false) => {
     if (!isRefresh) setFetchingWines(true);
     try {
-      const [winesSnap, bottlesSnap, storesSnap] = await Promise.all([
-        getDocs(collection(db, "master_wines")),
-        getDocs(collection(db, "inventory_bottles")),
-        getDocs(collection(db, "stores")),
+      const [winesData, bottlesData, storesData] = await Promise.all([
+        getMasterWines(),
+        getReceivedAndShelvedBottles(5000),
+        getStores(),
       ]);
-
-      const storesData = storesSnap.docs.map((d) => ({
-        id: d.id,
-        name: d.data().name,
-      }));
-      const bottlesData = bottlesSnap.docs.map((d) => d.data());
 
       const availableStores = storesData.filter(
         (s) => s.id !== profile?.locationId,
       );
       setLocations(availableStores);
 
-      const winesWithStock = winesSnap.docs.map((doc) => {
-        const wine = { id: doc.id, ...doc.data() } as MasterWine;
-
+      const winesWithStock = winesData.map((wine) => {
         let totalStock = 0;
         const stockByLoc: Record<string, number> = {};
 
@@ -102,10 +97,9 @@ export default function CreateWineRequest() {
           stockByLoc[store.id] = 0;
         });
 
-        bottlesData.forEach((b) => {
+        bottlesData.forEach((b: any) => {
           if (
-            b.masterWineRef?.id === doc.id &&
-            (b.status === "received" || b.status === "shelved") &&
+            b.masterWineRef?.id === wine.id &&
             b.storeRef?.id &&
             b.storeRef.id !== profile?.locationId
           ) {
