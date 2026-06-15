@@ -1,8 +1,9 @@
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { db } from "@/lib/firebase";
+import { calculateDashboardSalesMetrics } from "@/lib/utils/salesMath";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { collection, getDocs, orderBy, query, where, limit, startAfter, getAggregateFromServer, sum, count } from "firebase/firestore";
+import { collection, count, getAggregateFromServer, getDocs, orderBy, query, sum, where } from "firebase/firestore";
 import {
   Banknote,
   Calendar,
@@ -12,7 +13,7 @@ import {
   Sliders,
   TrendingUp,
 } from "lucide-react-native";
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -76,11 +77,11 @@ export default function SalesScreen() {
   const [isFilterModalVisible, setFilterModalVisible] = useState(false);
 
   // Aggregate state
-  const [aggregates, setAggregates] = useState({ 
-    totalBaseSales: 0, 
+  const [aggregates, setAggregates] = useState({
+    totalBaseSales: 0,
     totalGrossSales: 0,
-    totalCost: 0, 
-    totalBottles: 0 
+    totalCost: 0,
+    totalBottles: 0
   });
 
   // Initialize the state with the passed parameter, or default to "all"
@@ -173,7 +174,7 @@ export default function SalesScreen() {
         totalCost: sum("masterWinePrice"),
         totalBottles: count()
       });
-      
+
       setAggregates({
         totalBaseSales: aggregateSnapshot.data().totalBaseSales || 0,
         totalGrossSales: aggregateSnapshot.data().totalGrossSales || 0,
@@ -186,7 +187,7 @@ export default function SalesScreen() {
         id: doc.id,
         ...doc.data(),
       })) as Sale[];
-      
+
       setSales(salesData);
     } catch (error) {
       console.error("Error fetching sales:", error);
@@ -202,12 +203,10 @@ export default function SalesScreen() {
   // Calculations
   const totalBaseSales = aggregates.totalBaseSales;
   const grossSales = aggregates.totalGrossSales;
-  const vatAmount = grossSales - totalBaseSales;
   const totalBottles = aggregates.totalBottles;
-
-  // Profit Calculation
   const totalCost = aggregates.totalCost;
-  const netProfit = totalBaseSales - totalCost;
+
+  const { netProfit, vatAmount } = calculateDashboardSalesMetrics(totalBaseSales, grossSales, totalCost);
 
   const getPeriodLabel = () => {
     if (period === "lastMonth") return "Last Month's";

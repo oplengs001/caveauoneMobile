@@ -1,16 +1,16 @@
 {
   "expo": {
-    "name": "warehouse-app",
+    "name": "CaveauOne",
     "slug": "caveauone-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "warehouseapp",
+    "scheme": "caveauone",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.warehouse-app",
+      "bundleIdentifier": "com.prosource.caveauone",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
