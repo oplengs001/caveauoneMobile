@@ -39,6 +39,6 @@ if (Platform.OS === 'web') {
   }
 }
 
-const db = getFirestore(app);
+const db = getFirestore(app, process.env.EXPO_PUBLIC_FIREBASE_DATABASE_ID || '(default)');
 
 export { app, auth, db };

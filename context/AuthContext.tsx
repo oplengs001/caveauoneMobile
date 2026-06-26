@@ -1,8 +1,9 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { AppUser } from '@/types';
+import { usePushNotifications } from '@/hooks/usePushNotifications';
 
 interface AuthContextType {
   user: User | null;
@@ -20,6 +21,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const { expoPushToken } = usePushNotifications();
+
+  useEffect(() => {
+    if (user && expoPushToken?.data) {
+      const docRef = doc(db, 'users', user.uid);
+      updateDoc(docRef, {
+        pushTokens: arrayUnion(expoPushToken.data)
+      }).catch(err => console.error("Error saving push token:", err));
+    }
+  }, [user, expoPushToken]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {

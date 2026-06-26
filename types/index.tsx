@@ -6,6 +6,7 @@ export interface AppUser {
   role: "admin" | "store" | "warehouse";
   locationId?: string;
   createdAt: Date;
+  pushTokens?: string[];
 }
 
 export interface MasterWine {
