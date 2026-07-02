@@ -1,7 +1,9 @@
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { auth, db } from "@/lib/firebase";
+import { countBottlesForStoreDashboard, getSalesByPeriod, getStores } from "@/lib/queries";
 import { Delivery, PulloutRequest, WineRequest } from "@/types";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
 import { signOut } from "firebase/auth";
 import {
@@ -12,8 +14,6 @@ import {
   query,
   where,
 } from "firebase/firestore";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { countBottlesForStoreDashboard, getStores, getSalesByPeriod } from "@/lib/queries";
 import {
   AlertOctagon,
   AlertTriangle,
@@ -27,7 +27,7 @@ import {
   Truck,
   Wine,
 } from "lucide-react-native";
-import React, { useCallback, useEffect, useState, useRef } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,

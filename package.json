@@ -18,6 +18,8 @@
     "build:production:ios": "env-cmd -f .env.production npx eas-cli@latest build --profile production --platform ios --auto-submit",
     "ios-device": "env-cmd -f .env.staging expo run:ios --device",
     "ios-device:prod": "env-cmd -f .env.production expo run:ios --device",
+    "ios-ipad": "env-cmd -f .env.staging expo run:ios -d 'iPad Pro 11-inch (M4)'",
+    "ios-ipad:prod": "env-cmd -f .env.production expo run:ios -d 'iPad Pro 11-inch (M4)'",
     "eas-update": "npx eas-cli update --channel production"
   },
   "dependencies": {

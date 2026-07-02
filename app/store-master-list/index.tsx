@@ -87,7 +87,6 @@ function computeStatus(
     requestedQty = setting.safetyStock - stockCount;
   }
 
-  // If there's a pending request, override requestedQty to 0 to prevent re-requesting.
   if (hasPendingRequest) {
     requestedQty = 0;
   }
@@ -148,25 +147,23 @@ export default function StoreMasterListScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const { filter: initialFilter } = useLocalSearchParams<{
     filter:
-      | "all"
-      | "alerts"
-      | "under_safety"
-      | "stockout"
-      | "overstock"
-      | "unset";
+    | "all"
+    | "alerts"
+    | "under_safety"
+    | "stockout"
+    | "overstock"
+    | "unset";
   }>();
   const [filter, setFilter] = useState<
     "all" | "alerts" | "under_safety" | "stockout" | "overstock" | "unset"
   >(initialFilter || "all");
 
-  // Wine Dropdown Filter Data
   const [isWineFilterModalOpen, setIsWineFilterModalOpen] = useState(false);
   const [masterWinesList, setMasterWinesList] = useState<MasterWine[]>([]);
   const [selectedWineFilter, setSelectedWineFilter] =
     useState<MasterWine | null>(null);
   const [wineSearchTerm, setWineSearchTerm] = useState("");
 
-  // Adjustment sheet
   const [selected, setSelected] = useState<WineEntry | null>(null);
   const [sheetPar, setSheetPar] = useState("");
   const [sheetSafety, setSheetSafety] = useState("");
@@ -180,7 +177,6 @@ export default function StoreMasterListScreen() {
   const [batchRequesting, setBatchRequesting] = useState(false);
   const [isSuccessVisible, setIsSuccessVisible] = useState(false);
 
-  // Load master wines for the searchable dropdown filter
   useEffect(() => {
     const fetchMasterWines = async () => {
       try {
@@ -195,7 +191,6 @@ export default function StoreMasterListScreen() {
     fetchMasterWines();
   }, []);
 
-  // Filter master wines based on modal search term
   const filteredMasterWines = useMemo(() => {
     const q = wineSearchTerm.toLowerCase();
     return masterWinesList
@@ -205,7 +200,7 @@ export default function StoreMasterListScreen() {
           w.producer?.toLowerCase().includes(q) ||
           w.sku?.toLowerCase().includes(q),
       )
-      .slice(0, 30); // Pseudo-pagination / limit for UI performance
+      .slice(0, 30);
   }, [masterWinesList, wineSearchTerm]);
 
   const fetchData = useCallback(async () => {
@@ -298,9 +293,9 @@ export default function StoreMasterListScreen() {
 
           const masterWine: MasterWine = wineSnap.exists()
             ? ({
-                id: wineSnap.id,
-                ...(wineSnap.data() as object),
-              } as MasterWine)
+              id: wineSnap.id,
+              ...(wineSnap.data() as object),
+            } as MasterWine)
             : { id: wineId, name: "Unknown Wine", vintage: "", price: 0 };
 
           const stockCount = countSnap.data().count;
@@ -514,7 +509,6 @@ export default function StoreMasterListScreen() {
     setIsBatchConfirmVisible(true);
   };
 
-  // Filter local entries based on active status chip AND selected wine
   const filtered = entries.filter((e) => {
     if (selectedWineFilter && e.masterWine.id !== selectedWineFilter.id) {
       return false;
@@ -539,7 +533,6 @@ export default function StoreMasterListScreen() {
     const cfg = STATUS_CONFIG[item.status];
     const isConfigured = !!item.setting && !item.setting.discontinued;
 
-    // Calculate Progress Bar Fills (cap at 100%)
     const safetyStock = item.setting?.safetyStock || 0;
     const parLevel = item.setting?.parLevel || 0;
 
@@ -550,7 +543,6 @@ export default function StoreMasterListScreen() {
           ? 100
           : 0;
 
-    // Determine where the PAR marker sits on the progress bar
     const parPercentage =
       safetyStock > 0 ? Math.min(100, (parLevel / safetyStock) * 100) : 0;
 
@@ -565,7 +557,6 @@ export default function StoreMasterListScreen() {
         onPress={() => openSheet(item)}
         activeOpacity={0.7}
       >
-        {/* Header Row: Title & Price */}
         <View style={styles.cardHeaderRow}>
           <View style={{ flex: 1, paddingRight: 8 }}>
             <Text style={styles.wineName} numberOfLines={2}>
@@ -594,7 +585,6 @@ export default function StoreMasterListScreen() {
           </View>
         </View>
 
-        {/* Tags Row */}
         {(item.setting?.isFastMoving || item.setting?.isReserve) && (
           <View style={styles.tagsRow}>
             {item.setting?.isFastMoving && (
@@ -620,10 +610,8 @@ export default function StoreMasterListScreen() {
           </View>
         )}
 
-        {/* Integrated Stats & Capacity Bar */}
         {isConfigured ? (
           <View style={styles.barContainer}>
-            {/* Top Stats Row */}
             <View style={styles.barStatsRow}>
               <View style={styles.stockHeaderRow}>
                 <Package size={16} color={theme.textSecondary} />
@@ -641,7 +629,6 @@ export default function StoreMasterListScreen() {
               )}
             </View>
 
-            {/* Progress Bar Track */}
             <View style={styles.barTrack}>
               <View
                 style={[
@@ -649,7 +636,6 @@ export default function StoreMasterListScreen() {
                   { width: `${fillPercentage}%`, backgroundColor: cfg.accent },
                 ]}
               />
-              {/* Par Level Visual Marker */}
               {parLevel > 0 && parPercentage < 100 && (
                 <View
                   style={[
@@ -663,7 +649,6 @@ export default function StoreMasterListScreen() {
               )}
             </View>
 
-            {/* Bottom Labels */}
             <View style={styles.barLabelsRow}>
               <Text style={styles.barLabelSecondary}>
                 {parLevel > 0 ? `PAR: ${parLevel}` : ""}
@@ -672,7 +657,6 @@ export default function StoreMasterListScreen() {
             </View>
           </View>
         ) : (
-          /* Fallback for unconfigured wines */
           <View style={styles.unconfiguredStockRow}>
             <Package size={14} color={theme.textSecondary} />
             <Text style={styles.stockPrimaryValue}>{item.stockCount}</Text>
@@ -680,7 +664,6 @@ export default function StoreMasterListScreen() {
           </View>
         )}
 
-        {/* Pending Request Override Footer */}
         {item.activeRequest && (
           <TouchableOpacity
             style={[styles.requestedFooter, { backgroundColor: cfg.bg }]}
@@ -690,7 +673,7 @@ export default function StoreMasterListScreen() {
             }}
           >
             {item.activeRequest.status === "outbound" ||
-            item.activeRequest.status === "converted" ? (
+              item.activeRequest.status === "converted" ? (
               <Truck size={14} color={cfg.accent} />
             ) : item.activeRequest.status === "receiving" ? (
               <CheckCircle2 size={14} color={cfg.accent} />
@@ -723,7 +706,6 @@ export default function StoreMasterListScreen() {
     <SafeAreaView style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
 
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <ChevronLeft size={28} color={theme.primary} strokeWidth={2.5} />
@@ -737,7 +719,6 @@ export default function StoreMasterListScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Alert Banner */}
       {alertCount > 0 && (
         <View style={styles.alertBanner}>
           <AlertTriangle size={16} color="#92400e" />
@@ -747,7 +728,6 @@ export default function StoreMasterListScreen() {
         </View>
       )}
 
-      {/* Wine Search Dropdown Filter */}
       <View style={{ paddingHorizontal: 20, paddingTop: 12, paddingBottom: 4 }}>
         <TouchableOpacity
           style={[
@@ -790,7 +770,6 @@ export default function StoreMasterListScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Filter Chips */}
       <View style={styles.filterRow}>
         <ScrollView
           horizontal
@@ -838,7 +817,6 @@ export default function StoreMasterListScreen() {
         </ScrollView>
       </View>
 
-      {/* List */}
       {loading ? (
         <ActivityIndicator
           size="large"
@@ -871,7 +849,6 @@ export default function StoreMasterListScreen() {
         />
       )}
 
-      {/* Batch Request Button */}
       {itemsToRequest.length > 0 && !loading && (
         <View style={styles.batchRequestContainer}>
           <TouchableOpacity
@@ -901,7 +878,6 @@ export default function StoreMasterListScreen() {
         </View>
       )}
 
-      {/* Success Modal */}
       <Modal visible={isSuccessVisible} animationType="fade" transparent>
         <View style={styles.successOverlay}>
           <View style={styles.successContainer}>
@@ -950,7 +926,6 @@ export default function StoreMasterListScreen() {
         </View>
       </Modal>
 
-      {/* Batch Confirm Modal */}
       <Modal
         visible={isBatchConfirmVisible}
         animationType="slide"
@@ -1102,49 +1077,71 @@ export default function StoreMasterListScreen() {
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false}>
-              <Text style={styles.fieldLabel}>PAR LEVEL</Text>
-              <Text style={styles.fieldHint}>
-                When stock reaches this number, a reorder is triggered.
-              </Text>
-              <TextInput
-                style={styles.input}
-                value={sheetPar}
-                onChangeText={setSheetPar}
-                keyboardType="number-pad"
-                placeholder="e.g. 6"
-                placeholderTextColor="#94a3b8"
-              />
 
-              <Text style={[styles.fieldLabel, { marginTop: 20 }]}>
-                SAFETY STOCK
-              </Text>
-              <Text style={styles.fieldHint}>
-                Target quantity to restore when reordering.
-              </Text>
-              <TextInput
-                style={styles.input}
-                value={sheetSafety}
-                onChangeText={setSheetSafety}
-                keyboardType="number-pad"
-                placeholder="e.g. 24"
-                placeholderTextColor="#94a3b8"
-              />
+              {/* --- SETTINGS LIST: INPUTS --- */}
+              <View style={styles.settingsCard}>
 
-              <Text style={[styles.fieldLabel, { marginTop: 20 }]}>
-                SELLING PRICE
-              </Text>
-              <Text style={styles.fieldHint}>
-                The retail price of this wine at this store.
-              </Text>
-              <TextInput
-                style={styles.input}
-                value={sheetSellingPrice}
-                onChangeText={setSheetSellingPrice}
-                keyboardType="decimal-pad"
-                placeholder="e.g. 2500.00"
-                placeholderTextColor="#94a3b8"
-              />
+                {/* Par Level */}
+                <View style={styles.settingRow}>
+                  <View style={styles.settingTextContainer}>
+                    <Text style={styles.fieldLabel}>PAR LEVEL</Text>
+                    <Text style={styles.fieldHint}>
+                      When stock reaches this number, a reorder is triggered.
+                    </Text>
+                  </View>
+                  <TextInput
+                    style={[styles.input, styles.inputSmall]}
+                    value={sheetPar}
+                    onChangeText={setSheetPar}
+                    keyboardType="number-pad"
+                    placeholder="0"
+                    placeholderTextColor="#94a3b8"
+                  />
+                </View>
+                <View style={styles.divider} />
 
+                {/* Safety Stock */}
+                <View style={styles.settingRow}>
+                  <View style={styles.settingTextContainer}>
+                    <Text style={styles.fieldLabel}>SAFETY STOCK</Text>
+                    <Text style={styles.fieldHint}>
+                      Target quantity to restore when reordering.
+                    </Text>
+                  </View>
+                  <TextInput
+                    style={[styles.input, styles.inputSmall]}
+                    value={sheetSafety}
+                    onChangeText={setSheetSafety}
+                    keyboardType="number-pad"
+                    placeholder="0"
+                    placeholderTextColor="#94a3b8"
+                  />
+                </View>
+                <View style={styles.divider} />
+
+                {/* Selling Price */}
+                <View style={styles.settingRow}>
+                  <View style={styles.settingTextContainer}>
+                    <Text style={styles.fieldLabel}>SELLING PRICE</Text>
+                    <Text style={styles.fieldHint}>
+                      The retail price of this wine at this store.
+                    </Text>
+                  </View>
+                  <View style={styles.priceInputContainer}>
+                    <Text style={styles.currencyPrefix}>₱</Text>
+                    <TextInput
+                      style={[styles.input, styles.inputPrice]}
+                      value={sheetSellingPrice}
+                      onChangeText={setSheetSellingPrice}
+                      keyboardType="decimal-pad"
+                      placeholder="0.00"
+                      placeholderTextColor="#94a3b8"
+                    />
+                  </View>
+                </View>
+              </View>
+
+              {/* Dynamic Formula Display */}
               {sheetPar && sheetSafety && (
                 <View style={styles.formulaBox}>
                   <Text style={styles.formulaLabel}>REQUEST FORMULA</Text>
@@ -1162,9 +1159,12 @@ export default function StoreMasterListScreen() {
                 </View>
               )}
 
-              <View style={styles.switchSection}>
-                <View style={styles.switchRow}>
-                  <View style={{ flex: 1 }}>
+              {/* --- SETTINGS LIST: SWITCHES --- */}
+              <View style={[styles.settingsCard, { marginTop: 20 }]}>
+
+                {/* Fast Moving */}
+                <View style={styles.settingRow}>
+                  <View style={styles.settingTextContainer}>
                     <Text style={styles.fieldLabel}>FAST MOVING</Text>
                     <Text style={styles.fieldHint}>
                       Identifies this wine as a high-turnover item.
@@ -1180,13 +1180,14 @@ export default function StoreMasterListScreen() {
                     thumbColor={sheetIsFastMoving ? theme.primary : "#94a3b8"}
                   />
                 </View>
+                <View style={styles.divider} />
 
-                <View style={styles.switchRow}>
-                  <View style={{ flex: 1 }}>
+                {/* Reserve */}
+                <View style={styles.settingRow}>
+                  <View style={styles.settingTextContainer}>
                     <Text style={styles.fieldLabel}>RESERVE STOCK</Text>
                     <Text style={styles.fieldHint}>
-                      Marks this as a special/private stock, not for regular
-                      sale.
+                      Marks this as a special/private stock, not for regular sale.
                     </Text>
                   </View>
                   <Switch
@@ -1199,21 +1200,26 @@ export default function StoreMasterListScreen() {
                     thumbColor={sheetIsReserve ? theme.primary : "#94a3b8"}
                   />
                 </View>
-              </View>
+                <View style={styles.divider} />
 
-              <View style={styles.discontinuedRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.fieldLabel}>DISCONTINUED</Text>
-                  <Text style={styles.fieldHint}>
-                    No alerts or requests will be generated.
-                  </Text>
+                {/* Discontinued */}
+                <View style={styles.settingRow}>
+                  <View style={styles.settingTextContainer}>
+                    <Text style={styles.fieldLabel}>DISCONTINUED</Text>
+                    <Text style={styles.fieldHint}>
+                      No alerts or requests will be generated.
+                    </Text>
+                  </View>
+                  <Switch
+                    value={sheetDiscontinued}
+                    onValueChange={setSheetDiscontinued}
+                    trackColor={{
+                      false: "#e2e8f0",
+                      true: "#ef444460", // Red track for negative action
+                    }}
+                    thumbColor={sheetDiscontinued ? "#ef4444" : "#94a3b8"}
+                  />
                 </View>
-                <Switch
-                  value={sheetDiscontinued}
-                  onValueChange={setSheetDiscontinued}
-                  trackColor={{ false: "#e2e8f0", true: theme.primary + "60" }}
-                  thumbColor={sheetDiscontinued ? theme.primary : "#94a3b8"}
-                />
               </View>
 
               <TouchableOpacity
@@ -1237,7 +1243,7 @@ export default function StoreMasterListScreen() {
                   }}
                 >
                   {selected.activeRequest.status === "outbound" ||
-                  selected.activeRequest.status === "converted" ? (
+                    selected.activeRequest.status === "converted" ? (
                     <Truck size={18} color={theme.primary} strokeWidth={2.5} />
                   ) : selected.activeRequest.status === "receiving" ? (
                     <CheckCircle2
@@ -1286,7 +1292,6 @@ export default function StoreMasterListScreen() {
         </View>
       </Modal>
 
-      {/* ── Wine Search Filter Modal ── */}
       <Modal visible={isWineFilterModalOpen} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <View
@@ -1309,7 +1314,6 @@ export default function StoreMasterListScreen() {
               </TouchableOpacity>
             </View>
 
-            {/* Modal Search Input */}
             <View
               style={[
                 styles.searchWrapper,
@@ -1336,7 +1340,6 @@ export default function StoreMasterListScreen() {
               />
             </View>
 
-            {/* Catalog List */}
             <FlatList
               data={filteredMasterWines}
               keyExtractor={(item) => item.id}
@@ -1479,7 +1482,6 @@ const styles = StyleSheet.create({
   },
   alertBannerText: { color: "#92400e", fontWeight: "700", fontSize: 13 },
 
-  // Wine Filter Trigger Button Styles
   wineFilterBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -1522,7 +1524,6 @@ const styles = StyleSheet.create({
 
   list: { paddingHorizontal: 16, paddingBottom: 100 },
 
-  // --- New Card UI ---
   card: {
     backgroundColor: theme.card,
     borderRadius: 16,
@@ -1580,7 +1581,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
 
-  // Capacity Bar & Integrated Stats
   barContainer: { marginBottom: 12, marginTop: 4 },
 
   barStatsRow: {
@@ -1682,7 +1682,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
 
-  // Pending Request Footer inside Card
   requestedFooter: {
     flexDirection: "row",
     alignItems: "center",
@@ -1698,11 +1697,9 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
 
-  // Empty State
   empty: { alignItems: "center", paddingTop: 80, gap: 12 },
   emptyText: { color: theme.textSecondary, fontWeight: "600", fontSize: 15 },
 
-  // --- Modals & Sheets ---
   successOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.6)",
@@ -1835,8 +1832,8 @@ const styles = StyleSheet.create({
     backgroundColor: theme.card,
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
-    padding: 28,
-    maxHeight: "90%",
+    padding: 24,
+    maxHeight: "95%", // gave a tiny bit more room since we added descriptive cards
   },
   sheetHandle: {
     width: 40,
@@ -1849,7 +1846,7 @@ const styles = StyleSheet.create({
   sheetHeader: {
     flexDirection: "row",
     alignItems: "flex-start",
-    marginBottom: 20,
+    marginBottom: 16,
   },
   sheetWineName: {
     fontSize: 20,
@@ -1868,7 +1865,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    marginBottom: 24,
+    marginBottom: 16,
   },
   stockPill: {
     flexDirection: "row",
@@ -1883,6 +1880,31 @@ const styles = StyleSheet.create({
   },
   stockCount: { fontSize: 28, fontWeight: "900", color: theme.text },
   stockLabel: { fontSize: 12, color: theme.textSecondary, fontWeight: "600" },
+
+  // --- NEW SETTINGS CARD LIST STYLES ---
+  settingsCard: {
+    backgroundColor: theme.background,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: theme.border,
+    paddingHorizontal: 16,
+  },
+  settingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 16,
+    minHeight: 84, // Ensure comfortable tap height and space for text wrapping
+  },
+  settingTextContainer: {
+    flex: 1,
+    paddingRight: 16,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: theme.border,
+  },
+
   fieldLabel: {
     fontSize: 10,
     fontWeight: "900",
@@ -1895,20 +1917,40 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#94a3b8",
     fontWeight: "500",
-    marginBottom: 10,
-    lineHeight: 17,
+    lineHeight: 16,
   },
+
   input: {
     borderWidth: 1.5,
     borderColor: theme.border,
-    borderRadius: 14,
-    paddingHorizontal: 18,
-    height: 56,
-    fontSize: 18,
+    borderRadius: 12,
+    height: 48,
+    fontSize: 16,
     fontWeight: "800",
     color: theme.text,
-    backgroundColor: theme.background,
+    backgroundColor: theme.card, // Stand out from the background slightly
   },
+  inputSmall: {
+    width: 80,
+    textAlign: "center",
+    paddingHorizontal: 8,
+  },
+  priceInputContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    width: 160,
+  },
+  currencyPrefix: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: theme.textSecondary,
+    marginRight: 8,
+  },
+  inputPrice: {
+    flex: 1,
+    paddingHorizontal: 12,
+  },
+
   formulaBox: {
     backgroundColor: theme.primary + "08",
     borderRadius: 14,
@@ -1930,21 +1972,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     lineHeight: 20,
   },
-  switchSection: {
-    marginTop: 24,
-    paddingTop: 24,
-    borderTopWidth: 1,
-    borderTopColor: theme.border,
-  },
-  switchRow: { flexDirection: "row", alignItems: "center", marginBottom: 16 },
-  discontinuedRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 24,
-    paddingTop: 20,
-    borderTopWidth: 1,
-    borderTopColor: theme.border,
-  },
+
   saveBtn: {
     backgroundColor: theme.primary,
     height: 58,
@@ -1980,7 +2008,6 @@ const styles = StyleSheet.create({
   },
   btnDisabled: { opacity: 0.4 },
 
-  // Wine Search Modal Overlay Specific Styles
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.6)",
