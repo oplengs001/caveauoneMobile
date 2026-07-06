@@ -267,21 +267,37 @@ export default function TaggingScreen() {
 
   const {
     bottleId: initialBottleId,
+    bottleIds: bulkBottleIdsParam,
     mode,
     source,
     fromRequestId,
     fromOnboardingId,
+    wineName,
+    wineVintage,
+    wineProducer,
+    wineFormat,
   } = useLocalSearchParams<{
     bottleId?: string;
+    bottleIds?: string;
     mode?: "sell";
     source?: string;
     fromRequestId?: string;
     fromOnboardingId?: string;
+    wineName?: string;
+    wineVintage?: string;
+    wineProducer?: string;
+    wineFormat?: string;
   }>();
+
+  // Parse bulk bottle IDs if provided
+  const bulkBottleIds = bulkBottleIdsParam
+    ? bulkBottleIdsParam.split(",").filter(Boolean)
+    : null;
+  const isBulkMode = bulkBottleIds && bulkBottleIds.length > 1;
 
   const [permission, requestPermission] = useCameraPermissions();
   const [state, setState] = useState<TaggingState>(
-    initialBottleId ? "displaying" : "scanning",
+    isBulkMode || initialBottleId ? "displaying" : "scanning",
   );
   const [loading, setLoading] = useState(false);
   const [bottle, setBottle] = useState<InventoryBottle | null>(null);
@@ -394,7 +410,6 @@ export default function TaggingScreen() {
           setSalePrice("");
         }
       } catch (err) {
-        console.error("Error checking fast-moving setting:", err);
         setSalePrice("");
       }
     };
@@ -528,14 +543,28 @@ export default function TaggingScreen() {
       typeof overrideLocationId === "string"
         ? overrideLocationId
         : selectedLocationId;
-    if (!bottle || !locId) return;
+    if (!locId) return;
+    if (!isBulkMode && !bottle) return;
     setState("updating");
     try {
-      await updateDoc(doc(db, "inventory_bottles", bottle.id), {
-        locationRef: doc(db, "locations", locId),
-        status: "shelved",
-        updatedAt: new Date(),
-      });
+      if (isBulkMode && bulkBottleIds) {
+        // Bulk tag all bottles to the same location
+        await Promise.all(
+          bulkBottleIds.map((bid) =>
+            updateDoc(doc(db, "inventory_bottles", bid), {
+              locationRef: doc(db, "locations", locId),
+              status: "shelved",
+              updatedAt: new Date(),
+            }),
+          ),
+        );
+      } else {
+        await updateDoc(doc(db, "inventory_bottles", bottle!.id), {
+          locationRef: doc(db, "locations", locId),
+          status: "shelved",
+          updatedAt: new Date(),
+        });
+      }
       setSuccessAction("tagged");
       setState("success");
     } catch (error) {
@@ -781,14 +810,18 @@ export default function TaggingScreen() {
               ? "Bottle Sold!"
               : successAction === "received"
                 ? "Bottle Received!"
-                : "Location Tagged!"}
+                : isBulkMode
+                  ? `${bulkBottleIds!.length} Bottles Tagged!`
+                  : "Location Tagged!"}
           </Text>
           <Text style={styles.successDesc}>
             {successAction === "sold"
               ? "The bottle has been marked as sold and removed from active inventory."
               : successAction === "received"
                 ? "The bottle has been successfully added to your store's inventory."
-                : "The bottle has been assigned to its new storage location."}
+                : isBulkMode
+                  ? `All ${bulkBottleIds!.length} bottles have been assigned to the same storage location.`
+                  : "The bottle has been assigned to its new storage location."}
           </Text>
 
           <View
@@ -803,7 +836,7 @@ export default function TaggingScreen() {
                 { color: theme.text, textAlign: "center" },
               ]}
             >
-              {wine?.name}
+              {isBulkMode ? wineName : wine?.name}
             </Text>
             <Text
               style={[
@@ -815,7 +848,11 @@ export default function TaggingScreen() {
                 },
               ]}
             >
-              {wine?.vintage} • {wine?.producer} • {wine?.format}
+              {isBulkMode
+                ? [wineVintage, wineProducer, wineFormat]
+                    .filter(Boolean)
+                    .join(" • ")
+                : `${wine?.vintage} • ${wine?.producer} • ${wine?.format}`}
             </Text>
             {successAction === "sold" && numericBase > 0 && (
               <View
@@ -1059,7 +1096,9 @@ export default function TaggingScreen() {
             >
               <Box size={14} color={theme.secondary} />
               <Text style={[styles.skuLabel, { color: theme.textSecondary }]}>
-                BOTTLE ID: {bottle?.id.toUpperCase()}
+                {isBulkMode
+                  ? `BULK TAGGING (${bulkBottleIds?.length} BOTTLES)`
+                  : `BOTTLE ID: ${bottle?.id.toUpperCase()}`}
               </Text>
               {isFastMoving && mode === "sell" && (
                 <View
@@ -1079,7 +1118,7 @@ export default function TaggingScreen() {
                 { color: theme.text, paddingRight: mode === "sell" ? 80 : 0 },
               ]}
             >
-              {wine?.name || "Processing..."}
+              {isBulkMode ? wineName : wine?.name || "Processing..."}
             </Text>
             <View
               style={[
@@ -1090,7 +1129,7 @@ export default function TaggingScreen() {
               <Text
                 style={[styles.wineVintage, { color: theme.textSecondary }]}
               >
-                {wine?.vintage}
+                {isBulkMode ? wineVintage : wine?.vintage}
               </Text>
               <View
                 style={[styles.metaDot, { backgroundColor: theme.border }]}
@@ -1098,9 +1137,9 @@ export default function TaggingScreen() {
               <Text
                 style={[styles.wineProducer, { color: theme.textSecondary }]}
               >
-                {wine?.producer || "Independent Producer"}
+                {isBulkMode ? wineProducer : (wine?.producer || "Independent Producer")}
               </Text>
-              {wine?.format && (
+              {(isBulkMode ? wineFormat : wine?.format) && (
                 <>
                   <View
                     style={[styles.metaDot, { backgroundColor: theme.border }]}
@@ -1108,7 +1147,7 @@ export default function TaggingScreen() {
                   <Text
                     style={[styles.wineFormat, { color: theme.textSecondary }]}
                   >
-                    {wine.format}
+                    {isBulkMode ? wineFormat : wine?.format}
                   </Text>
                 </>
               )}

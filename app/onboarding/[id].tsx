@@ -200,7 +200,6 @@ function scoreMatch(
     breakdown.producer = Math.max(directMatch, nameOverlap * 0.6);
   }
 
-
   const weights = selectedFormat ? WEIGHTS_WITH_FORMAT : WEIGHTS;
   const score =
     breakdown.wineName * weights.wineName +
@@ -256,9 +255,11 @@ type Step =
   | "overview"
   | "scan_label"
   | "verify_qr"
+  | "confirm_qty"
+  | "bulk_verify"
   | "success"
   | "no_match"
-  | "manual_select" // ← add this
+  | "manual_select"
   | "select_item_for_report"
   | "select_bottle_for_report";
 
@@ -289,6 +290,17 @@ export default function OnboardingDetailScreen() {
   // Keep AI result for "no match" screen so user can see what was detected
   const [lastAiResult, setLastAiResult] = useState<AiLabelResult | null>(null);
   const [lastMatchScore, setLastMatchScore] = useState<number>(0);
+
+  // Batch onboarding state
+  const [batchQty, setBatchQty] = useState(1);
+  const [batchBottleIds, setBatchBottleIds] = useState<string[]>([]);
+  const [verifiedBottleIdsSet, setVerifiedBottleIdsSet] = useState<Set<string>>(
+    new Set(),
+  );
+  const [issuedBottleIdsSet, setIssuedBottleIdsSet] = useState<Set<string>>(
+    new Set(),
+  );
+  const lastBulkScanTime = useRef<number>(0);
 
   useEffect(() => {
     if (capturedImage) {
@@ -369,7 +381,8 @@ export default function OnboardingDetailScreen() {
       if (match) {
         setActiveItem(match);
         setSizeConfirmed(match.format === "75cl");
-        setCurrentStep("verify_qr");
+        setBatchQty(1);
+        setCurrentStep("confirm_qty");
         setCapturedImage(null);
       } else {
         // Show no-match screen with AI result so user can decide next step
@@ -433,6 +446,141 @@ export default function OnboardingDetailScreen() {
     } catch (err: any) {
       console.error(err);
       alert("Error updating bottle: " + err.message);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleConfirmBatchQty = () => {
+    if (!activeItem) return;
+    const start = activeItem.onboardedQty;
+    const ids = activeItem.bottleIds.slice(start, start + batchQty);
+    setBatchBottleIds(ids);
+    setVerifiedBottleIdsSet(new Set());
+    setIssuedBottleIdsSet(new Set());
+    setCurrentStep("bulk_verify");
+  };
+
+  const handleBulkQRScan = async ({ data }: { data: string }) => {
+    if (!activeItem || !task || !profile?.locationId) return;
+    // Debounce rapid re-fires
+    const now = Date.now();
+    if (now - lastBulkScanTime.current < 2000) return;
+    if (verifiedBottleIdsSet.has(data) || issuedBottleIdsSet.has(data)) return;
+    if (!batchBottleIds.includes(data)) {
+      lastBulkScanTime.current = now;
+      alert("This QR code is not in the current batch.");
+      return;
+    }
+    lastBulkScanTime.current = now;
+    setIsProcessing(true);
+    try {
+      await updateDoc(doc(db, "inventory_bottles", data), {
+        status: "received",
+        updatedAt: serverTimestamp(),
+        storeRef: doc(db, "stores", profile.locationId),
+      });
+
+      const nextVerified = new Set(verifiedBottleIdsSet).add(data);
+      setVerifiedBottleIdsSet(nextVerified);
+      setVerifiedBottleId(data); // keep single ref for legacy success screen
+
+      const totalDone = nextVerified.size + issuedBottleIdsSet.size;
+      if (totalDone === batchBottleIds.length) {
+        // Update task progress
+        const updatedItems = task.items.map((i) => {
+          if (i.id === activeItem.id) {
+            return {
+              ...i,
+              onboardedQty: i.onboardedQty + batchBottleIds.length,
+            };
+          }
+          return i;
+        });
+        const isFullyDone = updatedItems.every((i) => i.onboardedQty === i.qty);
+        await updateDoc(doc(db, "onboarding_tasks", task.id), {
+          items: updatedItems,
+          status: isFullyDone ? "completed" : "warehouse",
+          updatedAt: serverTimestamp(),
+        });
+        setCurrentStep("success");
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert("Error updating bottle: " + err.message);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleBulkIssue = async (bottleId: string) => {
+    if (!activeItem || !task || !profile) return;
+    Alert.alert(
+      "Report Issue",
+      `What's wrong with bottle ${bottleId.slice(-8)}?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "QR Label Missing",
+          onPress: () => _markBulkIssue(bottleId, "missing_qr_label"),
+        },
+        {
+          text: "Bottle Missing",
+          onPress: () => _markBulkIssue(bottleId, "missing_bottle"),
+        },
+      ],
+    );
+  };
+
+  const _markBulkIssue = async (
+    bottleId: string,
+    reason: "missing_bottle" | "missing_qr_label",
+  ) => {
+    if (!activeItem || !task || !profile) return;
+    setIsProcessing(true);
+    try {
+      const nextIssued = new Set(issuedBottleIdsSet).add(bottleId);
+      setIssuedBottleIdsSet(nextIssued);
+
+      const newReport = {
+        itemId: activeItem.id,
+        wineName: activeItem.wineName,
+        sku: activeItem.sku,
+        reportedBy: profile.email,
+        reportedAt: Timestamp.now(),
+        reason,
+        bottleId,
+      };
+
+      const totalDone = verifiedBottleIdsSet.size + nextIssued.size;
+      if (totalDone === batchBottleIds.length) {
+        const updatedItems = task.items.map((i) => {
+          if (i.id === activeItem.id) {
+            return {
+              ...i,
+              onboardedQty: i.onboardedQty + batchBottleIds.length,
+              issues: [...(i.issues || []), bottleId],
+            };
+          }
+          return i;
+        });
+        const isFullyDone = updatedItems.every((i) => i.onboardedQty === i.qty);
+        await updateDoc(doc(db, "onboarding_tasks", task.id), {
+          items: updatedItems,
+          reports: [...(task.reports || []), newReport],
+          status: isFullyDone ? "completed" : "warehouse",
+          updatedAt: serverTimestamp(),
+        });
+        setCurrentStep("success");
+      } else {
+        await updateDoc(doc(db, "onboarding_tasks", task.id), {
+          reports: [...(task.reports || []), newReport],
+          updatedAt: serverTimestamp(),
+        });
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert("Error reporting issue: " + err.message);
     } finally {
       setIsProcessing(false);
     }
@@ -568,10 +716,11 @@ export default function OnboardingDetailScreen() {
                 style={[
                   styles.progressBarFill,
                   {
-                    width: `${(task.items.reduce((s, i) => s + i.onboardedQty, 0) /
-                      task.items.reduce((s, i) => s + i.qty, 0)) *
+                    width: `${
+                      (task.items.reduce((s, i) => s + i.onboardedQty, 0) /
+                        task.items.reduce((s, i) => s + i.qty, 0)) *
                       100
-                      }%`,
+                    }%`,
                   },
                 ]}
               />
@@ -776,7 +925,7 @@ export default function OnboardingDetailScreen() {
                                   style={[
                                     styles.formatChip,
                                     selectedFormat === fmt &&
-                                    styles.formatChipSelected,
+                                      styles.formatChipSelected,
                                   ]}
                                   onPress={() => {
                                     setSelectedFormat(
@@ -789,7 +938,7 @@ export default function OnboardingDetailScreen() {
                                     style={[
                                       styles.formatChipText,
                                       selectedFormat === fmt &&
-                                      styles.formatChipTextSelected,
+                                        styles.formatChipTextSelected,
                                     ]}
                                   >
                                     {fmt}
@@ -817,6 +966,353 @@ export default function OnboardingDetailScreen() {
               )}
             </View>
           )}
+        </View>
+      )}
+
+      {/* CONFIRM QTY */}
+      {currentStep === "confirm_qty" && activeItem && (
+        <ScrollView
+          style={styles.content}
+          contentContainerStyle={{ paddingBottom: 60 }}
+        >
+          {/* Wine confirmation card */}
+          <View style={styles.matchCard}>
+            <Text style={styles.matchLabel}>Bottle Recognized</Text>
+            <Text style={styles.matchProducer}>{activeItem.producerName}</Text>
+            <Text style={styles.matchName}>{activeItem.wineName}</Text>
+            <View style={styles.matchMeta}>
+              <Text style={styles.matchMetaText}>{activeItem.vintage}</Text>
+              <View style={styles.metaDot} />
+              <Text style={styles.matchMetaText}>{activeItem.format}</Text>
+            </View>
+          </View>
+
+          {/* Non-75cl size confirmation (once for whole batch) */}
+          {!sizeConfirmed && activeItem.format !== "75cl" && (
+            <View style={styles.confirmFormatCard}>
+              <Text style={styles.confirmFormatTitle}>Confirm Bottle Size</Text>
+              <Text style={styles.confirmFormatDesc}>
+                This label matched a{" "}
+                <Text style={{ fontWeight: "900", color: "#f59e0b" }}>
+                  {activeItem.format}
+                </Text>{" "}
+                bottle. Physically verify the size before proceeding.
+              </Text>
+              <TouchableOpacity
+                style={styles.confirmFormatButton}
+                onPress={() => setSizeConfirmed(true)}
+              >
+                <Text style={styles.confirmFormatButtonText}>
+                  Confirm {activeItem.format} Size
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.cancelFormatButton}
+                onPress={() => setCurrentStep("scan_label")}
+              >
+                <Text style={styles.cancelFormatButtonText}>
+                  Cancel & Rescan
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {sizeConfirmed && (
+            <>
+              {/* Quantity selector */}
+              <Text style={[styles.sectionTitle, { marginTop: 24 }]}>
+                How many of this wine are you onboarding?
+              </Text>
+              <Text
+                style={{
+                  color: "#64748b",
+                  fontSize: 13,
+                  fontWeight: "600",
+                  marginBottom: 16,
+                }}
+              >
+                {activeItem.qty - activeItem.onboardedQty} bottle(s) remaining
+                in this task
+              </Text>
+
+              <View
+                style={{
+                  flexDirection: "row",
+                  flexWrap: "wrap",
+                  gap: 12,
+                  marginBottom: 32,
+                }}
+              >
+                {Array.from(
+                  {
+                    length: Math.min(
+                      activeItem.qty - activeItem.onboardedQty,
+                      8,
+                    ),
+                  },
+                  (_, i) => i + 1,
+                ).map((n) => (
+                  <TouchableOpacity
+                    key={n}
+                    onPress={() => setBatchQty(n)}
+                    style={{
+                      width: 60,
+                      height: 60,
+                      borderRadius: 16,
+                      borderWidth: 2,
+                      borderColor: batchQty === n ? "#4f46e5" : "#334155",
+                      backgroundColor: batchQty === n ? "#4f46e5" : "#1e293b",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: batchQty === n ? "#fff" : "#94a3b8",
+                        fontSize: 22,
+                        fontWeight: "900",
+                      }}
+                    >
+                      {n}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <TouchableOpacity
+                style={styles.mainButton}
+                onPress={handleConfirmBatchQty}
+              >
+                <QrCode size={24} color="#fff" />
+                <Text style={styles.mainButtonText}>
+                  Confirm & View {batchQty} Bottle{batchQty > 1 ? "s" : ""}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.secondaryButton}
+                onPress={() => setCurrentStep("scan_label")}
+              >
+                <Text style={styles.secondaryButtonText}>Cancel & Rescan</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </ScrollView>
+      )}
+
+      {/* BULK VERIFY */}
+      {currentStep === "bulk_verify" && activeItem && (
+        <View style={{ flex: 1 }}>
+          {/* Compact camera at top */}
+          <View
+            style={{
+              height: 220,
+              margin: 16,
+              borderRadius: 24,
+              overflow: "hidden",
+              backgroundColor: "#000",
+            }}
+          >
+            <CameraView
+              style={{ flex: 1 }}
+              onBarcodeScanned={handleBulkQRScan}
+            />
+            <View
+              style={{
+                ...StyleSheet.absoluteFillObject,
+                justifyContent: "center",
+                alignItems: "center",
+                backgroundColor: "rgba(0,0,0,0.35)",
+              }}
+            >
+              <View
+                style={{
+                  width: 140,
+                  height: 140,
+                  borderWidth: 2,
+                  borderColor: "#4f46e5",
+                  borderRadius: 12,
+                  backgroundColor: "transparent",
+                }}
+              />
+              <Text
+                style={{
+                  color: "#fff",
+                  fontSize: 13,
+                  fontWeight: "700",
+                  marginTop: 12,
+                }}
+              >
+                Scan each QR label
+              </Text>
+            </View>
+          </View>
+
+          {/* Progress */}
+          <View style={{ paddingHorizontal: 24, marginBottom: 12 }}>
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: 8,
+              }}
+            >
+              <Text style={{ color: "#fff", fontSize: 15, fontWeight: "900" }}>
+                {activeItem.wineName}
+              </Text>
+              <Text
+                style={{ color: "#4f46e5", fontSize: 14, fontWeight: "900" }}
+              >
+                {verifiedBottleIdsSet.size + issuedBottleIdsSet.size} /{" "}
+                {batchBottleIds.length}
+              </Text>
+            </View>
+            <View
+              style={{ height: 6, backgroundColor: "#1e293b", borderRadius: 3 }}
+            >
+              <View
+                style={{
+                  height: "100%",
+                  borderRadius: 3,
+                  backgroundColor: "#10b981",
+                  width: `${((verifiedBottleIdsSet.size + issuedBottleIdsSet.size) / batchBottleIds.length) * 100}%`,
+                }}
+              />
+            </View>
+          </View>
+
+          {/* Bottle list */}
+          <ScrollView
+            style={{ flex: 1, paddingHorizontal: 16 }}
+            showsVerticalScrollIndicator={false}
+          >
+            {batchBottleIds.map((bottleId, index) => {
+              const isVerified = verifiedBottleIdsSet.has(bottleId);
+              const isIssued = issuedBottleIdsSet.has(bottleId);
+              const isPending = !isVerified && !isIssued;
+              return (
+                <View
+                  key={bottleId}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    backgroundColor: isVerified
+                      ? "rgba(16,185,129,0.08)"
+                      : isIssued
+                        ? "rgba(239,68,68,0.08)"
+                        : "#1e293b",
+                    borderRadius: 16,
+                    padding: 16,
+                    marginBottom: 10,
+                    borderWidth: 1,
+                    borderColor: isVerified
+                      ? "rgba(16,185,129,0.3)"
+                      : isIssued
+                        ? "rgba(239,68,68,0.3)"
+                        : "#334155",
+                    gap: 14,
+                  }}
+                >
+                  <View
+                    style={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: 10,
+                      backgroundColor: isVerified
+                        ? "rgba(16,185,129,0.15)"
+                        : isIssued
+                          ? "rgba(239,68,68,0.15)"
+                          : "#0f172a",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    {isVerified ? (
+                      <CheckCircle2 size={18} color="#10b981" />
+                    ) : isIssued ? (
+                      <AlertCircle size={18} color="#ef4444" />
+                    ) : (
+                      <Text
+                        style={{
+                          color: "#64748b",
+                          fontSize: 13,
+                          fontWeight: "900",
+                        }}
+                      >
+                        {index + 1}
+                      </Text>
+                    )}
+                  </View>
+
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      style={{
+                        color: "#94a3b8",
+                        fontSize: 11,
+                        fontWeight: "800",
+                        textTransform: "uppercase",
+                        letterSpacing: 0.5,
+                      }}
+                    >
+                      Bottle {index + 1}
+                    </Text>
+                    <Text
+                      style={{
+                        color: isVerified
+                          ? "#10b981"
+                          : isIssued
+                            ? "#ef4444"
+                            : "#fff",
+                        fontSize: 13,
+                        fontWeight: "700",
+                        fontFamily: "monospace",
+                      }}
+                    >
+                      {bottleId.slice(-12)}
+                    </Text>
+                  </View>
+
+                  <View style={{ alignItems: "flex-end", gap: 4 }}>
+                    <Text
+                      style={{
+                        color: isVerified
+                          ? "#10b981"
+                          : isIssued
+                            ? "#ef4444"
+                            : "#64748b",
+                        fontSize: 11,
+                        fontWeight: "800",
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      {isVerified
+                        ? "✓ Verified"
+                        : isIssued
+                          ? "! Issue"
+                          : "Pending"}
+                    </Text>
+                    {isPending && (
+                      <TouchableOpacity
+                        onPress={() => handleBulkIssue(bottleId)}
+                      >
+                        <Text
+                          style={{
+                            color: "#ef4444",
+                            fontSize: 11,
+                            fontWeight: "700",
+                          }}
+                        >
+                          Report Issue
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
+              );
+            })}
+            <View style={{ height: 40 }} />
+          </ScrollView>
         </View>
       )}
 
@@ -979,7 +1475,8 @@ export default function OnboardingDetailScreen() {
                   onPress={() => {
                     setActiveItem(item);
                     setSizeConfirmed(item.format === "75cl");
-                    setCurrentStep("verify_qr");
+                    setBatchQty(1);
+                    setCurrentStep("confirm_qty");
                   }}
                 >
                   {/* Score badge */}
@@ -1051,12 +1548,18 @@ export default function OnboardingDetailScreen() {
             <CheckCircle2 size={80} color="#10b981" strokeWidth={3} />
           </View>
           <Text style={styles.successTitle}>
-            {isTaskComplete ? "Task Complete!" : "Bottle Verified!"}
+            {isTaskComplete
+              ? "Task Complete!"
+              : batchBottleIds.length > 1
+                ? `${verifiedBottleIdsSet.size} Bottles Verified!`
+                : "Bottle Verified!"}
           </Text>
           <Text style={styles.successDesc}>
             {isTaskComplete
               ? "All bottles for this task have been successfully verified."
-              : "The bottle has been matched and the QR code is verified."}
+              : batchBottleIds.length > 1
+                ? `${verifiedBottleIdsSet.size} of ${batchBottleIds.length} bottles have been matched and verified${issuedBottleIdsSet.size > 0 ? `, with ${issuedBottleIdsSet.size} issue(s) reported` : ""}.`
+                : "The bottle has been matched and the QR code is verified."}
           </Text>
 
           <TouchableOpacity
@@ -1064,20 +1567,38 @@ export default function OnboardingDetailScreen() {
               styles.mainButton,
               { backgroundColor: "#10b981", marginTop: 40 },
             ]}
-            onPress={() =>
-              router.push({
-                pathname: "/tagging",
-                params: {
-                  // Use the captured bottleId, not the live index which has already incremented
-                  bottleId: verifiedBottleId,
-                  source: "onboarding",
-                  fromOnboardingId: id,
-                },
-              })
-            }
+            onPress={() => {
+              if (batchBottleIds.length > 1) {
+                router.push({
+                  pathname: "/tagging",
+                  params: {
+                    bottleIds: [...verifiedBottleIdsSet].join(","),
+                    source: "onboarding",
+                    fromOnboardingId: id,
+                    wineName: activeItem.wineName,
+                    wineVintage: String(activeItem.vintage ?? ""),
+                    wineProducer: activeItem.producerName ?? "",
+                    wineFormat: activeItem.format ?? "",
+                  },
+                });
+              } else {
+                router.push({
+                  pathname: "/tagging",
+                  params: {
+                    bottleId: verifiedBottleId,
+                    source: "onboarding",
+                    fromOnboardingId: id,
+                  },
+                });
+              }
+            }}
           >
             <MapPin size={24} color="#fff" />
-            <Text style={styles.mainButtonText}>Add Location Tag Now</Text>
+            <Text style={styles.mainButtonText}>
+              {batchBottleIds.length > 1
+                ? `Tag Location for All ${verifiedBottleIdsSet.size} Bottles`
+                : "Add Location Tag Now"}
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
