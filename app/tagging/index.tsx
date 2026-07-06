@@ -27,6 +27,7 @@ import {
   RefreshCw,
   Save,
   ScanQrCode,
+  Search,
   Tag,
   User,
   Wine,
@@ -38,7 +39,6 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
-  FlatList,
   Modal,
   SafeAreaView,
   ScrollView,
@@ -309,6 +309,13 @@ export default function TaggingScreen() {
   // Sell Bottle state
   const [salePrice, setSalePrice] = useState("");
   const [buyerName, setBuyerName] = useState("");
+  const [priceError, setPriceError] = useState(false);
+
+  const [locationInputMode, setLocationInputMode] = useState<"browse" | "scan">(
+    "browse",
+  );
+
+  const isPrompting = useRef(false);
 
   // Snackbar State
   const [snackbarMessage, setSnackbarMessage] = useState<string | null>(null);
@@ -384,13 +391,10 @@ export default function TaggingScreen() {
           }
         } else {
           setIsFastMoving(false);
-          setStorePrice(null);
           setSalePrice("");
         }
       } catch (err) {
         console.error("Error checking fast-moving setting:", err);
-        setIsFastMoving(false);
-        setStorePrice(null);
         setSalePrice("");
       }
     };
@@ -482,7 +486,9 @@ export default function TaggingScreen() {
   const handleCreateLocation = async () => {
     if (!profile?.locationId || !newMajor) return;
     setSavingLocation(true);
-    const generatedCode = `${newCat.prefix}${newMajor.toUpperCase()}${newMinor}`;
+    const generatedCode = newMinor
+      ? `${newCat.prefix}${newMajor.toUpperCase()}-${newMinor}`
+      : `${newCat.prefix}${newMajor.toUpperCase()}`;
 
     try {
       const docRef = await addDoc(collection(db, "locations"), {
@@ -517,12 +523,16 @@ export default function TaggingScreen() {
     loadBottleData(data);
   };
 
-  const handleConfirmTagging = async () => {
-    if (!bottle || !selectedLocationId) return;
+  const handleConfirmTagging = async (overrideLocationId?: string | any) => {
+    const locId =
+      typeof overrideLocationId === "string"
+        ? overrideLocationId
+        : selectedLocationId;
+    if (!bottle || !locId) return;
     setState("updating");
     try {
       await updateDoc(doc(db, "inventory_bottles", bottle.id), {
-        locationRef: doc(db, "locations", selectedLocationId),
+        locationRef: doc(db, "locations", locId),
         status: "shelved",
         updatedAt: new Date(),
       });
@@ -556,7 +566,7 @@ export default function TaggingScreen() {
 
   const handleMarkAsSold = async () => {
     if (!bottle || !salePrice) {
-      Alert.alert("Missing Price", "Please provide a sale price to continue.");
+      setPriceError(true);
       return;
     }
 
@@ -568,9 +578,20 @@ export default function TaggingScreen() {
       return;
     }
 
+    const numericPrice = parseFloat(salePrice);
+    if (isNaN(numericPrice)) {
+      setPriceError(true);
+      return;
+    }
+
+    if (wine?.price !== undefined && numericPrice < wine.price) {
+      setPriceError(true);
+      return;
+    }
+
+    setPriceError(false);
     setState("updating");
     try {
-      const numericPrice = parseFloat(salePrice);
       const vatAmount = numericPrice * VAT_RATE;
       const totalAmount = numericPrice + vatAmount;
 
@@ -704,6 +725,7 @@ export default function TaggingScreen() {
     setSuccessAction(null);
     setSalePrice("");
     setBuyerName("");
+    setPriceError(false);
     setIsFastMoving(false);
   };
 
@@ -711,6 +733,17 @@ export default function TaggingScreen() {
   const numericBase = parseFloat(salePrice) || 0;
   const vatAmount = numericBase * VAT_RATE;
   const totalWithVat = numericBase + vatAmount;
+
+  // Group locations for Browse mode
+  const groupedLocations = locations.reduce(
+    (acc, loc) => {
+      if (!acc[loc.type]) acc[loc.type] = [];
+      acc[loc.type].push(loc);
+      return acc;
+    },
+    {} as Record<string, Location[]>,
+  );
+  const sortedLocationTypes = Object.keys(groupedLocations).sort();
 
   if (!permission) return <View style={styles.container} />;
 
@@ -850,6 +883,32 @@ export default function TaggingScreen() {
                 </View>
               </View>
             )}
+
+            {successAction === "tagged" && selectedLocationId && (
+              <View
+                style={[
+                  styles.saleSummaryRow,
+                  { borderTopColor: theme.border, marginTop: 16 },
+                ]}
+              >
+                <View style={styles.saleSummaryItem}>
+                  <Text
+                    style={[
+                      styles.saleSummaryLabel,
+                      { color: theme.textSecondary },
+                    ]}
+                  >
+                    STORAGE LOCATION
+                  </Text>
+                  <Text
+                    style={[styles.saleSummaryValue, { color: theme.primary }]}
+                  >
+                    {locations.find((l) => l.id === selectedLocationId)?.name ||
+                      selectedLocationId}
+                  </Text>
+                </View>
+              </View>
+            )}
           </View>
 
           <TouchableOpacity
@@ -879,7 +938,15 @@ export default function TaggingScreen() {
 
           <TouchableOpacity
             style={styles.secondaryButton}
-            onPress={() => router.back()}
+            onPress={() => {
+              if (source === "wine-request" && fromRequestId) {
+                router.replace(`/wine-requests/${fromRequestId}` as any);
+              } else if (source === "onboarding" && fromOnboardingId) {
+                router.replace(`/onboarding/${fromOnboardingId}` as any);
+              } else {
+                router.back();
+              }
+            }}
           >
             <Text style={styles.secondaryButtonText}>Finish & Return</Text>
           </TouchableOpacity>
@@ -1005,12 +1072,21 @@ export default function TaggingScreen() {
                   <Text style={styles.fastMovingChipText}>FAST MOVING</Text>
                 </View>
               )}
-
             </View>
-            <Text style={[styles.wineName, { color: theme.text, paddingRight: mode === "sell" ? 80 : 0 }]}>
+            <Text
+              style={[
+                styles.wineName,
+                { color: theme.text, paddingRight: mode === "sell" ? 80 : 0 },
+              ]}
+            >
               {wine?.name || "Processing..."}
             </Text>
-            <View style={[styles.wineMetaRow, { paddingRight: mode === "sell" ? 80 : 0 }]}>
+            <View
+              style={[
+                styles.wineMetaRow,
+                { paddingRight: mode === "sell" ? 80 : 0 },
+              ]}
+            >
               <Text
                 style={[styles.wineVintage, { color: theme.textSecondary }]}
               >
@@ -1039,7 +1115,8 @@ export default function TaggingScreen() {
             </View>
 
             {/* Positioned at the bottom right */}
-            {mode === "sell" && wine?.price ? (
+            {/* FEATURE TOGGLE: Hide unit cost for now */}
+            {false && mode === "sell" && wine?.price ? (
               <View
                 style={[
                   styles.refPriceChip,
@@ -1052,11 +1129,7 @@ export default function TaggingScreen() {
                     marginLeft: 0, // Reset from style definition
                   },
                 ]}
-              >
-                <Text style={[styles.refPriceChipText, { color: theme.primary }]}>
-                  UNIT COST: {formatCurrency(wine.price)}
-                </Text>
-              </View>
+              ></View>
             ) : null}
           </View>
 
@@ -1206,9 +1279,11 @@ export default function TaggingScreen() {
                       styles.priceInputWrapper,
                       {
                         backgroundColor: theme.card,
-                        borderColor: salePrice
-                          ? theme.primary + "60"
-                          : theme.border,
+                        borderColor: priceError
+                          ? "#ef4444"
+                          : salePrice
+                            ? theme.primary + "60"
+                            : theme.border,
                       },
                     ]}
                   >
@@ -1226,7 +1301,10 @@ export default function TaggingScreen() {
                       placeholderTextColor={theme.textSecondary}
                       keyboardType="decimal-pad"
                       value={salePrice}
-                      onChangeText={setSalePrice}
+                      onChangeText={(text) => {
+                        setSalePrice(text);
+                        if (priceError) setPriceError(false);
+                      }}
                     />
                   </View>
                   {!isFastMoving && (
@@ -1319,9 +1397,7 @@ export default function TaggingScreen() {
                   }}
                 >
                   <Map size={18} color="#64748b" />
-                  <Text style={styles.sectionTitle}>
-                    Select Storage Location
-                  </Text>
+                  <Text style={styles.sectionTitle}>Storage Location</Text>
                 </View>
                 <TouchableOpacity
                   onPress={() => setIsAddModalOpen(true)}
@@ -1339,90 +1415,227 @@ export default function TaggingScreen() {
                 </TouchableOpacity>
               </View>
 
-              <FlatList
-                data={locations}
-                keyExtractor={(item) => item.id}
-                numColumns={2}
-                columnWrapperStyle={styles.locationRow}
-                renderItem={({ item }) => (
-                  <TouchableOpacity
+              <View
+                style={[
+                  styles.locationToggleContainer,
+                  { backgroundColor: theme.card, borderColor: theme.border },
+                ]}
+              >
+                <TouchableOpacity
+                  style={[
+                    styles.locationToggleTab,
+                    locationInputMode === "browse" && {
+                      backgroundColor: theme.primary,
+                    },
+                  ]}
+                  onPress={() => setLocationInputMode("browse")}
+                >
+                  <Search
+                    size={14}
+                    color={
+                      locationInputMode === "browse"
+                        ? "#fff"
+                        : theme.textSecondary
+                    }
+                  />
+                  <Text
                     style={[
-                      styles.locationItem,
+                      styles.locationToggleText,
                       {
-                        backgroundColor: theme.card,
-                        borderColor: theme.border,
+                        color:
+                          locationInputMode === "browse"
+                            ? "#fff"
+                            : theme.textSecondary,
                       },
-                      selectedLocationId === item.id && [
-                        styles.locationItemSelected,
-                        {
-                          backgroundColor: theme.accent,
-                          borderColor: theme.accent,
-                        },
-                      ],
                     ]}
-                    onPress={() => setSelectedLocationId(item.id)}
                   >
-                    <View
-                      style={[
-                        styles.locationIconContainer,
-                        {
-                          backgroundColor:
-                            selectedLocationId === item.id
-                              ? "rgba(255,255,255,0.2)"
-                              : theme.background,
-                        },
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.locationPrefix,
+                    Browse
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.locationToggleTab,
+                    locationInputMode === "scan" && {
+                      backgroundColor: theme.primary,
+                    },
+                  ]}
+                  onPress={() => setLocationInputMode("scan")}
+                >
+                  <ScanQrCode
+                    size={14}
+                    color={
+                      locationInputMode === "scan"
+                        ? "#fff"
+                        : theme.textSecondary
+                    }
+                  />
+                  <Text
+                    style={[
+                      styles.locationToggleText,
+                      {
+                        color:
+                          locationInputMode === "scan"
+                            ? "#fff"
+                            : theme.textSecondary,
+                      },
+                    ]}
+                  >
+                    Scan QR
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {locationInputMode === "scan" ? (
+                <View style={styles.scanLocationContainer}>
+                  <CameraView
+                    style={styles.scanLocationCamera}
+                    facing="back"
+                    onBarcodeScanned={({ data }) => {
+                      if (isPrompting.current) return;
+                      const found = locations.find((l) => l.id === data);
+                      if (found) {
+                        if (selectedLocationId === data) return;
+                        isPrompting.current = true;
+                        Alert.alert(
+                          "Confirm Location",
+                          `Set location to ${found.name} (${found.type})?`,
+                          [
+                            {
+                              text: "Cancel",
+                              style: "cancel",
+                              onPress: () => {
+                                isPrompting.current = false;
+                              },
+                            },
+                            {
+                              text: "Confirm",
+                              onPress: () => {
+                                setSelectedLocationId(data);
+                                showSnackbar(`Location ${found.name} selected`);
+                                isPrompting.current = false;
+                                handleConfirmTagging(data);
+                              },
+                            },
+                          ],
                           {
-                            color:
-                              selectedLocationId === item.id
-                                ? "#fff"
-                                : theme.primary,
+                            onDismiss: () => {
+                              isPrompting.current = false;
+                            },
                           },
-                        ]}
-                      >
-                        {(item as any).prefix ||
-                          (item.type === "Locker" ? "L" : item.type.charAt(0))}
+                        );
+                      } else {
+                        isPrompting.current = true;
+                        showSnackbar("Location not found");
+                        setTimeout(() => {
+                          isPrompting.current = false;
+                        }, 2000);
+                      }
+                    }}
+                  />
+                  <Text
+                    style={[
+                      styles.scanLocationHint,
+                      { color: theme.textSecondary },
+                    ]}
+                  >
+                    Scan a unit's QR code to set location
+                  </Text>
+                </View>
+              ) : (
+                <ScrollView
+                  contentContainerStyle={styles.locationList}
+                  showsVerticalScrollIndicator={false}
+                >
+                  {locations.length === 0 ? (
+                    <View style={styles.emptyContainer}>
+                      <AlertTriangle size={48} color="#334155" />
+                      <Text style={styles.emptyText}>
+                        No storage locations configured.
                       </Text>
                     </View>
-                    <Text
-                      style={[
-                        styles.locationName,
-                        { color: theme.text },
-                        selectedLocationId === item.id &&
-                        styles.locationNameSelected,
-                      ]}
-                    >
-                      {item.name}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.locationType,
-                        {
-                          color:
-                            selectedLocationId === item.id
-                              ? "rgba(255,255,255,0.7)"
-                              : theme.textSecondary,
-                        },
-                      ]}
-                    >
-                      {item.type.toUpperCase()}
-                    </Text>
-                  </TouchableOpacity>
-                )}
-                ListEmptyComponent={
-                  <View style={styles.emptyContainer}>
-                    <AlertTriangle size={48} color="#334155" />
-                    <Text style={styles.emptyText}>
-                      No storage locations configured.
-                    </Text>
-                  </View>
-                }
-                contentContainerStyle={styles.locationList}
-              />
+                  ) : (
+                    sortedLocationTypes.map((type) => (
+                      <View key={type} style={styles.locationGroup}>
+                        <Text
+                          style={[
+                            styles.locationGroupTitle,
+                            { color: theme.text },
+                          ]}
+                        >
+                          {type}s{" "}
+                          <Text style={styles.locationGroupCount}>
+                            ({groupedLocations[type].length})
+                          </Text>
+                        </Text>
+                        <View style={styles.locationGroupGrid}>
+                          {groupedLocations[type].map((item) => (
+                            <TouchableOpacity
+                              key={item.id}
+                              style={[
+                                styles.locationItem,
+                                {
+                                  backgroundColor: theme.card,
+                                  borderColor: theme.border,
+                                  width: "48%",
+                                  flex: 0,
+                                  marginBottom: 0,
+                                },
+                                selectedLocationId === item.id && [
+                                  styles.locationItemSelected,
+                                  {
+                                    backgroundColor: theme.accent,
+                                    borderColor: theme.accent,
+                                  },
+                                ],
+                              ]}
+                              onPress={() => setSelectedLocationId(item.id)}
+                            >
+                              <View
+                                style={[
+                                  styles.locationIconContainer,
+                                  {
+                                    backgroundColor:
+                                      selectedLocationId === item.id
+                                        ? "rgba(255,255,255,0.2)"
+                                        : theme.background,
+                                  },
+                                ]}
+                              >
+                                <Text
+                                  style={[
+                                    styles.locationPrefix,
+                                    {
+                                      color:
+                                        selectedLocationId === item.id
+                                          ? "#fff"
+                                          : theme.primary,
+                                    },
+                                  ]}
+                                >
+                                  {(item as any).prefix ||
+                                    (item.type === "Locker"
+                                      ? "L"
+                                      : item.type.charAt(0))}
+                                </Text>
+                              </View>
+                              <Text
+                                style={[
+                                  styles.locationName,
+                                  { color: theme.text },
+                                  selectedLocationId === item.id &&
+                                  styles.locationNameSelected,
+                                ]}
+                              >
+                                {item.name}
+                              </Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      </View>
+                    ))
+                  )}
+                </ScrollView>
+              )}
             </>
           )}
 
@@ -1906,7 +2119,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "bold",
     letterSpacing: 0.5,
-
   },
 
   // Sell mode
@@ -2325,4 +2537,64 @@ const styles = StyleSheet.create({
     zIndex: 999,
   },
   snackbarText: { color: "#fff", fontSize: 14, fontWeight: "600", flex: 1 },
+
+  // Scan & Grouped locations
+  locationToggleContainer: {
+    flexDirection: "row",
+    padding: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 16,
+  },
+  locationToggleTab: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  locationToggleText: {
+    fontSize: 12,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  scanLocationContainer: {
+    alignItems: "center",
+    marginTop: 8,
+    paddingBottom: 160,
+  },
+  scanLocationCamera: {
+    width: "100%",
+    aspectRatio: 1,
+    borderRadius: 24,
+    overflow: "hidden",
+    marginBottom: 16,
+  },
+  scanLocationHint: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  locationGroup: {
+    marginBottom: 24,
+  },
+  locationGroupTitle: {
+    fontSize: 16,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginBottom: 12,
+  },
+  locationGroupCount: {
+    color: "#94a3b8",
+    fontSize: 14,
+  },
+  locationGroupGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    gap: 12,
+  },
 });
