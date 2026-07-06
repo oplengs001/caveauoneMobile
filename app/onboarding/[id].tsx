@@ -681,12 +681,12 @@ export default function OnboardingDetailScreen() {
                 if (i.id === itemId) {
                   // 1. Remove from issues
                   const newIssues = i.issues?.filter((id) => id !== bottleId) || [];
-                  
+
                   // 2. Move bottleId back to the 'pending' section by swapping it with the last 'processed' item
                   const newBottleIds = [...i.bottleIds];
                   const reportedIndex = newBottleIds.indexOf(bottleId);
                   const lastProcessedIndex = i.onboardedQty - 1;
-                  
+
                   if (reportedIndex !== -1 && reportedIndex < i.onboardedQty && lastProcessedIndex >= 0) {
                     const temp = newBottleIds[lastProcessedIndex];
                     newBottleIds[lastProcessedIndex] = newBottleIds[reportedIndex];
@@ -783,11 +783,10 @@ export default function OnboardingDetailScreen() {
                 style={[
                   styles.progressBarFill,
                   {
-                    width: `${
-                      (task.items.reduce((s, i) => s + i.onboardedQty, 0) /
-                        task.items.reduce((s, i) => s + i.qty, 0)) *
+                    width: `${(task.items.reduce((s, i) => s + i.onboardedQty, 0) /
+                      task.items.reduce((s, i) => s + i.qty, 0)) *
                       100
-                    }%`,
+                      }%`,
                   },
                 ]}
               />
@@ -1023,7 +1022,7 @@ export default function OnboardingDetailScreen() {
                                   style={[
                                     styles.formatChip,
                                     selectedFormat === fmt &&
-                                      styles.formatChipSelected,
+                                    styles.formatChipSelected,
                                   ]}
                                   onPress={() => {
                                     setSelectedFormat(
@@ -1036,7 +1035,7 @@ export default function OnboardingDetailScreen() {
                                     style={[
                                       styles.formatChipText,
                                       selectedFormat === fmt &&
-                                        styles.formatChipTextSelected,
+                                      styles.formatChipTextSelected,
                                     ]}
                                   >
                                     {fmt}
@@ -1204,7 +1203,7 @@ export default function OnboardingDetailScreen() {
           {/* Compact camera at top */}
           <View
             style={{
-              height: 220,
+              height: 400,
               margin: 16,
               borderRadius: 24,
               overflow: "hidden",

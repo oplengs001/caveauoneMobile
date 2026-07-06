@@ -850,8 +850,8 @@ export default function TaggingScreen() {
             >
               {isBulkMode
                 ? [wineVintage, wineProducer, wineFormat]
-                    .filter(Boolean)
-                    .join(" • ")
+                  .filter(Boolean)
+                  .join(" • ")
                 : `${wine?.vintage} • ${wine?.producer} • ${wine?.format}`}
             </Text>
             {successAction === "sold" && numericBase > 0 && (
@@ -1563,11 +1563,11 @@ export default function TaggingScreen() {
                           },
                         );
                       } else {
-                        isPrompting.current = true;
-                        showSnackbar("Location not found");
-                        setTimeout(() => {
-                          isPrompting.current = false;
-                        }, 2000);
+                        const now = Date.now();
+                        if (now - lastInvalidScanTime.current > 2000) {
+                          lastInvalidScanTime.current = now;
+                          showSnackbar("Location not found");
+                        }
                       }
                     }}
                   />
@@ -2607,7 +2607,7 @@ const styles = StyleSheet.create({
   },
   scanLocationCamera: {
     width: "100%",
-    aspectRatio: 1,
+    height: 450,
     borderRadius: 24,
     overflow: "hidden",
     marginBottom: 16,
