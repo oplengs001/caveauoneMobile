@@ -664,6 +664,73 @@ export default function OnboardingDetailScreen() {
     }
   };
 
+  const handleResolveIssue = async (itemId: string, bottleId: string) => {
+    if (!task) return;
+
+    Alert.alert(
+      "Reset Issue",
+      `Are you sure you want to reset the issue for bottle ${bottleId.slice(-8)}? This will allow it to be scanned again.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Reset",
+          onPress: async () => {
+            setIsProcessing(true);
+            try {
+              const updatedItems = task.items.map((i) => {
+                if (i.id === itemId) {
+                  // 1. Remove from issues
+                  const newIssues = i.issues?.filter((id) => id !== bottleId) || [];
+                  
+                  // 2. Move bottleId back to the 'pending' section by swapping it with the last 'processed' item
+                  const newBottleIds = [...i.bottleIds];
+                  const reportedIndex = newBottleIds.indexOf(bottleId);
+                  const lastProcessedIndex = i.onboardedQty - 1;
+                  
+                  if (reportedIndex !== -1 && reportedIndex < i.onboardedQty && lastProcessedIndex >= 0) {
+                    const temp = newBottleIds[lastProcessedIndex];
+                    newBottleIds[lastProcessedIndex] = newBottleIds[reportedIndex];
+                    newBottleIds[reportedIndex] = temp;
+                  }
+
+                  return {
+                    ...i,
+                    issues: newIssues,
+                    bottleIds: newBottleIds,
+                    // Decrement onboardedQty so it can be scanned again
+                    onboardedQty: Math.max(0, i.onboardedQty - 1),
+                  };
+                }
+                return i;
+              });
+
+              const updatedReports =
+                task.reports?.filter(
+                  (r) => !(r.itemId === itemId && r.bottleId === bottleId),
+                ) || [];
+
+              const isFullyDone = updatedItems.every(
+                (i) => i.onboardedQty === i.qty && (!i.issues || i.issues.length === 0),
+              );
+
+              await updateDoc(doc(db, "onboarding_tasks", task.id), {
+                items: updatedItems,
+                reports: updatedReports,
+                status: isFullyDone ? "completed" : "warehouse",
+                updatedAt: serverTimestamp(),
+              });
+            } catch (err: any) {
+              console.error(err);
+              alert("Error resetting issue: " + err.message);
+            } finally {
+              setIsProcessing(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
   if (loading) {
     return (
       <View style={styles.centerContainer}>
@@ -736,41 +803,72 @@ export default function OnboardingDetailScreen() {
             const successfullyOnboardedQty =
               item.onboardedQty - (item.issues?.length || 0);
             const hasIssues = (item.issues?.length || 0) > 0;
+            const itemReports = task.reports?.filter(r => r.itemId === item.id) || [];
             const isItemComplete = item.onboardedQty === item.qty;
             let iconColor = "#4f46e5";
             if (isItemComplete) iconColor = hasIssues ? "#ef4444" : "#10b981";
 
             return (
-              <View key={item.id} style={styles.itemCard}>
-                <View style={styles.itemIcon}>
-                  <Wine size={24} color={iconColor} />
-                </View>
-                <View style={styles.itemInfo}>
-                  <Text style={styles.producerText}>{item.producerName}</Text>
-                  <Text style={styles.wineNameText}>{item.wineName}</Text>
-                  <View style={styles.itemMeta}>
-                    <Text style={styles.metaBadge}>{item.vintage}</Text>
-                    <Text style={styles.metaBadge}>{item.format}</Text>
+              <View key={item.id} style={[styles.itemCard, { flexDirection: "column", padding: 0, overflow: "hidden" }]}>
+                {/* Main Item Row */}
+                <View style={{ flexDirection: "row", alignItems: "center", padding: 16, width: "100%" }}>
+                  <View style={styles.itemIcon}>
+                    <Wine size={24} color={iconColor} />
+                  </View>
+                  <View style={styles.itemInfo}>
+                    <Text style={styles.producerText}>{item.producerName}</Text>
+                    <Text style={styles.wineNameText}>{item.wineName}</Text>
+                    <View style={styles.itemMeta}>
+                      <Text style={styles.metaBadge}>{item.vintage}</Text>
+                      <Text style={styles.metaBadge}>{item.format}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.itemProgress}>
+                    <Text style={[styles.qtyText, { color: iconColor }]}>
+                      {successfullyOnboardedQty}/{item.qty}
+                    </Text>
+                    {isItemComplete ? (
+                      hasIssues ? (
+                        <AlertCircle size={16} color={iconColor} />
+                      ) : (
+                        <CheckCircle2 size={16} color={iconColor} />
+                      )
+                    ) : null}
+                    {hasIssues && !isItemComplete && (
+                      <Text style={styles.issuesText}>
+                        ({item.issues?.length} issue{item.issues!.length > 1 ? "s" : ""})
+                      </Text>
+                    )}
                   </View>
                 </View>
-                <View style={styles.itemProgress}>
-                  <Text style={[styles.qtyText, { color: iconColor }]}>
-                    {successfullyOnboardedQty}/{item.qty}
-                  </Text>
-                  {isItemComplete ? (
-                    hasIssues ? (
-                      <AlertCircle size={16} color={iconColor} />
-                    ) : (
-                      <CheckCircle2 size={16} color={iconColor} />
-                    )
-                  ) : null}
-                  {hasIssues && !isItemComplete && (
-                    <Text style={styles.issuesText}>
-                      ({item.issues?.length} issue
-                      {item.issues!.length > 1 ? "s" : ""})
+
+                {/* Detailed Issues List */}
+                {itemReports.length > 0 && (
+                  <View style={{ backgroundColor: "rgba(239,68,68,0.05)", padding: 12, paddingHorizontal: 16, width: "100%", borderTopWidth: 1, borderTopColor: "rgba(239,68,68,0.1)" }}>
+                    <Text style={{ color: "#ef4444", fontSize: 11, fontWeight: "800", marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                      Reported Issues
                     </Text>
-                  )}
-                </View>
+                    {itemReports.map((report, idx) => (
+                      <View key={idx} style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                        <AlertCircle size={14} color="#ef4444" />
+                        <Text style={{ color: "#f87171", fontSize: 13, fontFamily: "monospace", fontWeight: "700" }}>
+                          {report.bottleId.slice(-8)}
+                        </Text>
+                        <Text style={{ color: "#94a3b8", fontSize: 12, fontWeight: "500", flex: 1 }} numberOfLines={1}>
+                          — {report.reason === "missing_qr_label" ? "QR Label Missing" : "Physical Bottle Missing"}
+                        </Text>
+                        <TouchableOpacity
+                          style={{ backgroundColor: "rgba(16,185,129,0.15)", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 }}
+                          onPress={() => handleResolveIssue(item.id, report.bottleId)}
+                        >
+                          <Text style={{ color: "#10b981", fontSize: 11, fontWeight: "700", textTransform: "uppercase" }}>
+                            Reset
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
+                )}
               </View>
             );
           })}
@@ -1158,9 +1256,19 @@ export default function OnboardingDetailScreen() {
                 marginBottom: 8,
               }}
             >
-              <Text style={{ color: "#fff", fontSize: 15, fontWeight: "900" }}>
-                {activeItem.wineName}
-              </Text>
+              <View style={{ flex: 1, paddingRight: 16 }}>
+                {activeItem.producerName && (
+                  <Text style={{ color: "#94a3b8", fontSize: 12, fontWeight: "700", marginBottom: 2 }}>
+                    {activeItem.producerName}
+                  </Text>
+                )}
+                <Text style={{ color: "#fff", fontSize: 15, fontWeight: "900", marginBottom: 4 }}>
+                  {activeItem.wineName}
+                </Text>
+                <Text style={{ color: "#64748b", fontSize: 12, fontWeight: "600" }}>
+                  {[activeItem.vintage, activeItem.format].filter(Boolean).join(" • ")}
+                </Text>
+              </View>
               <Text
                 style={{ color: "#4f46e5", fontSize: 14, fontWeight: "900" }}
               >
