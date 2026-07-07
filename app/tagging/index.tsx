@@ -1,6 +1,7 @@
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { db } from "@/lib/firebase";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import {
@@ -10,12 +11,12 @@ import {
   getCountFromServer,
   getDoc,
   getDocs,
+  increment,
   orderBy,
   query,
   serverTimestamp,
   updateDoc,
   where,
-  increment,
 } from "firebase/firestore";
 import {
   AlertTriangle,
@@ -35,7 +36,6 @@ import {
   X,
   Zap,
 } from "lucide-react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -50,8 +50,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { InventoryBottle, Location, MasterWine, Customer } from "../../types";
 import CustomerPickerModal from "../../components/CustomerPickerModal";
+import { Customer, InventoryBottle, Location, MasterWine } from "../../types";
 
 type TaggingState = "scanning" | "displaying" | "updating" | "success";
 
@@ -436,11 +436,10 @@ export default function TaggingScreen() {
           const fastMoving = setting.isFastMoving === true;
           setIsFastMoving(fastMoving);
 
-          // Only auto-fill price for fast-moving wines
-          if (fastMoving && setting.sellingPrice) {
+          if (setting.sellingPrice) {
             setSalePrice(String(setting.sellingPrice));
           } else {
-            setSalePrice(""); // Leave blank — let staff decide
+            setSalePrice(""); // Leave blank if not set
           }
         } else {
           setIsFastMoving(false);
@@ -1364,12 +1363,48 @@ export default function TaggingScreen() {
                     >
                       Sale Price
                     </Text>
-                    {isFastMoving && (
+                    <View style={{ flex: 1 }} />
+                    {isFastMoving ? (
                       <Text
                         style={[styles.autoFilledHint, { color: "#f59e0b" }]}
                       >
                         ✦ Auto-filled
                       </Text>
+                    ) : (
+                      <View style={{ flexDirection: "row", backgroundColor: theme.primary + "1A", borderRadius: 8, padding: 2 }}>
+                        <TouchableOpacity
+                          onPress={() => setStoreVatMode("excluded")}
+                          style={{
+                            paddingHorizontal: 10,
+                            paddingVertical: 4,
+                            borderRadius: 6,
+                            backgroundColor: storeVatMode === "excluded" ? theme.card : "transparent",
+                            shadowColor: storeVatMode === "excluded" ? "#000" : "transparent",
+                            shadowOffset: { width: 0, height: 1 },
+                            shadowOpacity: 0.1,
+                            shadowRadius: 1,
+                            elevation: storeVatMode === "excluded" ? 1 : 0,
+                          }}
+                        >
+                          <Text style={{ fontSize: 10, fontWeight: "800", color: storeVatMode === "excluded" ? theme.primary : theme.primary + "80" }}>EX VAT</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() => setStoreVatMode("included")}
+                          style={{
+                            paddingHorizontal: 10,
+                            paddingVertical: 4,
+                            borderRadius: 6,
+                            backgroundColor: storeVatMode === "included" ? theme.card : "transparent",
+                            shadowColor: storeVatMode === "included" ? "#000" : "transparent",
+                            shadowOffset: { width: 0, height: 1 },
+                            shadowOpacity: 0.1,
+                            shadowRadius: 1,
+                            elevation: storeVatMode === "included" ? 1 : 0,
+                          }}
+                        >
+                          <Text style={{ fontSize: 10, fontWeight: "800", color: storeVatMode === "included" ? theme.primary : theme.primary + "80" }}>INC VAT</Text>
+                        </TouchableOpacity>
+                      </View>
                     )}
                   </View>
                   <View
@@ -1445,7 +1480,7 @@ export default function TaggingScreen() {
                       </Text>
                     </Text>
                   </View>
-                  
+
                   {selectedCustomer ? (
                     <View
                       style={[
