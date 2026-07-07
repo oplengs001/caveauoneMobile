@@ -15,6 +15,7 @@ import {
   serverTimestamp,
   updateDoc,
   where,
+  increment,
 } from "firebase/firestore";
 import {
   AlertTriangle,
@@ -48,7 +49,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { InventoryBottle, Location, MasterWine } from "../../types";
+import { InventoryBottle, Location, MasterWine, Customer } from "../../types";
+import CustomerPickerModal from "../../components/CustomerPickerModal";
 
 type TaggingState = "scanning" | "displaying" | "updating" | "success";
 
@@ -77,15 +79,27 @@ function VatBreakdownCard({
   basePrice,
   theme,
   isFastMoving,
+  vatMode,
 }: {
   basePrice: string;
   theme: any;
   isFastMoving: boolean;
+  vatMode?: "excluded" | "included";
 }) {
-  const numericBase = parseFloat(basePrice) || 0;
-  const vatAmount = numericBase * VAT_RATE;
-  const total = numericBase + vatAmount;
-  const hasValue = numericBase > 0;
+  const numericPrice = parseFloat(basePrice) || 0;
+  const isIncluded = vatMode === "included";
+
+  let netPrice = numericPrice;
+  let vatAmount = numericPrice * VAT_RATE;
+  let total = numericPrice + vatAmount;
+
+  if (isIncluded) {
+    netPrice = numericPrice / (1 + VAT_RATE);
+    vatAmount = numericPrice - netPrice;
+    total = numericPrice;
+  }
+
+  const hasValue = numericPrice > 0;
 
   return (
     <View
@@ -122,7 +136,7 @@ function VatBreakdownCard({
           Selling Price
         </Text>
         <Text style={[vatStyles.rowValue, { color: theme.text }]}>
-          {hasValue ? formatCurrency(numericBase) : "—"}
+          {hasValue ? formatCurrency(netPrice) : "—"}
         </Text>
       </View>
 
@@ -156,7 +170,7 @@ function VatBreakdownCard({
         style={[vatStyles.totalRow, { backgroundColor: theme.primary + "0C" }]}
       >
         <Text style={[vatStyles.totalLabel, { color: theme.text }]}>
-          TOTAL (VAT-INC)
+          {isIncluded ? "TOTAL (ENTERED)" : "TOTAL (VAT-INC)"}
         </Text>
         <Text
           style={[
@@ -313,6 +327,7 @@ export default function TaggingScreen() {
 
   // Fast-moving flag — drives whether we pre-populate the price
   const [isFastMoving, setIsFastMoving] = useState(false);
+  const [storeVatMode, setStoreVatMode] = useState<"excluded" | "included">("excluded");
 
   // Add Location Modal State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -324,7 +339,8 @@ export default function TaggingScreen() {
 
   // Sell Bottle state
   const [salePrice, setSalePrice] = useState("");
-  const [buyerName, setBuyerName] = useState("");
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
   const [priceError, setPriceError] = useState(false);
 
   const [locationInputMode, setLocationInputMode] = useState<"browse" | "scan">(
@@ -332,6 +348,7 @@ export default function TaggingScreen() {
   );
 
   const isPrompting = useRef(false);
+  const lastInvalidScanTime = useRef<number>(0);
 
   // Snackbar State
   const [snackbarMessage, setSnackbarMessage] = useState<string | null>(null);
@@ -374,10 +391,29 @@ export default function TaggingScreen() {
 
   useEffect(() => {
     fetchLocations();
+    fetchStoreVatMode();
     if (initialBottleId && mode !== "sell") {
       loadBottleData(initialBottleId as string);
     }
   }, [initialBottleId, profile?.locationId]);
+
+  const fetchStoreVatMode = async () => {
+    if (!profile?.locationId) return;
+    try {
+      const storeRef = doc(db, "stores", profile.locationId);
+      const storeSnap = await getDoc(storeRef);
+      if (storeSnap.exists()) {
+        const data = storeSnap.data();
+        if (data.vatMode === "included") {
+          setStoreVatMode("included");
+        } else {
+          setStoreVatMode("excluded");
+        }
+      }
+    } catch (e) {
+      console.error("Error fetching vatMode:", e);
+    }
+  };
 
   // ── Fetch store_wine_settings when wine is loaded in sell mode ─────────────
   // Only pre-populate price if the wine is marked as fast-moving.
@@ -621,8 +657,15 @@ export default function TaggingScreen() {
     setPriceError(false);
     setState("updating");
     try {
-      const vatAmount = numericPrice * VAT_RATE;
-      const totalAmount = numericPrice + vatAmount;
+      let netPrice = numericPrice;
+      let vatAmount = numericPrice * VAT_RATE;
+      let totalAmount = numericPrice + vatAmount;
+
+      if (storeVatMode === "included") {
+        netPrice = numericPrice / (1 + VAT_RATE);
+        vatAmount = numericPrice - netPrice;
+        totalAmount = numericPrice;
+      }
 
       await addDoc(collection(db, "sales"), {
         bottleId: bottle.id,
@@ -635,13 +678,23 @@ export default function TaggingScreen() {
         soldById: profile?.id,
         soldByEmail: profile?.email,
         soldAt: serverTimestamp(),
-        price: numericPrice,
+        price: netPrice,
         vatAmount,
         totalAmount,
-        buyerName: buyerName || null,
+        vatMode: storeVatMode,
+        customerId: selectedCustomer?.id || null,
+        customerName: selectedCustomer?.name || null,
         isFastMoving,
         masterWinePrice: bottle.masterWineRef ? wine?.price || null : null,
       });
+
+      if (selectedCustomer?.id) {
+        await updateDoc(doc(db, "customers", selectedCustomer.id), {
+          totalSpend: increment(totalAmount),
+          totalOrders: increment(1),
+          updatedAt: serverTimestamp(),
+        });
+      }
 
       await updateDoc(doc(db, "inventory_bottles", bottle.id), {
         status: "consumed",
@@ -753,15 +806,17 @@ export default function TaggingScreen() {
     setIsIncoming(false);
     setSuccessAction(null);
     setSalePrice("");
-    setBuyerName("");
+    setSelectedCustomer(null);
+    setIsCustomerModalOpen(false);
     setPriceError(false);
     setIsFastMoving(false);
   };
 
   // ── Derived VAT values ─────────────────────────────────────────────────────
   const numericBase = parseFloat(salePrice) || 0;
-  const vatAmount = numericBase * VAT_RATE;
-  const totalWithVat = numericBase + vatAmount;
+  const isIncluded = storeVatMode === "included";
+  const vatAmount = isIncluded ? numericBase - (numericBase / (1 + VAT_RATE)) : numericBase * VAT_RATE;
+  const totalWithVat = isIncluded ? numericBase : numericBase + vatAmount;
 
   // Group locations for Browse mode
   const groupedLocations = locations.reduce(
@@ -1350,7 +1405,7 @@ export default function TaggingScreen() {
                     <Text
                       style={[styles.priceHint, { color: theme.textSecondary }]}
                     >
-                      Enter the agreed sale price for this bottle.
+                      {storeVatMode === "included" ? "Enter the gross price. VAT will be extracted automatically." : "Enter the agreed sale price for this bottle."}
                     </Text>
                   )}
                 </View>
@@ -1360,16 +1415,17 @@ export default function TaggingScreen() {
                   basePrice={salePrice}
                   theme={theme}
                   isFastMoving={isFastMoving}
+                  vatMode={storeVatMode}
                 />
 
-                {/* Buyer name */}
+                {/* Customer */}
                 <View style={styles.sellSection}>
                   <View style={styles.sellSectionHeader}>
                     <User size={15} color={theme.textSecondary} />
                     <Text
                       style={[styles.sellSectionTitle, { color: theme.text }]}
                     >
-                      Buyer Name
+                      Customer
                       <Text
                         style={[
                           styles.optionalLabel,
@@ -1381,21 +1437,50 @@ export default function TaggingScreen() {
                       </Text>
                     </Text>
                   </View>
-                  <TextInput
-                    style={[
-                      styles.buyerInput,
-                      {
-                        color: theme.text,
-                        backgroundColor: theme.card,
-                        borderColor: theme.border,
-                      },
-                    ]}
-                    placeholder="e.g. Juan dela Cruz"
-                    placeholderTextColor={theme.textSecondary}
-                    value={buyerName}
-                    onChangeText={setBuyerName}
-                    autoCapitalize="words"
-                  />
+                  
+                  {selectedCustomer ? (
+                    <View
+                      style={[
+                        styles.buyerInput,
+                        {
+                          flexDirection: "row",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          backgroundColor: theme.primary + "1A",
+                          borderColor: theme.primary + "40",
+                        },
+                      ]}
+                    >
+                      <View style={{ flexDirection: "row", alignItems: "center", flex: 1, gap: 10 }}>
+                        <User size={16} color={theme.primary} />
+                        <Text style={{ fontSize: 16, fontWeight: "700", color: theme.primary }} numberOfLines={1}>
+                          {selectedCustomer.name}
+                        </Text>
+                      </View>
+                      <TouchableOpacity onPress={() => setSelectedCustomer(null)} style={{ padding: 4 }}>
+                        <X size={20} color={theme.primary} />
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      onPress={() => setIsCustomerModalOpen(true)}
+                      style={[
+                        styles.buyerInput,
+                        {
+                          flexDirection: "row",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          backgroundColor: theme.card,
+                          borderColor: theme.border,
+                        },
+                      ]}
+                    >
+                      <Text style={{ fontSize: 15, color: theme.textSecondary, fontWeight: "600" }}>
+                        Select or add customer...
+                      </Text>
+                      <Plus size={20} color={theme.textSecondary} />
+                    </TouchableOpacity>
+                  )}
                 </View>
               </View>
             </ScrollView>
@@ -1952,6 +2037,17 @@ export default function TaggingScreen() {
           <AlertTriangle size={20} color="#fff" style={{ marginRight: 8 }} />
           <Text style={styles.snackbarText}>{snackbarMessage}</Text>
         </Animated.View>
+      )}
+
+      {profile?.locationId && (
+        <CustomerPickerModal
+          isOpen={isCustomerModalOpen}
+          onClose={() => setIsCustomerModalOpen(false)}
+          storeId={profile.locationId}
+          theme={theme}
+          onSelectCustomer={setSelectedCustomer}
+          selectedCustomerId={selectedCustomer?.id}
+        />
       )}
     </SafeAreaView>
   );

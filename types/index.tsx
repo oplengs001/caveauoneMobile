@@ -232,3 +232,15 @@ export interface ActivityLog {
   source: "admin" | "warehouse";
   timestamp: any;           // Firestore Timestamp
 }
+
+export interface Customer {
+  id: string;
+  name: string;
+  email?: string;
+  contactNo?: string;
+  storeId: string;
+  createdAt: any;
+  updatedAt: any;
+  totalSpend: number;
+  totalOrders: number;
+}
