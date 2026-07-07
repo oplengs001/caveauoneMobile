@@ -171,6 +171,7 @@ export default function StoreMasterListScreen() {
   const [sheetDiscontinued, setSheetDiscontinued] = useState(false);
   const [sheetIsFastMoving, setSheetIsFastMoving] = useState(false);
   const [sheetIsReserve, setSheetIsReserve] = useState(false);
+  const [sheetVatMode, setSheetVatMode] = useState<"included" | "excluded">("excluded");
   const [saving, setSaving] = useState(false);
   const [requesting, setRequesting] = useState(false);
   const [isBatchConfirmVisible, setIsBatchConfirmVisible] = useState(false);
@@ -355,6 +356,7 @@ export default function StoreMasterListScreen() {
     setSheetDiscontinued(entry.setting?.discontinued ?? false);
     setSheetIsFastMoving(entry.setting?.isFastMoving ?? false);
     setSheetIsReserve(entry.setting?.isReserve ?? false);
+    setSheetVatMode(entry.setting?.vatMode ?? "excluded");
   };
 
   const closeSheet = () => setSelected(null);
@@ -373,18 +375,20 @@ export default function StoreMasterListScreen() {
     setSaving(true);
     try {
       const docId = `${storeId}_${selected.masterWine.id}`;
-      await setDoc(doc(db, "store_wine_settings", docId), {
+      const updateData = {
         storeId,
         masterWineId: selected.masterWine.id,
         parLevel: par,
         safetyStock: safety,
+        sellingPrice: sheetSellingPrice ? parseFloat(sheetSellingPrice) : null,
         discontinued: sheetDiscontinued,
         isFastMoving: sheetIsFastMoving,
         isReserve: sheetIsReserve,
-        sellingPrice: sheetSellingPrice ? parseFloat(sheetSellingPrice) : null,
+        vatMode: sheetVatMode,
         updatedAt: serverTimestamp(),
         createdAt: selected.setting?.createdAt ?? serverTimestamp(),
-      });
+      };
+      await setDoc(doc(db, "store_wine_settings", docId), updateData);
       closeSheet();
       fetchData();
     } catch (err) {
@@ -1127,16 +1131,52 @@ export default function StoreMasterListScreen() {
                       The retail price of this wine at this store.
                     </Text>
                   </View>
-                  <View style={styles.priceInputContainer}>
-                    <Text style={styles.currencyPrefix}>₱</Text>
-                    <TextInput
-                      style={[styles.input, styles.inputPrice]}
-                      value={sheetSellingPrice}
-                      onChangeText={setSheetSellingPrice}
-                      keyboardType="decimal-pad"
-                      placeholder="0.00"
-                      placeholderTextColor="#94a3b8"
-                    />
+                  <View style={{ alignItems: "flex-end", gap: 8 }}>
+                    <View style={styles.priceInputContainer}>
+                      <Text style={styles.currencyPrefix}>₱</Text>
+                      <TextInput
+                        style={[styles.input, styles.inputPrice]}
+                        value={sheetSellingPrice}
+                        onChangeText={setSheetSellingPrice}
+                        keyboardType="decimal-pad"
+                        placeholder="0.00"
+                        placeholderTextColor="#94a3b8"
+                      />
+                    </View>
+                    <View style={{ flexDirection: "row", backgroundColor: Colors.store.primary + "1A", borderRadius: 8, padding: 2 }}>
+                      <TouchableOpacity
+                        onPress={() => setSheetVatMode("excluded")}
+                        style={{
+                          paddingHorizontal: 10,
+                          paddingVertical: 4,
+                          borderRadius: 6,
+                          backgroundColor: sheetVatMode === "excluded" ? Colors.store.card : "transparent",
+                          shadowColor: sheetVatMode === "excluded" ? "#000" : "transparent",
+                          shadowOffset: { width: 0, height: 1 },
+                          shadowOpacity: 0.1,
+                          shadowRadius: 1,
+                          elevation: sheetVatMode === "excluded" ? 1 : 0,
+                        }}
+                      >
+                        <Text style={{ fontSize: 10, fontWeight: "800", color: sheetVatMode === "excluded" ? Colors.store.primary : Colors.store.primary + "80" }}>EX VAT</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => setSheetVatMode("included")}
+                        style={{
+                          paddingHorizontal: 10,
+                          paddingVertical: 4,
+                          borderRadius: 6,
+                          backgroundColor: sheetVatMode === "included" ? Colors.store.card : "transparent",
+                          shadowColor: sheetVatMode === "included" ? "#000" : "transparent",
+                          shadowOffset: { width: 0, height: 1 },
+                          shadowOpacity: 0.1,
+                          shadowRadius: 1,
+                          elevation: sheetVatMode === "included" ? 1 : 0,
+                        }}
+                      >
+                        <Text style={{ fontSize: 10, fontWeight: "800", color: sheetVatMode === "included" ? Colors.store.primary : Colors.store.primary + "80" }}>INC VAT</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 </View>
               </View>

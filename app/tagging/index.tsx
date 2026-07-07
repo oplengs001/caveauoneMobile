@@ -439,7 +439,11 @@ export default function TaggingScreen() {
           if (setting.sellingPrice) {
             setSalePrice(String(setting.sellingPrice));
           } else {
-            setSalePrice(""); // Leave blank if not set
+            setSalePrice("");
+          }
+
+          if (setting.vatMode) {
+            setStoreVatMode(setting.vatMode);
           }
         } else {
           setIsFastMoving(false);
