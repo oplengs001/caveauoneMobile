@@ -238,6 +238,7 @@ export interface Customer {
   name: string;
   email?: string;
   contactNo?: string;
+  notes?: string;
   storeId: string;
   createdAt: any;
   updatedAt: any;

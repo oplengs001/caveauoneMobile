@@ -42,6 +42,7 @@ export default function CustomerPickerModal({
   const [newName, setNewName] = useState("");
   const [newEmail, setNewEmail] = useState("");
   const [newContact, setNewContact] = useState("");
+  const [newNotes, setNewNotes] = useState("");
   const [savingNew, setSavingNew] = useState(false);
 
   useEffect(() => {
@@ -51,6 +52,7 @@ export default function CustomerPickerModal({
       setNewName("");
       setNewEmail("");
       setNewContact("");
+      setNewNotes("");
       setSearchQuery("");
     }
   }, [isOpen, storeId]);
@@ -80,7 +82,8 @@ export default function CustomerPickerModal({
       (c) =>
         c.name.toLowerCase().includes(lowerQ) ||
         (c.email && c.email.toLowerCase().includes(lowerQ)) ||
-        (c.contactNo && c.contactNo.toLowerCase().includes(lowerQ))
+        (c.contactNo && c.contactNo.toLowerCase().includes(lowerQ)) ||
+        (c.notes && c.notes.toLowerCase().includes(lowerQ))
     );
   }, [customers, searchQuery]);
 
@@ -115,6 +118,7 @@ export default function CustomerPickerModal({
         name: newName.trim(),
         email: newEmail.trim() || null,
         contactNo: newContact.trim() || null,
+        notes: newNotes.trim() || null,
         storeId,
         totalSpend: 0,
         totalOrders: 0,
@@ -127,6 +131,7 @@ export default function CustomerPickerModal({
         name: newName.trim(),
         email: newEmail.trim() || undefined,
         contactNo: newContact.trim() || undefined,
+        notes: newNotes.trim() || undefined,
         storeId,
         totalSpend: 0,
         totalOrders: 0,
@@ -216,6 +221,19 @@ export default function CustomerPickerModal({
                 value={newContact}
                 onChangeText={setNewContact}
                 keyboardType="phone-pad"
+              />
+
+              <Text style={[styles.formLabel, { color: theme.textSecondary }]}>Notes (Optional)</Text>
+              <TextInput
+                style={[
+                  styles.formInput,
+                  { backgroundColor: theme.card, color: theme.text, borderColor: theme.border, height: 80, paddingTop: 12, textAlignVertical: "top" }
+                ]}
+                placeholder="Any special requests or details..."
+                placeholderTextColor={theme.textSecondary}
+                value={newNotes}
+                onChangeText={setNewNotes}
+                multiline
               />
 
               <View style={styles.formActions}>

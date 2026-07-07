@@ -35,6 +35,7 @@ import {
   X,
   Zap,
 } from "lucide-react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -341,7 +342,7 @@ export default function TaggingScreen() {
   const [salePrice, setSalePrice] = useState("");
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
-  const [priceError, setPriceError] = useState(false);
+  const [priceError, setPriceError] = useState<string | null>(null);
 
   const [locationInputMode, setLocationInputMode] = useState<"browse" | "scan">(
     "browse",
@@ -601,6 +602,7 @@ export default function TaggingScreen() {
           updatedAt: new Date(),
         });
       }
+      await AsyncStorage.setItem("forceDashboardRefresh", "true");
       setSuccessAction("tagged");
       setState("success");
     } catch (error) {
@@ -620,6 +622,7 @@ export default function TaggingScreen() {
         status: "shelved",
         updatedAt: new Date(),
       });
+      await AsyncStorage.setItem("forceDashboardRefresh", "true");
       setSuccessAction("received");
       setState("success");
     } catch (error) {
@@ -631,7 +634,7 @@ export default function TaggingScreen() {
 
   const handleMarkAsSold = async () => {
     if (!bottle || !salePrice) {
-      setPriceError(true);
+      setPriceError("Please enter a sale price.");
       return;
     }
 
@@ -645,16 +648,16 @@ export default function TaggingScreen() {
 
     const numericPrice = parseFloat(salePrice);
     if (isNaN(numericPrice)) {
-      setPriceError(true);
+      setPriceError("Invalid price format.");
       return;
     }
 
     if (wine?.price !== undefined && numericPrice < wine.price) {
-      setPriceError(true);
+      setPriceError("Sale price cannot be lower than the unit cost.");
       return;
     }
 
-    setPriceError(false);
+    setPriceError(null);
     setState("updating");
     try {
       let netPrice = numericPrice;
@@ -788,6 +791,7 @@ export default function TaggingScreen() {
         }
       }
 
+      await AsyncStorage.setItem("forceDashboardRefresh", "true");
       setSuccessAction("sold");
       setState("success");
     } catch (error) {
@@ -808,7 +812,7 @@ export default function TaggingScreen() {
     setSalePrice("");
     setSelectedCustomer(null);
     setIsCustomerModalOpen(false);
-    setPriceError(false);
+    setPriceError(null);
     setIsFastMoving(false);
   };
 
@@ -1397,17 +1401,21 @@ export default function TaggingScreen() {
                       value={salePrice}
                       onChangeText={(text) => {
                         setSalePrice(text);
-                        if (priceError) setPriceError(false);
+                        if (priceError) setPriceError(null);
                       }}
                     />
                   </View>
-                  {!isFastMoving && (
+                  {priceError ? (
+                    <Text style={{ color: "#ef4444", fontSize: 12, fontWeight: "600", marginTop: 8, paddingHorizontal: 4 }}>
+                      {priceError}
+                    </Text>
+                  ) : !isFastMoving ? (
                     <Text
                       style={[styles.priceHint, { color: theme.textSecondary }]}
                     >
                       {storeVatMode === "included" ? "Enter the gross price. VAT will be extracted automatically." : "Enter the agreed sale price for this bottle."}
                     </Text>
-                  )}
+                  ) : null}
                 </View>
 
                 {/* VAT Breakdown Card */}

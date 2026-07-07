@@ -330,10 +330,17 @@ export default function HomeScreen() {
   useFocusEffect(
     useCallback(() => {
       if (!loading) {
-        fetchMetrics();
-        fetchOutboundRequests();
+        AsyncStorage.getItem("forceDashboardRefresh").then((flag) => {
+          if (flag === "true") {
+            AsyncStorage.removeItem("forceDashboardRefresh");
+            onRefresh();
+          } else {
+            fetchMetrics();
+            fetchOutboundRequests();
+          }
+        });
       }
-    }, [loading, profile, fetchMetrics, fetchOutboundRequests]),
+    }, [loading, profile, fetchMetrics, fetchOutboundRequests, onRefresh]),
   );
 
   useEffect(() => {
