@@ -19,3 +19,21 @@ export async function getSalesByPeriod(storeId: string, periodStart: Date, perio
     totalItems: snapshot.data().totalItems
   };
 }
+
+export async function getSalesByPeriodAllStores(periodStart: Date, periodEnd: Date) {
+  const q = query(
+    collection(db, "sales"),
+    where("soldAt", ">=", periodStart),
+    where("soldAt", "<=", periodEnd)
+  );
+
+  const snapshot = await getAggregateFromServer(q, {
+    totalRevenue: sum("totalAmount"),
+    totalItems: count()
+  });
+
+  return {
+    totalRevenue: snapshot.data().totalRevenue ?? 0,
+    totalItems: snapshot.data().totalItems ?? 0
+  };
+}

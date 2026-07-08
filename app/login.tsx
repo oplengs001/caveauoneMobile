@@ -127,6 +127,12 @@ export default function LoginScreen() {
           <View style={styles.testButtonsContainer}>
             <TouchableOpacity
               style={styles.testButton}
+              onPress={() => quickLogin("gadmin@gmail.com", "123456")}
+            >
+              <Text style={styles.testButtonText}>Login as Admin</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.testButton}
               onPress={() => quickLogin("gwarehouse@gmail.com", "123456")}
             >
               <Text style={styles.testButtonText}>Login as Warehouse</Text>

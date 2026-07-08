@@ -23,6 +23,18 @@ export const Colors = {
     danger: '#991b1b',
     logoBg: '#4c0519',
     success: '#10b981'
+  },
+  admin: {
+    background: '#0a0f1e',
+    card: '#111827',
+    border: '#1f2937',
+    text: '#f9fafb',
+    textSecondary: '#6b7280',
+    primary: '#6366f1',   // Indigo
+    secondary: '#f59e0b', // Gold
+    accent: '#10b981',    // Emerald
+    danger: '#ef4444',
+    logoBg: '#6366f1',
   }
 };
 

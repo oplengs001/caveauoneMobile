@@ -3,6 +3,7 @@ import { useAuth } from "@/context/AuthContext";
 import { auth, db } from "@/lib/firebase";
 import { countBottlesForStoreDashboard, getSalesByPeriod, getStores } from "@/lib/queries";
 import { Delivery, PulloutRequest, WineRequest } from "@/types";
+import AdminDashboard from "@/components/AdminDashboard";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
 import { signOut } from "firebase/auth";
@@ -380,6 +381,11 @@ export default function HomeScreen() {
         </View>
       </View>
     );
+  }
+
+  // Admin role gets its own dedicated dashboard
+  if (profile?.role === "admin") {
+    return <AdminDashboard />;
   }
 
   const role = profile?.role || "warehouse";

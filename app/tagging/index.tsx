@@ -277,8 +277,8 @@ const vatStyles = StyleSheet.create({
 
 export default function TaggingScreen() {
   const { profile } = useAuth();
-  const theme = profile?.role === "store" ? Colors.store : Colors.warehouse;
-  const isStore = profile?.role === "store";
+  const theme = profile?.role === "store" ? Colors.store : profile?.role === "admin" ? Colors.admin : Colors.warehouse;
+  const isStore = profile?.role === "store" || profile?.role === "admin";
 
   const {
     bottleId: initialBottleId,
@@ -396,12 +396,13 @@ export default function TaggingScreen() {
     if (initialBottleId && mode !== "sell") {
       loadBottleData(initialBottleId as string);
     }
-  }, [initialBottleId, profile?.locationId]);
+  }, [initialBottleId, profile?.locationId, profile?.role]);
 
-  const fetchStoreVatMode = async () => {
-    if (!profile?.locationId) return;
+  const fetchStoreVatMode = async (overrideStoreId?: string) => {
+    const storeId = overrideStoreId || profile?.locationId;
+    if (!storeId) return;
     try {
-      const storeRef = doc(db, "stores", profile.locationId);
+      const storeRef = doc(db, "stores", storeId);
       const storeSnap = await getDoc(storeRef);
       if (storeSnap.exists()) {
         const data = storeSnap.data();
@@ -419,14 +420,19 @@ export default function TaggingScreen() {
   // ── Fetch store_wine_settings when wine is loaded in sell mode ─────────────
   // Only pre-populate price if the wine is marked as fast-moving.
   useEffect(() => {
-    if (mode !== "sell" || !wine || !profile?.locationId) return;
+    if (mode !== "sell" || !wine) return;
+    // For admin: use the bottle's store; for store user: use profile.locationId
+    const effectiveStoreId = profile?.role === "admin"
+      ? (bottle as any)?.storeRef?.id
+      : profile?.locationId;
+    if (!effectiveStoreId) return;
 
     const checkFastMoving = async () => {
       try {
         const settingsSnap = await getDocs(
           query(
             collection(db, "store_wine_settings"),
-            where("storeId", "==", profile.locationId),
+            where("storeId", "==", effectiveStoreId),
             where("masterWineId", "==", wine.id),
           ),
         );
@@ -455,7 +461,8 @@ export default function TaggingScreen() {
     };
 
     checkFastMoving();
-  }, [wine, mode, profile?.locationId]);
+  }, [wine, bottle, mode, profile?.locationId, profile?.role]);
+
 
   const fetchLocations = async () => {
     if (!profile?.locationId) return;
@@ -510,8 +517,15 @@ export default function TaggingScreen() {
       } as InventoryBottle;
       setBottle(bottleData);
 
+      // For admin: once bottle is loaded in sell mode, fetch vatMode from the bottle's store
+      const bottleStoreId = (bottleData as any).storeRef?.id;
+      if (profile?.role === "admin" && mode === "sell" && bottleStoreId) {
+        fetchStoreVatMode(bottleStoreId);
+      }
+
       if (
         isStore &&
+        profile?.role !== "admin" &&
         profile?.locationId &&
         (bottleData as any).storeRef?.id !== profile.locationId
       ) {
@@ -673,6 +687,11 @@ export default function TaggingScreen() {
         totalAmount = numericPrice;
       }
 
+      // For admin selling: use the bottle's own store, not profile.locationId
+      const effectiveSaleStoreId = profile?.role === "admin"
+        ? ((bottle as any).storeRef?.id || profile?.locationId)
+        : profile?.locationId;
+
       await addDoc(collection(db, "sales"), {
         bottleId: bottle.id,
         masterWineId: bottle.masterWineRef?.id || null,
@@ -680,7 +699,7 @@ export default function TaggingScreen() {
         vintage: wine?.vintage,
         producer: wine?.producer,
         format: wine?.format,
-        storeId: profile?.locationId,
+        storeId: effectiveSaleStoreId,
         soldById: profile?.id,
         soldByEmail: profile?.email,
         soldAt: serverTimestamp(),
@@ -709,8 +728,8 @@ export default function TaggingScreen() {
         updatedAt: serverTimestamp(),
       });
 
-      // Auto-request restock if PAR level reached
-      if (isStore && profile?.locationId && bottle.masterWineRef && wine) {
+      // Auto-request restock if PAR level reached (store users only, not admin)
+      if (profile?.role === "store" && profile?.locationId && bottle.masterWineRef && wine) {
         const storeId = profile.locationId;
         const wineRef = bottle.masterWineRef;
 
