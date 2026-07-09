@@ -148,14 +148,14 @@ export default function StoreMasterListScreen() {
   const { filter: initialFilter } = useLocalSearchParams<{
     filter:
     | "all"
-    | "alerts"
     | "under_safety"
     | "stockout"
     | "overstock"
-    | "unset";
+    | "optimal"
+    | "discontinued";
   }>();
   const [filter, setFilter] = useState<
-    "all" | "alerts" | "under_safety" | "stockout" | "overstock" | "unset"
+    "all" | "under_safety" | "stockout" | "overstock" | "optimal" | "discontinued"
   >(initialFilter || "all");
 
   const [isWineFilterModalOpen, setIsWineFilterModalOpen] = useState(false);
@@ -517,11 +517,11 @@ export default function StoreMasterListScreen() {
     if (selectedWineFilter && e.masterWine.id !== selectedWineFilter.id) {
       return false;
     }
-    if (filter === "alerts") return e.status === "par_alert";
     if (filter === "under_safety") return e.status === "under_safety";
     if (filter === "stockout") return e.status === "stockout";
     if (filter === "overstock") return e.status === "overstock";
-    if (filter === "unset") return e.status === "unset";
+    if (filter === "optimal") return e.status === "in_stock";
+    if (filter === "discontinued") return e.status === "discontinued";
     return true;
   });
 
@@ -783,11 +783,11 @@ export default function StoreMasterListScreen() {
           {(
             [
               "all",
-              "alerts",
               "under_safety",
               "stockout",
               "overstock",
-              "unset",
+              "optimal",
+              "discontinued",
             ] as const
           ).map((f) => (
             <TouchableOpacity
@@ -806,15 +806,15 @@ export default function StoreMasterListScreen() {
               >
                 {f === "all"
                   ? "All"
-                  : f === "alerts"
-                    ? "⚠ PAR Alerts"
-                    : f === "under_safety"
-                      ? "🛡 Under Safety"
-                      : f === "stockout"
-                        ? "🔴 Stockout"
-                        : f === "overstock"
-                          ? "🟢 Overstock"
-                          : "⚪️ Unset"}
+                  : f === "under_safety"
+                    ? "🛡 Under Safety"
+                    : f === "stockout"
+                      ? "🔴 Stockout"
+                      : f === "overstock"
+                        ? "🔵 Overstock"
+                        : f === "optimal"
+                          ? "🟢 Optimal"
+                          : "🚫 Discontinued"}
               </Text>
             </TouchableOpacity>
           ))}
