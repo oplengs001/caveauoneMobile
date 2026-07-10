@@ -33,6 +33,7 @@ export interface InventoryBottle {
   status:
     | "incoming"
     | "received"
+    | "tagged"
     | "shelved"
     | "consumed"
     | "damaged"

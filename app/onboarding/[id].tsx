@@ -15,6 +15,8 @@ import {
   CheckCircle2,
   ChevronLeft,
   MapPin,
+  Minus,
+  Plus,
   QrCode,
   Wine,
 } from "lucide-react-native";
@@ -29,6 +31,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -775,7 +778,7 @@ export default function OnboardingDetailScreen() {
 
       {/* OVERVIEW */}
       {currentStep === "overview" && (
-        <ScrollView style={styles.content}>
+        <View style={styles.content}>
           <View style={styles.statsCard}>
             <Text style={styles.statsTitle}>Progress Overview</Text>
             <View style={styles.progressBarBg}>
@@ -797,80 +800,94 @@ export default function OnboardingDetailScreen() {
             </Text>
           </View>
 
-          <Text style={styles.sectionTitle}>Wine Items</Text>
-          {task.items.map((item) => {
-            const successfullyOnboardedQty =
-              item.onboardedQty - (item.issues?.length || 0);
-            const hasIssues = (item.issues?.length || 0) > 0;
-            const itemReports = task.reports?.filter(r => r.itemId === item.id) || [];
-            const isItemComplete = item.onboardedQty === item.qty;
-            let iconColor = "#4f46e5";
-            if (isItemComplete) iconColor = hasIssues ? "#ef4444" : "#10b981";
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>Wine Items</Text>
+            {task.items.length > 5 && (
+              <Text style={{ color: "#94a3b8", fontSize: 12, fontStyle: "italic", marginRight: 4 }}>
+                Scroll to see all
+              </Text>
+            )}
+          </View>
+          <ScrollView
+            style={{ flex: 1, marginBottom: 16 }}
+            showsVerticalScrollIndicator={true}
+            indicatorStyle="white"
+            contentContainerStyle={{ paddingBottom: 24 }}
+          >
+            {task.items.map((item) => {
+              const successfullyOnboardedQty =
+                item.onboardedQty - (item.issues?.length || 0);
+              const hasIssues = (item.issues?.length || 0) > 0;
+              const itemReports = task.reports?.filter(r => r.itemId === item.id) || [];
+              const isItemComplete = item.onboardedQty === item.qty;
+              let iconColor = "#4f46e5";
+              if (isItemComplete) iconColor = hasIssues ? "#ef4444" : "#10b981";
 
-            return (
-              <View key={item.id} style={[styles.itemCard, { flexDirection: "column", padding: 0, overflow: "hidden" }]}>
-                {/* Main Item Row */}
-                <View style={{ flexDirection: "row", alignItems: "center", padding: 16, width: "100%" }}>
-                  <View style={styles.itemIcon}>
-                    <Wine size={24} color={iconColor} />
-                  </View>
-                  <View style={styles.itemInfo}>
-                    <Text style={styles.producerText}>{item.producerName}</Text>
-                    <Text style={styles.wineNameText}>{item.wineName}</Text>
-                    <View style={styles.itemMeta}>
-                      <Text style={styles.metaBadge}>{item.vintage}</Text>
-                      <Text style={styles.metaBadge}>{item.format}</Text>
+              return (
+                <View key={item.id} style={[styles.itemCard, { flexDirection: "column", padding: 0, overflow: "hidden" }]}>
+                  {/* Main Item Row */}
+                  <View style={{ flexDirection: "row", alignItems: "center", padding: 16, width: "100%" }}>
+                    <View style={styles.itemIcon}>
+                      <Wine size={24} color={iconColor} />
+                    </View>
+                    <View style={styles.itemInfo}>
+                      <Text style={styles.producerText}>{item.producerName}</Text>
+                      <Text style={styles.wineNameText}>{item.wineName}</Text>
+                      <View style={styles.itemMeta}>
+                        <Text style={styles.metaBadge}>{item.vintage}</Text>
+                        <Text style={styles.metaBadge}>{item.format}</Text>
+                      </View>
+                    </View>
+                    <View style={styles.itemProgress}>
+                      <Text style={[styles.qtyText, { color: iconColor }]}>
+                        {successfullyOnboardedQty}/{item.qty}
+                      </Text>
+                      {isItemComplete ? (
+                        hasIssues ? (
+                          <AlertCircle size={16} color={iconColor} />
+                        ) : (
+                          <CheckCircle2 size={16} color={iconColor} />
+                        )
+                      ) : null}
+                      {hasIssues && !isItemComplete && (
+                        <Text style={styles.issuesText}>
+                          ({item.issues?.length} issue{item.issues!.length > 1 ? "s" : ""})
+                        </Text>
+                      )}
                     </View>
                   </View>
-                  <View style={styles.itemProgress}>
-                    <Text style={[styles.qtyText, { color: iconColor }]}>
-                      {successfullyOnboardedQty}/{item.qty}
-                    </Text>
-                    {isItemComplete ? (
-                      hasIssues ? (
-                        <AlertCircle size={16} color={iconColor} />
-                      ) : (
-                        <CheckCircle2 size={16} color={iconColor} />
-                      )
-                    ) : null}
-                    {hasIssues && !isItemComplete && (
-                      <Text style={styles.issuesText}>
-                        ({item.issues?.length} issue{item.issues!.length > 1 ? "s" : ""})
-                      </Text>
-                    )}
-                  </View>
-                </View>
 
-                {/* Detailed Issues List */}
-                {itemReports.length > 0 && (
-                  <View style={{ backgroundColor: "rgba(239,68,68,0.05)", padding: 12, paddingHorizontal: 16, width: "100%", borderTopWidth: 1, borderTopColor: "rgba(239,68,68,0.1)" }}>
-                    <Text style={{ color: "#ef4444", fontSize: 11, fontWeight: "800", marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.5 }}>
-                      Reported Issues
-                    </Text>
-                    {itemReports.map((report, idx) => (
-                      <View key={idx} style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                        <AlertCircle size={14} color="#ef4444" />
-                        <Text style={{ color: "#f87171", fontSize: 13, fontFamily: "monospace", fontWeight: "700" }}>
-                          {report.bottleId.slice(-8)}
-                        </Text>
-                        <Text style={{ color: "#94a3b8", fontSize: 12, fontWeight: "500", flex: 1 }} numberOfLines={1}>
-                          — {report.reason === "missing_qr_label" ? "QR Label Missing" : "Physical Bottle Missing"}
-                        </Text>
-                        <TouchableOpacity
-                          style={{ backgroundColor: "rgba(16,185,129,0.15)", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 }}
-                          onPress={() => handleResolveIssue(item.id, report.bottleId)}
-                        >
-                          <Text style={{ color: "#10b981", fontSize: 11, fontWeight: "700", textTransform: "uppercase" }}>
-                            Reset
+                  {/* Detailed Issues List */}
+                  {itemReports.length > 0 && (
+                    <View style={{ backgroundColor: "rgba(239,68,68,0.05)", padding: 12, paddingHorizontal: 16, width: "100%", borderTopWidth: 1, borderTopColor: "rgba(239,68,68,0.1)" }}>
+                      <Text style={{ color: "#ef4444", fontSize: 11, fontWeight: "800", marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                        Reported Issues
+                      </Text>
+                      {itemReports.map((report, idx) => (
+                        <View key={idx} style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                          <AlertCircle size={14} color="#ef4444" />
+                          <Text style={{ color: "#f87171", fontSize: 13, fontFamily: "monospace", fontWeight: "700" }}>
+                            {report.bottleId.slice(-8)}
                           </Text>
-                        </TouchableOpacity>
-                      </View>
-                    ))}
-                  </View>
-                )}
-              </View>
-            );
-          })}
+                          <Text style={{ color: "#94a3b8", fontSize: 12, fontWeight: "500", flex: 1 }} numberOfLines={1}>
+                            — {report.reason === "missing_qr_label" ? "QR Label Missing" : "Physical Bottle Missing"}
+                          </Text>
+                          <TouchableOpacity
+                            style={{ backgroundColor: "rgba(16,185,129,0.15)", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 }}
+                            onPress={() => handleResolveIssue(item.id, report.bottleId)}
+                          >
+                            <Text style={{ color: "#10b981", fontSize: 11, fontWeight: "700", textTransform: "uppercase" }}>
+                              Reset
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                </View>
+              );
+            })}
+          </ScrollView>
 
           <TouchableOpacity
             style={styles.mainButton}
@@ -887,7 +904,7 @@ export default function OnboardingDetailScreen() {
             <AlertCircle size={20} color="#ef4444" />
             <Text style={styles.reportIssueButtonText}>Report an Issue</Text>
           </TouchableOpacity>
-        </ScrollView>
+        </View>
       )}
 
       {/* SELECT ITEM FOR REPORT */}
@@ -1132,49 +1149,89 @@ export default function OnboardingDetailScreen() {
                 in this task
               </Text>
 
-              <View
-                style={{
-                  flexDirection: "row",
-                  flexWrap: "wrap",
-                  gap: 12,
-                  marginBottom: 32,
-                }}
-              >
-                {Array.from(
-                  {
-                    length: Math.min(
-                      activeItem.qty - activeItem.onboardedQty,
-                      8,
-                    ),
-                  },
-                  (_, i) => i + 1,
-                ).map((n) => (
-                  <TouchableOpacity
-                    key={n}
-                    onPress={() => setBatchQty(n)}
-                    style={{
-                      width: 60,
-                      height: 60,
-                      borderRadius: 16,
-                      borderWidth: 2,
-                      borderColor: batchQty === n ? "#4f46e5" : "#334155",
-                      backgroundColor: batchQty === n ? "#4f46e5" : "#1e293b",
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    <Text
+              {activeItem.qty - activeItem.onboardedQty <= 10 ? (
+                <View
+                  style={{
+                    flexDirection: "row",
+                    flexWrap: "wrap",
+                    gap: 12,
+                    marginBottom: 32,
+                  }}
+                >
+                  {Array.from(
+                    {
+                      length: activeItem.qty - activeItem.onboardedQty,
+                    },
+                    (_, i) => i + 1,
+                  ).map((n) => (
+                    <TouchableOpacity
+                      key={n}
+                      onPress={() => setBatchQty(n)}
                       style={{
-                        color: batchQty === n ? "#fff" : "#94a3b8",
-                        fontSize: 22,
-                        fontWeight: "900",
+                        width: 60,
+                        height: 60,
+                        borderRadius: 16,
+                        borderWidth: 2,
+                        borderColor: batchQty === n ? "#4f46e5" : "#334155",
+                        backgroundColor: batchQty === n ? "#4f46e5" : "#1e293b",
+                        alignItems: "center",
+                        justifyContent: "center",
                       }}
                     >
-                      {n}
-                    </Text>
+                      <Text
+                        style={{
+                          color: batchQty === n ? "#fff" : "#94a3b8",
+                          fontSize: 22,
+                          fontWeight: "900",
+                        }}
+                      >
+                        {n}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              ) : (
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 24, marginBottom: 32, alignSelf: "center" }}>
+                  <TouchableOpacity
+                    style={{ backgroundColor: "#334155", padding: 16, borderRadius: 16 }}
+                    onPress={() => setBatchQty(Math.max(1, batchQty - 1))}
+                  >
+                    <Minus size={24} color="#fff" />
                   </TouchableOpacity>
-                ))}
-              </View>
+
+                  <TextInput
+                    style={{
+                      color: "#fff",
+                      fontSize: 32,
+                      fontWeight: "900",
+                      minWidth: 50,
+                      textAlign: "center",
+                    }}
+                    value={batchQty > 0 ? String(batchQty) : ""}
+                    keyboardType="number-pad"
+                    onChangeText={(val) => {
+                      if (val === "") {
+                        setBatchQty(0);
+                      } else {
+                        const parsed = parseInt(val.replace(/[^0-9]/g, ""), 10);
+                        if (!isNaN(parsed)) {
+                          setBatchQty(Math.min(activeItem.qty - activeItem.onboardedQty, parsed));
+                        }
+                      }
+                    }}
+                    onBlur={() => {
+                      if (batchQty < 1) setBatchQty(1);
+                    }}
+                  />
+
+                  <TouchableOpacity
+                    style={{ backgroundColor: "#334155", padding: 16, borderRadius: 16 }}
+                    onPress={() => setBatchQty(Math.min(activeItem.qty - activeItem.onboardedQty, batchQty + 1))}
+                  >
+                    <Plus size={24} color="#fff" />
+                  </TouchableOpacity>
+                </View>
+              )}
 
               <TouchableOpacity
                 style={styles.mainButton}

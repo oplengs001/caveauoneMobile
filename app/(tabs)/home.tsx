@@ -27,6 +27,7 @@ import {
   Search,
   Truck,
   Wine,
+  QrCode,
 } from "lucide-react-native";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -956,6 +957,28 @@ export default function HomeScreen() {
                   </Text>
                   <Text style={styles.buttonDesc}>
                     PAR levels & stock management
+                  </Text>
+                </View>
+              </View>
+            </TouchableOpacity>
+          )}
+          {!isStore && (
+            <TouchableOpacity
+              style={[
+                styles.actionButton,
+                {
+                  backgroundColor: theme.primary,
+                  borderRadius: 24,
+                },
+              ]}
+              onPress={() => router.push("/bottle-tagging")}
+            >
+              <View style={styles.buttonContent}>
+                <QrCode size={42} color="#ffffff" strokeWidth={1.5} />
+                <View style={styles.buttonTextContainer}>
+                  <Text style={styles.buttonTitle}>{"QR Tagging"}</Text>
+                  <Text style={styles.buttonDesc}>
+                    {"Scan and stick QR labels"}
                   </Text>
                 </View>
               </View>

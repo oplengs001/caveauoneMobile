@@ -11,6 +11,7 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "test": "jest",
+    "clean": "npx expo prebuild --clean",
     "test:watch": "jest --watch",
     "build:staging": "env-cmd -f .env.staging npx eas-cli@latest build --profile preview --platform all --auto-submit",
     "build:production": "env-cmd -f .env.production npx eas-cli@latest build --profile production --platform all --auto-submit",
