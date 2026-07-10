@@ -545,7 +545,7 @@ export default function BottleTaggingScreen() {
           <CheckCircle2 size={80} color="#10b981" />
           <Text style={styles.successTitle}>Successfully Verified!</Text>
           <Text style={styles.successSub}>
-            {qtyToTag} bottles have been verified.
+            {qtyToTag} bottles of <Text style={{color: "#fff", fontWeight: "bold"}}>{selectedWine?.name}</Text> have been verified.
           </Text>
 
           <TouchableOpacity
@@ -559,7 +559,19 @@ export default function BottleTaggingScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.primaryButton, { backgroundColor: "#10b981", marginTop: 12 }]}
-            onPress={() => router.push("/tagging")}
+            onPress={() => {
+              const idsString = Array.from(verifiedIds).join(",");
+              router.push({
+                pathname: "/tagging",
+                params: { 
+                  bottleIds: idsString,
+                  wineName: selectedWine?.name,
+                  wineVintage: selectedWine?.vintage,
+                  wineProducer: selectedWine?.producer,
+                  wineFormat: selectedWine?.format
+                }
+              });
+            }}
           >
             <Text style={styles.primaryButtonText}>Tag Location Now</Text>
           </TouchableOpacity>
