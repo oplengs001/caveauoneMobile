@@ -30,6 +30,7 @@ export interface InventoryBottle {
   outboundLocationRef?: DocumentReference | null;
   sku: string;
   readableId?: string;
+  isTagged?: boolean;
   status:
     | "incoming"
     | "received"

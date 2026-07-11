@@ -8,6 +8,8 @@ import {
   doc,
   getDocs,
   query,
+  serverTimestamp,
+  updateDoc,
   where
 } from "firebase/firestore";
 import {
@@ -18,7 +20,8 @@ import {
   Minus,
   Plus,
   Search,
-  X
+  X,
+  Info
 } from "lucide-react-native";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -109,8 +112,8 @@ export default function BottleTaggingScreen() {
 
   const fetchMasterWines = async () => {
     try {
-      // 1. Get all bottles that are "received" (untagged)
-      const untaggedQ = query(collection(db, "inventory_bottles"), where("status", "==", "received"));
+      // 1. Get all bottles that are untagged
+      const untaggedQ = query(collection(db, "inventory_bottles"), where("isTagged", "==", false));
       const untaggedSnap = await getDocs(untaggedQ);
 
       // 2. Extract unique master wine IDs
@@ -190,11 +193,11 @@ export default function BottleTaggingScreen() {
     setLoading(true);
     setSelectedWine(wine);
     try {
-      // Find untagged bottles: status === "received" for this masterWine
+      // Find untagged bottles: isTagged === false for this masterWine
       const q = query(
         collection(db, "inventory_bottles"),
         where("masterWineRef", "==", doc(db, "master_wines", wine.id)),
-        where("status", "==", "received")
+        where("isTagged", "==", false)
       );
       const snap = await getDocs(q);
       const bottles = snap.docs.map(
@@ -240,6 +243,11 @@ export default function BottleTaggingScreen() {
     setIsProcessingAI(true);
 
     try {
+      await updateDoc(doc(db, "inventory_bottles", data), {
+        isTagged: true,
+        updatedAt: serverTimestamp(),
+      });
+
       const nextVerified = new Set(verifiedIds).add(data);
       setVerifiedIds(nextVerified);
 
@@ -406,7 +414,7 @@ export default function BottleTaggingScreen() {
           <View style={styles.statsCard}>
             <Text style={styles.statsLabel}>Untagged Bottles</Text>
             <Text style={styles.statsBigValue}>{untaggedBottles.length}</Text>
-            <Text style={styles.statsSub}>Status: Received</Text>
+            <Text style={styles.statsSub}>Status: Untagged</Text>
           </View>
 
           {untaggedBottles.length > 0 ? (
@@ -477,6 +485,16 @@ export default function BottleTaggingScreen() {
             </View>
           </CameraView>
 
+          <View style={styles.infoBanner}>
+            <Info size={20} color="#3b82f6" style={{ marginTop: 2 }} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.infoBannerTitle}>Stick Label First!</Text>
+              <Text style={styles.infoBannerText}>
+                Please physically attach the printed QR sticker to the wine bottle before scanning it here.
+              </Text>
+            </View>
+          </View>
+
           <View style={styles.progressHeader}>
             <Text style={styles.progressTitle}>Verification Progress</Text>
             <Text style={styles.progressCount}>
@@ -545,7 +563,7 @@ export default function BottleTaggingScreen() {
           <CheckCircle2 size={80} color="#10b981" />
           <Text style={styles.successTitle}>Successfully Verified!</Text>
           <Text style={styles.successSub}>
-            {qtyToTag} bottles of <Text style={{color: "#fff", fontWeight: "bold"}}>{selectedWine?.name}</Text> have been verified.
+            {qtyToTag} bottles of <Text style={{ color: "#fff", fontWeight: "bold" }}>{selectedWine?.name}</Text> have been verified.
           </Text>
 
           <TouchableOpacity
@@ -563,7 +581,7 @@ export default function BottleTaggingScreen() {
               const idsString = Array.from(verifiedIds).join(",");
               router.push({
                 pathname: "/tagging",
-                params: { 
+                params: {
                   bottleIds: idsString,
                   wineName: selectedWine?.name,
                   wineVintage: selectedWine?.vintage,
@@ -900,6 +918,30 @@ const styles = StyleSheet.create({
     backgroundColor: "#1e293b",
     borderBottomWidth: 1,
     borderBottomColor: "#334155",
+    marginTop: 16,
+  },
+  infoBanner: {
+    flexDirection: "row",
+    backgroundColor: "rgba(59, 130, 246, 0.1)",
+    padding: 16,
+    marginHorizontal: 20,
+    marginTop: 20,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(59, 130, 246, 0.2)",
+    gap: 12,
+  },
+  infoBannerTitle: {
+    color: "#60a5fa",
+    fontSize: 15,
+    fontWeight: "800",
+    marginBottom: 4,
+  },
+  infoBannerText: {
+    color: "#94a3b8",
+    fontSize: 13,
+    fontWeight: "600",
+    lineHeight: 18,
   },
   progressTitle: {
     color: "#94a3b8",

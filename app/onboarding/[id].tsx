@@ -426,6 +426,7 @@ export default function OnboardingDetailScreen() {
 
       await updateDoc(bottleRef, {
         status: "received",
+        isTagged: true,
         updatedAt: serverTimestamp(),
         storeRef: storeRef,
       });
@@ -480,6 +481,7 @@ export default function OnboardingDetailScreen() {
     try {
       await updateDoc(doc(db, "inventory_bottles", data), {
         status: "received",
+        isTagged: true,
         updatedAt: serverTimestamp(),
         storeRef: doc(db, "stores", profile.locationId),
       });
