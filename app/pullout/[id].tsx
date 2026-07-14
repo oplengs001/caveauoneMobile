@@ -54,7 +54,6 @@ export default function PulloutDetailScreen() {
   const theme = profile?.role === "store" ? Colors.store : Colors.warehouse;
   const [request, setRequest] = useState<PulloutRequest | null>(null);
   const [loading, setLoading] = useState(true);
-  const [scanning, setScanning] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<
     (InventoryBottle & {
@@ -72,6 +71,9 @@ export default function PulloutDetailScreen() {
   const [searchLoading, setSearchLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [lastVisible, setLastVisible] = useState<any>(null);
+  const [showResults, setShowResults] = useState(true);
+  const [scanFeedback, setScanFeedback] = useState<{ message: string; success: boolean } | null>(null);
+  const scanFeedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isProcessing = useRef(false);
   const [permission, requestPermission] = useCameraPermissions();
@@ -108,26 +110,26 @@ export default function PulloutDetailScreen() {
   }, [searchResults]);
 
   const handleBarcodeScanned = async ({ data }: { data: string }) => {
-    if (!scanning || !request || isProcessing.current) return;
+    if (!request || isProcessing.current) return;
     isProcessing.current = true;
-    setScanning(false);
     setLoading(true);
+
+    const resumeScan = (success: boolean, message: string) => {
+      if (scanFeedbackTimer.current) clearTimeout(scanFeedbackTimer.current);
+      setScanFeedback({ message, success });
+      scanFeedbackTimer.current = setTimeout(() => {
+        setScanFeedback(null);
+        isProcessing.current = false;
+      }, 1500);
+    };
 
     try {
       // 1. Find bottle by ID
       const bottleSnap = await getDoc(doc(db, "inventory_bottles", data));
 
       if (!bottleSnap.exists()) {
-        Alert.alert("Not Found", `No bottle found with ID: ${data}`, [
-          {
-            text: "OK",
-            onPress: () => {
-              isProcessing.current = false;
-              setScanning(true);
-            },
-          },
-        ]);
         setLoading(false);
+        resumeScan(false, `No bottle found with ID: ${data}`);
         return;
       }
 
@@ -137,20 +139,8 @@ export default function PulloutDetailScreen() {
       } as InventoryBottle;
 
       if (bottleData.status !== "received" && bottleData.status !== "shelved") {
-        Alert.alert(
-          "Invalid Status",
-          `Bottle is already ${bottleData.status}.`,
-          [
-            {
-              text: "OK",
-              onPress: () => {
-                isProcessing.current = false;
-                setScanning(true);
-              },
-            },
-          ],
-        );
         setLoading(false);
+        resumeScan(false, `Bottle is already ${bottleData.status}.`);
         return;
       }
 
@@ -163,34 +153,14 @@ export default function PulloutDetailScreen() {
       );
 
       if (itemIndex === -1) {
-        Alert.alert(
-          "Not Requested",
-          "This wine is not needed for this request or already fulfilled.",
-          [
-            {
-              text: "OK",
-              onPress: () => {
-                isProcessing.current = false;
-                setScanning(true);
-              },
-            },
-          ],
-        );
         setLoading(false);
+        resumeScan(false, "This wine is not needed for this request or already fulfilled.");
         return;
       }
 
       if (!request.outBoundStoreId) {
-        Alert.alert("Error", "Pullout request is missing a target store.", [
-          {
-            text: "OK",
-            onPress: () => {
-              isProcessing.current = false;
-              setScanning(true);
-            },
-          },
-        ]);
         setLoading(false);
+        resumeScan(false, "Pullout request is missing a target store.");
         return;
       }
 
@@ -248,25 +218,20 @@ export default function PulloutDetailScreen() {
         source: (profile?.role as any) || "warehouse",
       });
 
-      Alert.alert("Success", `Pulled ${updatedItems[itemIndex].wineName}`, [
-        {
-          text: allFulfilled ? "Finish" : "Scan Next",
-          onPress: () => {
-            isProcessing.current = false;
-            if (allFulfilled) {
-              fetchRequest();
-            } else {
-              setScanning(true);
-            }
-          },
-        },
-      ]);
-
       await fetchRequest();
+
+      if (allFulfilled) {
+        if (scanFeedbackTimer.current) clearTimeout(scanFeedbackTimer.current);
+        setScanFeedback(null);
+        Alert.alert("All Done!", `Pulled ${updatedItems[itemIndex].wineName}. Request fully fulfilled.`, [
+          { text: "Finish", onPress: () => { isProcessing.current = false; fetchRequest(); } },
+        ]);
+      } else {
+        resumeScan(true, `✓ Pulled: ${updatedItems[itemIndex].wineName}`);
+      }
     } catch (error) {
       console.error("Error processing pullout:", error);
-      Alert.alert("Error", "Failed to process pullout.");
-      isProcessing.current = false;
+      resumeScan(false, "Failed to process pullout.");
     } finally {
       setLoading(false);
     }
@@ -591,41 +556,7 @@ export default function PulloutDetailScreen() {
     );
   }
 
-  if (scanning) {
-    return (
-      <View style={styles.container}>
-        <CameraView
-          style={StyleSheet.absoluteFill}
-          onBarcodeScanned={handleBarcodeScanned}
-          barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
-        >
-          <View style={styles.scannerOverlay}>
-            <View
-              style={[
-                styles.scanTarget,
-                {
-                  borderColor: theme.primary,
-                  backgroundColor: theme.primary + "0D",
-                },
-              ]}
-            />
-            <Text style={styles.scanText}>Scan bottle QR to pull</Text>
-            <TouchableOpacity
-              onPress={() => setScanning(false)}
-              style={[
-                styles.cancelScanButton,
-                { backgroundColor: theme.card, borderColor: theme.border },
-              ]}
-            >
-              <Text style={[styles.cancelScanText, { color: theme.text }]}>
-                Cancel
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </CameraView>
-      </View>
-    );
-  }
+
 
   return (
     <SafeAreaView
@@ -714,90 +645,173 @@ export default function PulloutDetailScreen() {
 
               {Object.keys(groupedResults).length > 0 && (
                 <View style={styles.searchResults}>
-                  {Object.entries(groupedResults).map(
-                    ([locationName, bottles]) => (
-                      <Collapsible
-                        key={locationName}
-                        title={`${locationName} (${bottles.length} bottles)`}
+                  {/* Results header with Hide + Clear actions */}
+                  <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                    <Text style={{ fontSize: 11, fontWeight: "800", color: theme.textSecondary, letterSpacing: 0.5 }}>
+                      {Object.values(groupedResults).flat().length} RESULT{Object.values(groupedResults).flat().length !== 1 ? "S" : ""}
+                    </Text>
+                    <View style={{ flexDirection: "row", gap: 8 }}>
+                      <TouchableOpacity
+                        onPress={() => setShowResults((v) => !v)}
+                        style={[
+                          styles.searchResultAction,
+                          { borderColor: theme.border, backgroundColor: theme.background },
+                        ]}
                       >
-                        {bottles.map((res) => (
-                          <View
-                            key={res.id}
-                            style={[
-                              styles.searchResultItem,
-                              {
-                                backgroundColor: theme.background,
-                                borderColor: theme.border,
-                              },
-                            ]}
+                        <Text style={{ fontSize: 11, fontWeight: "700", color: theme.textSecondary }}>
+                          {showResults ? "Hide" : "Show"}
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => {
+                          setGroupedResults({});
+                          setSearchQuery("");
+                          setLastVisible(null);
+                          setShowResults(true);
+                        }}
+                        style={[
+                          styles.searchResultAction,
+                          { borderColor: theme.danger + "40", backgroundColor: theme.danger + "10" },
+                        ]}
+                      >
+                        <Text style={{ fontSize: 11, fontWeight: "700", color: theme.danger }}>Clear</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  {showResults && (
+                    <>
+                      {Object.entries(groupedResults).map(
+                        ([locationName, bottles]) => (
+                          <Collapsible
+                            key={locationName}
+                            title={`${locationName} (${bottles.length} bottles)`}
                           >
-                            <View style={styles.resultInfo}>
-                              <Text
+                            {bottles.map((res) => (
+                              <View
+                                key={res.id}
                                 style={[
-                                  styles.resultWineName,
-                                  { color: theme.text },
+                                  styles.searchResultItem,
+                                  {
+                                    backgroundColor: theme.background,
+                                    borderColor: theme.border,
+                                  },
                                 ]}
                               >
-                                {res.wineName}
-                              </Text>
-                              <Text
-                                style={{
-                                  fontSize: 12,
-                                  color: theme.textSecondary,
-                                  fontWeight: "500",
-                                  marginBottom: 4,
-                                }}
-                              >
-                                {res.vintage} • {res.producer} • {res.format}
-                              </Text>
-                              <Text
-                                style={[
-                                  styles.resultId,
-                                  { color: theme.textSecondary },
-                                ]}
-                              >
-                                Bottle ID: {res.readableId || res.id}
-                              </Text>
-                            </View>
-                            <View
-                              style={[
-                                styles.resultBadge,
-                                { backgroundColor: theme.card },
-                              ]}
-                            >
-                              <Text
-                                style={[
-                                  styles.resultStatus,
-                                  { color: theme.textSecondary },
-                                ]}
-                              >
-                                {res.status.toUpperCase()}
-                              </Text>
-                            </View>
-                          </View>
-                        ))}
-                      </Collapsible>
-                    ),
-                  )}
-                  {lastVisible && (
-                    <TouchableOpacity
-                      style={[
-                        styles.loadMoreButton,
-                        { backgroundColor: theme.primary },
-                      ]}
-                      onPress={handleLoadMore}
-                      disabled={loadingMore}
-                    >
-                      {loadingMore ? (
-                        <ActivityIndicator size="small" color="#fff" />
-                      ) : (
-                        <Text style={styles.loadMoreButtonText}>Load More</Text>
+                                <View style={styles.resultInfo}>
+                                  <Text
+                                    style={[
+                                      styles.resultWineName,
+                                      { color: theme.text },
+                                    ]}
+                                  >
+                                    {res.wineName}
+                                  </Text>
+                                  <Text
+                                    style={{
+                                      fontSize: 12,
+                                      color: theme.textSecondary,
+                                      fontWeight: "500",
+                                      marginBottom: 4,
+                                    }}
+                                  >
+                                    {res.vintage} • {res.producer} • {res.format}
+                                  </Text>
+                                  <Text
+                                    style={[
+                                      styles.resultId,
+                                      { color: theme.textSecondary },
+                                    ]}
+                                  >
+                                    Bottle ID: {res.readableId || res.id}
+                                  </Text>
+                                </View>
+                                <View
+                                  style={[
+                                    styles.resultBadge,
+                                    { backgroundColor: theme.card },
+                                  ]}
+                                >
+                                  <Text
+                                    style={[
+                                      styles.resultStatus,
+                                      { color: theme.textSecondary },
+                                    ]}
+                                  >
+                                    {res.status.toUpperCase()}
+                                  </Text>
+                                </View>
+                              </View>
+                            ))}
+                          </Collapsible>
+                        ),
                       )}
-                    </TouchableOpacity>
+                      {lastVisible && (
+                        <TouchableOpacity
+                          style={[
+                            styles.loadMoreButton,
+                            { backgroundColor: theme.primary },
+                          ]}
+                          onPress={handleLoadMore}
+                          disabled={loadingMore}
+                        >
+                          {loadingMore ? (
+                            <ActivityIndicator size="small" color="#fff" />
+                          ) : (
+                            <Text style={styles.loadMoreButtonText}>Load More</Text>
+                          )}
+                        </TouchableOpacity>
+                      )}
+                    </>
                   )}
                 </View>
               )}
             </View>
+
+            {request.status !== "completed" && (
+              <View style={styles.inlineScannerContainer}>
+                <CameraView
+                  style={StyleSheet.absoluteFill}
+                  onBarcodeScanned={handleBarcodeScanned}
+                  barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
+                >
+                  <View style={styles.scannerOverlay}>
+                    {/* Scan target box */}
+                    <View
+                      style={[
+                        styles.scanTarget,
+                        {
+                          borderColor: scanFeedback
+                            ? scanFeedback.success ? "#10b981" : "#ef4444"
+                            : theme.primary,
+                          backgroundColor: scanFeedback
+                            ? scanFeedback.success ? "#10b98120" : "#ef444420"
+                            : theme.primary + "0D",
+                        },
+                      ]}
+                    />
+
+                    {/* Toast feedback for continuous mode */}
+                    {scanFeedback && (
+                      <View
+                        style={[
+                          styles.scanToast,
+                          { backgroundColor: scanFeedback.success ? "#10b981" : "#ef4444" },
+                        ]}
+                      >
+                        <Text style={styles.scanToastText}>{scanFeedback.message}</Text>
+                      </View>
+                    )}
+
+                    {!scanFeedback && (
+                      <Text style={styles.scanText}>
+                        Scan bottle QR to pull
+                      </Text>
+                    )}
+                  </View>
+                </CameraView>
+              </View>
+            )}
 
             <View style={styles.sectionHeader}>
               <PackageSearch size={16} color={theme.primary} />
@@ -993,36 +1007,17 @@ export default function PulloutDetailScreen() {
             </View>
           </ScrollView>
 
-          {request.status !== "completed" && (
+          {request.status !== "completed" && request.items.every(
+            (i) => i.pulledQty + (i.skippedQty || 0) >= i.requestedQty,
+          ) && (
             <View style={styles.footer}>
-              {request.items.every(
-                (i) => i.pulledQty + (i.skippedQty || 0) >= i.requestedQty,
-              ) ? (
-                <TouchableOpacity
-                  style={[styles.completeButton]}
-                  onPress={handleCompleteRequest}
-                >
-                  <CheckCircle2 size={24} color="#fff" strokeWidth={2.5} />
-                  <Text style={styles.completeButtonText}>Finalize Task</Text>
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity
-                  style={[
-                    styles.scanButton,
-                    {
-                      backgroundColor: theme.primary,
-                      shadowColor: theme.primary,
-                    },
-                  ]}
-                  onPress={() => {
-                    isProcessing.current = false;
-                    setScanning(true);
-                  }}
-                >
-                  <ScanQrCode size={24} color="#fff" strokeWidth={2.5} />
-                  <Text style={styles.scanButtonText}>Scan to Pull</Text>
-                </TouchableOpacity>
-              )}
+              <TouchableOpacity
+                style={[styles.completeButton]}
+                onPress={handleCompleteRequest}
+              >
+                <CheckCircle2 size={24} color="#fff" strokeWidth={2.5} />
+                <Text style={styles.completeButtonText}>Finalize Task</Text>
+              </TouchableOpacity>
             </View>
           )}
         </>
@@ -1238,40 +1233,68 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 1.5,
   },
+  inlineScannerContainer: {
+    height: 380,
+    borderRadius: 24,
+    overflow: "hidden",
+    marginVertical: 16,
+    borderWidth: 1,
+    borderColor: "#334155",
+  },
   scannerOverlay: {
     flex: 1,
-    backgroundColor: "rgba(15, 23, 42, 0.7)",
+    backgroundColor: "rgba(15, 23, 42, 0.6)",
     justifyContent: "center",
     alignItems: "center",
   },
   scanTarget: {
-    width: 260,
-    height: 260,
+    width: 220,
+    height: 220,
     borderWidth: 2,
     borderRadius: 32,
-    marginBottom: 40,
+    marginBottom: 16,
   },
   scanText: {
     color: "#fff",
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "900",
     textTransform: "uppercase",
     letterSpacing: 2,
+    marginBottom: 16,
+  },
+  scannerControls: {
+    flexDirection: "row",
+    gap: 12,
   },
   cancelScanButton: {
-    position: "absolute",
-    bottom: 60,
-    paddingHorizontal: 40,
-    paddingVertical: 18,
-    borderRadius: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 16,
     borderWidth: 1,
   },
   cancelScanText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "900",
     textTransform: "uppercase",
     letterSpacing: 1,
   },
+  scanToast: {
+    position: "absolute",
+    top: "40%",
+    left: 20,
+    right: 20,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 16,
+    alignItems: "center",
+  },
+  scanToastText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "900",
+    textAlign: "center",
+  },
+
 
   permissionText: {
     textAlign: "center",
@@ -1324,6 +1347,12 @@ const styles = StyleSheet.create({
   searchResults: {
     marginTop: 20,
     gap: 10,
+  },
+  searchResultAction: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
   },
   searchResultItem: {
     flexDirection: "row",
