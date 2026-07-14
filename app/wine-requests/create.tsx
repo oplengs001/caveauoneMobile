@@ -133,7 +133,7 @@ export default function CreateWineRequest() {
     if (!matchesSearch) return false;
 
     if (selectedLocationId === "all") {
-      return true;
+      return w.stock > 0;
     } else {
       return w.stockByLocation[selectedLocationId] > 0;
     }
@@ -669,7 +669,7 @@ export default function CreateWineRequest() {
                           onPress={() => updateQty(item.wine.id, -1)}
                           style={styles.miniBtn}
                         >
-                          <Minus size={14} color={theme.primary} />
+                          <Minus size={20} color={theme.primary} />
                         </TouchableOpacity>
                         <Text style={[styles.cartQty, { color: theme.text }]}>
                           {item.qty}
@@ -678,13 +678,13 @@ export default function CreateWineRequest() {
                           onPress={() => updateQty(item.wine.id, 1)}
                           style={styles.miniBtn}
                         >
-                          <Plus size={14} color={theme.primary} />
+                          <Plus size={20} color={theme.primary} />
                         </TouchableOpacity>
                         <TouchableOpacity
                           onPress={() => removeItem(item.wine.id)}
-                          style={[styles.miniBtn, { marginLeft: 4 }]}
+                          style={[styles.miniBtn, { marginLeft: 8 }]}
                         >
-                          <Trash2 size={14} color={theme.danger} />
+                          <Trash2 size={20} color={theme.danger} />
                         </TouchableOpacity>
                       </View>
                     </View>
@@ -937,11 +937,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   miniBtn: {
-    padding: 4,
+    padding: 10,
+    justifyContent: "center",
+    alignItems: "center",
   },
   cartQty: {
-    fontSize: 13,
+    fontSize: 16,
     fontWeight: "900",
+    minWidth: 28,
+    textAlign: "center",
   },
   submitButton: {
     height: 56,
