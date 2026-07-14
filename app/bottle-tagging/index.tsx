@@ -17,11 +17,11 @@ import {
   Camera,
   CheckCircle2,
   ChevronLeft,
+  Info,
   Minus,
   Plus,
   Search,
-  X,
-  Info
+  X
 } from "lucide-react-native";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -40,6 +40,10 @@ import {
 const NEXT_JS_API_URL = "https://caveauone.vercel.app";
 
 type Phase = "search" | "confirm" | "verify" | "success" | "no_match";
+
+interface MasterWineWithCount extends MasterWine {
+  untaggedCount?: number;
+}
 
 // ─── Wine Matching Helpers ───────────────────────────────────────────────────
 function normalizeStr(s: string): string {
@@ -85,7 +89,7 @@ export default function BottleTaggingScreen() {
 
   const [phase, setPhase] = useState<Phase>("search");
   const [loading, setLoading] = useState(false);
-  const [masterWines, setMasterWines] = useState<MasterWine[]>([]);
+  const [masterWines, setMasterWines] = useState<MasterWineWithCount[]>([]);
 
   // Phase 1: Search
   const [searchQuery, setSearchQuery] = useState("");
@@ -97,7 +101,7 @@ export default function BottleTaggingScreen() {
   const cameraRef = useRef<CameraView>(null);
 
   // Phase 2: Confirm
-  const [selectedWine, setSelectedWine] = useState<MasterWine | null>(null);
+  const [selectedWine, setSelectedWine] = useState<MasterWineWithCount | null>(null);
   const [untaggedBottles, setUntaggedBottles] = useState<InventoryBottle[]>([]);
   const [qtyToTag, setQtyToTag] = useState(1);
 
@@ -116,16 +120,24 @@ export default function BottleTaggingScreen() {
       const untaggedQ = query(collection(db, "inventory_bottles"), where("isTagged", "==", false));
       const untaggedSnap = await getDocs(untaggedQ);
 
-      // 2. Extract unique master wine IDs
-      const untaggedWineIds = new Set(
-        untaggedSnap.docs.map((d) => d.data().masterWineRef?.id).filter(Boolean)
-      );
+      // 2. Extract unique master wine IDs and their counts
+      const untaggedCounts: Record<string, number> = {};
+      untaggedSnap.docs.forEach((d) => {
+        const id = d.data().masterWineRef?.id;
+        if (id) {
+          untaggedCounts[id] = (untaggedCounts[id] || 0) + 1;
+        }
+      });
 
       // 3. Fetch master wines and filter
       const snap = await getDocs(collection(db, "master_wines"));
       const wines = snap.docs
-        .filter((doc) => untaggedWineIds.has(doc.id))
-        .map((doc) => ({ id: doc.id, ...doc.data() } as MasterWine));
+        .filter((doc) => untaggedCounts[doc.id] > 0)
+        .map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+          untaggedCount: untaggedCounts[doc.id],
+        } as MasterWineWithCount));
 
       setMasterWines(wines);
     } catch (err) {
@@ -159,7 +171,7 @@ export default function BottleTaggingScreen() {
       console.log("AI Result:", aiResult);
 
       // Find best match in master wines
-      let bestMatch = null;
+      let bestMatch: MasterWineWithCount | null = null;
       let highestScore = 0;
 
       for (const wine of masterWines) {
@@ -189,7 +201,7 @@ export default function BottleTaggingScreen() {
     }
   };
 
-  const handleSelectWine = async (wine: MasterWine) => {
+  const handleSelectWine = async (wine: MasterWineWithCount) => {
     setLoading(true);
     setSelectedWine(wine);
     try {
@@ -375,8 +387,17 @@ export default function BottleTaggingScreen() {
                   >
                     <View style={styles.wineHeader}>
                       <Text style={styles.wineName}>{item.name}</Text>
-                      <View style={styles.wineBadge}>
-                        <Text style={styles.wineVintage}>{item.vintage}</Text>
+                      <View style={{ flexDirection: "row", alignItems: "center" }}>
+                        {item.untaggedCount && (
+                          <View style={[styles.wineBadge, { backgroundColor: "#4f46e5", marginLeft: 0 }]}>
+                            <Text style={[styles.wineVintage, { color: "#fff" }]}>
+                              {item.untaggedCount} {item.untaggedCount === 1 ? "Bottle" : "Bottles"}
+                            </Text>
+                          </View>
+                        )}
+                        <View style={styles.wineBadge}>
+                          <Text style={styles.wineVintage}>{item.vintage}</Text>
+                        </View>
                       </View>
                     </View>
                     <Text style={styles.wineMeta}>
@@ -411,56 +432,67 @@ export default function BottleTaggingScreen() {
             </View>
           </View>
 
-          <View style={styles.statsCard}>
-            <Text style={styles.statsLabel}>Untagged Bottles</Text>
-            <Text style={styles.statsBigValue}>{untaggedBottles.length}</Text>
-            <Text style={styles.statsSub}>Status: Untagged</Text>
-          </View>
+          {untaggedBottles.length > 0 ? (
+            <View style={{ flexDirection: "row", gap: 16, marginBottom: 24 }}>
+              <View style={[styles.statsCard, { flex: 1, marginBottom: 0, padding: 16 }]}>
+                <Text style={styles.statsLabel}>Untagged</Text>
+                <Text style={[styles.statsBigValue, { fontSize: 48 }]}>{untaggedBottles.length}</Text>
+                <Text style={styles.statsSub}>Bottles</Text>
+              </View>
+
+              <View style={[styles.statsCard, { flex: 1.5, marginBottom: 0, padding: 16, justifyContent: "center" }]}>
+                <Text style={styles.statsLabel}>Tagging Now</Text>
+                <View style={[styles.qtyControls, { marginBottom: 0, marginTop: 16, gap: 12 }]}>
+                  <TouchableOpacity
+                    style={[styles.qtyBtn, { width: 52, height: 52 }]}
+                    onPress={() => setQtyToTag(Math.max(1, qtyToTag - 1))}
+                  >
+                    <Minus size={28} color="#fff" />
+                  </TouchableOpacity>
+                  <TextInput
+                    style={[styles.qtyValue, { flex: 1, minWidth: 60, height: 60, fontSize: 32 }]}
+                    value={qtyToTag > 0 ? String(qtyToTag) : ""}
+                    keyboardType="number-pad"
+                    onChangeText={(val) => {
+                      if (val === "") {
+                        setQtyToTag(0);
+                      } else {
+                        const parsed = parseInt(val.replace(/[^0-9]/g, ""), 10);
+                        if (!isNaN(parsed)) {
+                          setQtyToTag(Math.min(untaggedBottles.length, parsed));
+                        }
+                      }
+                    }}
+                    onBlur={() => {
+                      if (qtyToTag < 1) setQtyToTag(1);
+                    }}
+                  />
+                  <TouchableOpacity
+                    style={[styles.qtyBtn, { width: 52, height: 52 }]}
+                    onPress={() =>
+                      setQtyToTag(Math.min(untaggedBottles.length, qtyToTag + 1))
+                    }
+                  >
+                    <Plus size={28} color="#fff" />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          ) : (
+            <View style={styles.statsCard}>
+              <Text style={styles.statsLabel}>Untagged Bottles</Text>
+              <Text style={styles.statsBigValue}>{untaggedBottles.length}</Text>
+              <Text style={styles.statsSub}>Status: Untagged</Text>
+            </View>
+          )}
 
           {untaggedBottles.length > 0 ? (
-            <View style={styles.qtySection}>
-              <Text style={styles.qtyLabel}>How many to tag now?</Text>
-              <View style={styles.qtyControls}>
-                <TouchableOpacity
-                  style={styles.qtyBtn}
-                  onPress={() => setQtyToTag(Math.max(1, qtyToTag - 1))}
-                >
-                  <Minus size={24} color="#fff" />
-                </TouchableOpacity>
-                <TextInput
-                  style={styles.qtyValue}
-                  value={qtyToTag > 0 ? String(qtyToTag) : ""}
-                  keyboardType="number-pad"
-                  onChangeText={(val) => {
-                    if (val === "") {
-                      setQtyToTag(0);
-                    } else {
-                      const parsed = parseInt(val.replace(/[^0-9]/g, ""), 10);
-                      if (!isNaN(parsed)) {
-                        setQtyToTag(Math.min(untaggedBottles.length, parsed));
-                      }
-                    }
-                  }}
-                  onBlur={() => {
-                    if (qtyToTag < 1) setQtyToTag(1);
-                  }}
-                />
-                <TouchableOpacity
-                  style={styles.qtyBtn}
-                  onPress={() =>
-                    setQtyToTag(Math.min(untaggedBottles.length, qtyToTag + 1))
-                  }
-                >
-                  <Plus size={24} color="#fff" />
-                </TouchableOpacity>
-              </View>
-              <TouchableOpacity
-                style={styles.primaryButton}
-                onPress={handleConfirmQty}
-              >
-                <Text style={styles.primaryButtonText}>Start Verification</Text>
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity
+              style={styles.primaryButton}
+              onPress={handleConfirmQty}
+            >
+              <Text style={styles.primaryButtonText}>Start Verification</Text>
+            </TouchableOpacity>
           ) : (
             <View style={styles.emptyState}>
               <CheckCircle2 size={48} color="#10b981" />
@@ -800,15 +832,23 @@ const styles = StyleSheet.create({
   },
   qtyBtn: {
     backgroundColor: "#334155",
-    padding: 16,
-    borderRadius: 16,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: "center",
+    justifyContent: "center",
   },
   qtyValue: {
+    backgroundColor: "#1e293b",
     color: "#fff",
-    fontSize: 32,
+    fontSize: 48,
     fontWeight: "900",
-    minWidth: 50,
+    minWidth: 120,
+    height: 80,
     textAlign: "center",
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: "#4f46e5",
   },
   primaryButton: {
     backgroundColor: "#4f46e5",

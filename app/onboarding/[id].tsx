@@ -1862,7 +1862,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  itemInfo: { flex: 1 },
+  itemInfo: { flex: 1, paddingLeft: 10 },
   producerText: {
     color: "#64748b",
     fontSize: 10,
