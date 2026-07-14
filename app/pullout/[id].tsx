@@ -2,6 +2,7 @@ import { Collapsible } from "@/components/ui/collapsible";
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { db } from "@/lib/firebase";
+import { logActivity } from "@/lib/utils/activityLogger";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import {
@@ -16,7 +17,6 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
-import { logActivity } from "@/lib/utils/activityLogger";
 
 import {
   AlertCircle,
@@ -24,8 +24,7 @@ import {
   ChevronLeft,
   MapPin,
   PackageSearch,
-  ScanQrCode,
-  Search,
+  Search
 } from "lucide-react-native";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -202,9 +201,8 @@ export default function PulloutDetailScreen() {
         action: "PULLOUT_BOTTLE_SCANNED",
         entity: "pullout_requests",
         entityId: request.id,
-        summary: `Pulled bottle ${bottleData.id} (${updatedItems[itemIndex].wineName}) for pullout ${request.id}${
-          allFulfilled ? " — request now complete" : ""
-        }`,
+        summary: `Pulled bottle ${bottleData.id} (${updatedItems[itemIndex].wineName}) for pullout ${request.id}${allFulfilled ? " — request now complete" : ""
+          }`,
         details: {
           bottleId: bottleData.id,
           wineName: updatedItems[itemIndex].wineName,
@@ -284,10 +282,10 @@ export default function PulloutDetailScreen() {
         },
         remaining > 1
           ? {
-              text: `Skip All Remaining (${remaining})`,
-              style: "destructive",
-              onPress: () => processSkip(index, remaining),
-            }
+            text: `Skip All Remaining (${remaining})`,
+            style: "destructive",
+            onPress: () => processSkip(index, remaining),
+          }
           : null,
       ].filter(Boolean) as any,
     );
@@ -358,9 +356,8 @@ export default function PulloutDetailScreen() {
                 action: "PULLOUT_COMPLETED",
                 entity: "pullout_requests",
                 entityId: id as string,
-                summary: `Pullout request ${id} completed by ${profile?.email} — ${
-                  request.items.reduce((s, i) => s + i.pulledQty, 0)
-                } bottle(s) pulled`,
+                summary: `Pullout request ${id} completed by ${profile?.email} — ${request.items.reduce((s, i) => s + i.pulledQty, 0)
+                  } bottle(s) pulled`,
                 details: {
                   totalPulled: request.items.reduce((s, i) => s + i.pulledQty, 0),
                   totalSkipped: request.items.reduce((s, i) => s + (i.skippedQty || 0), 0),
@@ -540,7 +537,7 @@ export default function PulloutDetailScreen() {
   };
 
   if (!permission) return <View />;
-  if (!permission.granted && scanning) {
+  if (!permission.granted) {
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
         <Text style={[styles.permissionText, { color: theme.textSecondary }]}>
@@ -846,10 +843,10 @@ export default function PulloutDetailScreen() {
                       isFullyPulled && styles.itemCardFulfilled,
                       isFullySkipped && styles.itemCardSkipped,
                       isPartiallySkipped &&
-                        isFullyAddressed &&
-                        !isFullyPulled &&
-                        !isFullySkipped &&
-                        styles.itemCardWarning,
+                      isFullyAddressed &&
+                      !isFullyPulled &&
+                      !isFullySkipped &&
+                      styles.itemCardWarning,
                     ]}
                   >
                     <View style={styles.itemMain}>
@@ -1010,16 +1007,16 @@ export default function PulloutDetailScreen() {
           {request.status !== "completed" && request.items.every(
             (i) => i.pulledQty + (i.skippedQty || 0) >= i.requestedQty,
           ) && (
-            <View style={styles.footer}>
-              <TouchableOpacity
-                style={[styles.completeButton]}
-                onPress={handleCompleteRequest}
-              >
-                <CheckCircle2 size={24} color="#fff" strokeWidth={2.5} />
-                <Text style={styles.completeButtonText}>Finalize Task</Text>
-              </TouchableOpacity>
-            </View>
-          )}
+              <View style={styles.footer}>
+                <TouchableOpacity
+                  style={[styles.completeButton]}
+                  onPress={handleCompleteRequest}
+                >
+                  <CheckCircle2 size={24} color="#fff" strokeWidth={2.5} />
+                  <Text style={styles.completeButtonText}>Finalize Task</Text>
+                </TouchableOpacity>
+              </View>
+            )}
         </>
       ) : (
         <Text style={[styles.errorText, { color: theme.danger }]}>
