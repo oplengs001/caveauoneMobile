@@ -1,9 +1,9 @@
+import AdminDashboard from "@/components/AdminDashboard";
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { auth, db } from "@/lib/firebase";
 import { countBottlesForStoreDashboard, getSalesByPeriod, getStores } from "@/lib/queries";
 import { Delivery, PulloutRequest, WineRequest } from "@/types";
-import AdminDashboard from "@/components/AdminDashboard";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
 import { signOut } from "firebase/auth";
@@ -24,10 +24,10 @@ import {
   LayoutList,
   LogOut,
   MapPin,
+  QrCode,
   Search,
   Truck,
   Wine,
-  QrCode,
 } from "lucide-react-native";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -928,9 +928,9 @@ export default function HomeScreen() {
               onPress={() => router.push("/wine-requests")}
             >
               <View style={styles.buttonContent}>
-                <ClipboardList size={42} color="#ffffff" strokeWidth={1.5} />
+                <ClipboardList size={32} color="#ffffff" strokeWidth={1.5} />
                 <View style={styles.buttonTextContainer}>
-                  <Text style={[styles.buttonTitle, { fontSize: 24 }]}>
+                  <Text style={styles.buttonTitle}>
                     Wine Requests
                   </Text>
                   <Text style={styles.buttonDesc}>
@@ -945,14 +945,14 @@ export default function HomeScreen() {
             <TouchableOpacity
               style={[
                 styles.actionButton,
-                { backgroundColor: "#0f766e", borderRadius: 24, padding: 32 },
+                { backgroundColor: "#0f766e" },
               ]}
               onPress={() => router.push("/store-master-list")}
             >
               <View style={styles.buttonContent}>
-                <LayoutList size={42} color="#ffffff" strokeWidth={1.5} />
+                <LayoutList size={32} color="#ffffff" strokeWidth={1.5} />
                 <View style={styles.buttonTextContainer}>
-                  <Text style={[styles.buttonTitle, { fontSize: 24 }]}>
+                  <Text style={styles.buttonTitle}>
                     Stock Management
                   </Text>
                   <Text style={styles.buttonDesc}>
@@ -1045,16 +1045,16 @@ export default function HomeScreen() {
             <TouchableOpacity
               style={[
                 styles.actionButton,
-                { backgroundColor: "#10b981", borderRadius: 24, padding: 32 },
+                { backgroundColor: "#10b981" },
               ]}
               onPress={() =>
                 router.push({ pathname: "/tagging", params: { mode: "sell" } })
               }
             >
               <View style={styles.buttonContent}>
-                <Banknote size={42} color="#ffffff" strokeWidth={1.5} />
+                <Banknote size={32} color="#ffffff" strokeWidth={1.5} />
                 <View style={styles.buttonTextContainer}>
-                  <Text style={[styles.buttonTitle, { fontSize: 24 }]}>
+                  <Text style={styles.buttonTitle}>
                     Sell Bottle
                   </Text>
                   <Text style={styles.buttonDesc}>
@@ -1117,7 +1117,7 @@ const styles = StyleSheet.create({
   },
   header: {
     marginTop: 40,
-    marginBottom: 48,
+    marginBottom: 32,
   },
   headerTop: {
     flexDirection: "row",
@@ -1131,16 +1131,16 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   signOutButton: {
-    width: 44,
-    height: 44,
+    width: 40,
+    height: 40,
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
   },
   logoBadge: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     backgroundColor: "#4f46e5",
     alignItems: "center",
     justifyContent: "center",
@@ -1150,25 +1150,26 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
   },
   title: {
-    fontSize: 28,
+    fontSize: 22,
     fontWeight: "900",
     textTransform: "uppercase",
   },
   subtitle: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "600",
     marginTop: 4,
   },
   metricsDashboard: {
-    marginBottom: 32,
+    marginBottom: 28,
+    backgroundColor: "transparent",
   },
   metricsTitle: {
     color: "#475569",
-    fontSize: 14,
+    fontSize: 11,
     fontWeight: "900",
     textTransform: "uppercase",
-    letterSpacing: 1,
-    marginBottom: 16,
+    letterSpacing: 1.5,
+    marginBottom: 14,
     paddingHorizontal: 4,
   },
   responsiveGrid: {
@@ -1181,22 +1182,22 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   metricCard: {
-    width: 140, // Keeps original width for non-responsive scroll views (Inventory Alerts)
-    height: 160,
-    borderRadius: 24,
+    width: 140,
+    height: 140,
+    borderRadius: 16,
     padding: 16,
     alignItems: "center",
     justifyContent: "center",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 4,
   },
   metricCount: {
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: "900",
-    marginTop: 8,
+    marginTop: 6,
     marginBottom: 4,
   },
   metricLabel: {
@@ -1214,34 +1215,34 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   buttonContainer: {
-    gap: 20,
+    gap: 14,
   },
   actionButton: {
-    borderRadius: 24,
-    padding: 24,
-    elevation: 8,
+    borderRadius: 20,
+    padding: 20,
+    elevation: 4,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.2,
-    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
   },
   buttonContent: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 20,
+    gap: 16,
   },
   buttonTextContainer: {
     flex: 1,
   },
   buttonTitle: {
-    fontSize: 20,
-    fontWeight: "800",
+    fontSize: 16,
+    fontWeight: "900",
     color: "#ffffff",
     marginBottom: 2,
   },
   buttonDesc: {
     fontSize: 12,
-    color: "rgba(255, 255, 255, 0.8)",
+    color: "rgba(255, 255, 255, 0.7)",
     fontWeight: "500",
   },
   filterButton: {
@@ -1278,25 +1279,25 @@ const styles = StyleSheet.create({
   requestCard: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 16,
-    borderRadius: 16,
+    padding: 14,
+    borderRadius: 14,
     borderWidth: 1,
-    gap: 16,
+    gap: 12,
   },
   requestCardIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Colors.store.primary + "15",
   },
   requestCardTitle: {
     fontWeight: "700",
-    fontSize: 14,
+    fontSize: 13,
   },
   requestCardSubtitle: {
-    fontSize: 12,
+    fontSize: 11,
     color: "#64748b",
     marginTop: 2,
   },

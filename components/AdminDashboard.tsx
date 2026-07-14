@@ -2,7 +2,7 @@ import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { auth, db } from "@/lib/firebase";
 import { getSalesByPeriodAllStores, getStores } from "@/lib/queries";
-import { Store, PulloutRequest, Delivery } from "@/types";
+import { Delivery, PulloutRequest } from "@/types";
 import { useFocusEffect, useRouter } from "expo-router";
 import { signOut } from "firebase/auth";
 import {
@@ -18,11 +18,10 @@ import {
   Banknote,
   Building2,
   ClipboardList,
-  FileDown,
   LogOut,
   Search,
   Truck,
-  Wine,
+  Wine
 } from "lucide-react-native";
 import React, { useCallback, useState } from "react";
 import {
@@ -493,17 +492,6 @@ export default function AdminDashboard() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.actionTitle}>Bottle Management</Text>
                 <Text style={styles.actionDesc}>Search inventory across all stores</Text>
-              </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.actionBtn, { backgroundColor: "#0f766e" }]}
-              onPress={() => router.push("/onboarding")}
-            >
-              <FileDown size={32} color="#fff" strokeWidth={1.5} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.actionTitle}>Onboarding Tasks</Text>
-                <Text style={styles.actionDesc}>Review & process new wine deliveries</Text>
               </View>
             </TouchableOpacity>
           </View>
