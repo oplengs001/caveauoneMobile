@@ -283,10 +283,34 @@ export default function SellScreen() {
         },
       });
 
+      // Create a sales record
+      await addDoc(collection(db, "sales"), {
+        bottleId: selectedBottleId,
+        masterWineId: selectedWine?.id || null,
+        wineName: selectedWine?.name,
+        vintage: selectedWine?.vintage,
+        producer: selectedWine?.producer,
+        format: selectedWine?.format,
+        storeId: profile?.locationId || null,
+        soldById: profile?.id,
+        soldByEmail: profile?.email,
+        soldAt: serverTimestamp(),
+        price: netPrice,
+        vatAmount,
+        totalAmount,
+        vatMode: storeVatMode,
+        customerId: selectedCustomer?.id || null,
+        customerName: selectedCustomer?.name || null,
+        isFastMoving,
+        masterWinePrice: selectedWine?.price || null,
+      });
+
+      // Update customer spend if selected
       if (selectedCustomer?.id) {
         await updateDoc(doc(db, "customers", selectedCustomer.id), {
           totalSpend: increment(totalAmount),
           totalOrders: increment(1),
+          lastPurchaseDate: serverTimestamp(),
           updatedAt: serverTimestamp(),
         });
       }

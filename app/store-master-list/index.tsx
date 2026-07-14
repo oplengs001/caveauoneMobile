@@ -28,13 +28,13 @@ import {
   Package,
   RefreshCw,
   Search,
+  Star,
   TrendingDown,
   TrendingUp,
   Truck,
   Wine,
   X,
-  Zap,
-  Tag,
+  Zap
 } from "lucide-react-native";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -170,8 +170,7 @@ export default function StoreMasterListScreen() {
   const [sheetSafety, setSheetSafety] = useState("");
   const [sheetSellingPrice, setSheetSellingPrice] = useState("");
   const [sheetDiscontinued, setSheetDiscontinued] = useState(false);
-  const [sheetIsFastMoving, setSheetIsFastMoving] = useState(false);
-  const [sheetIsReserve, setSheetIsReserve] = useState(false);
+  const [sheetWineCategory, setSheetWineCategory] = useState<"fast" | "fine" | "reserve" | "none">("none");
   const [sheetVatMode, setSheetVatMode] = useState<"included" | "excluded">("excluded");
   const [saving, setSaving] = useState(false);
   const [requesting, setRequesting] = useState(false);
@@ -358,8 +357,13 @@ export default function StoreMasterListScreen() {
     setSheetSafety(entry.setting?.safetyStock?.toString() ?? "");
     setSheetSellingPrice(entry.setting?.sellingPrice?.toString() ?? "");
     setSheetDiscontinued(entry.setting?.discontinued ?? false);
-    setSheetIsFastMoving(entry.setting?.isFastMoving ?? false);
-    setSheetIsReserve(entry.setting?.isReserve ?? false);
+
+    let cat: "fast" | "fine" | "reserve" | "none" = "none";
+    if (entry.setting?.isFastMoving) cat = "fast";
+    else if (entry.setting?.isFineWine) cat = "fine";
+    else if (entry.setting?.isReserve) cat = "reserve";
+    setSheetWineCategory(cat);
+
     setSheetVatMode(entry.setting?.vatMode ?? "excluded");
   };
 
@@ -386,8 +390,9 @@ export default function StoreMasterListScreen() {
         safetyStock: safety,
         sellingPrice: sheetSellingPrice ? parseFloat(sheetSellingPrice) : null,
         discontinued: sheetDiscontinued,
-        isFastMoving: sheetIsFastMoving,
-        isReserve: sheetIsReserve,
+        isFastMoving: sheetWineCategory === "fast",
+        isFineWine: sheetWineCategory === "fine",
+        isReserve: sheetWineCategory === "reserve",
         vatMode: sheetVatMode,
         updatedAt: serverTimestamp(),
         createdAt: selected.setting?.createdAt ?? serverTimestamp(),
@@ -593,7 +598,7 @@ export default function StoreMasterListScreen() {
           </View>
         </View>
 
-        {(item.setting?.isFastMoving || item.setting?.isReserve) && (
+        {(item.setting?.isFastMoving || item.setting?.isFineWine || item.setting?.isReserve) && (
           <View style={styles.tagsRow}>
             {item.setting?.isFastMoving && (
               <View
@@ -601,7 +606,17 @@ export default function StoreMasterListScreen() {
               >
                 <Zap size={10} color="#d97706" strokeWidth={2.5} />
                 <Text style={[styles.indicatorText, { color: "#d97706" }]}>
-                  Fast Moving
+                  Fast Wine
+                </Text>
+              </View>
+            )}
+            {item.setting?.isFineWine && (
+              <View
+                style={[styles.indicatorBadge, { backgroundColor: "#fce7f3" }]}
+              >
+                <Star size={10} color="#be185d" strokeWidth={2.5} />
+                <Text style={[styles.indicatorText, { color: "#be185d" }]}>
+                  Fine Wine
                 </Text>
               </View>
             )}
@@ -611,7 +626,7 @@ export default function StoreMasterListScreen() {
               >
                 <Lock size={10} color="#4338ca" strokeWidth={2.5} />
                 <Text style={[styles.indicatorText, { color: "#4338ca" }]}>
-                  Reserve
+                  Reserved Wine
                 </Text>
               </View>
             )}
@@ -1206,43 +1221,52 @@ export default function StoreMasterListScreen() {
               {/* --- SETTINGS LIST: SWITCHES --- */}
               <View style={[styles.settingsCard, { marginTop: 20 }]}>
 
-                {/* Fast Moving */}
-                <View style={styles.settingRow}>
-                  <View style={styles.settingTextContainer}>
-                    <Text style={styles.fieldLabel}>FAST MOVING</Text>
+                {/* Wine Category Selection */}
+                <View style={[styles.settingRow, { alignItems: "flex-start", paddingVertical: 16 }]}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.fieldLabel}>WINE CATEGORY</Text>
                     <Text style={styles.fieldHint}>
-                      Identifies this wine as a high-turnover item.
+                      Classify this wine to affect its prominence and handling.
                     </Text>
-                  </View>
-                  <Switch
-                    value={sheetIsFastMoving}
-                    onValueChange={setSheetIsFastMoving}
-                    trackColor={{
-                      false: "#e2e8f0",
-                      true: theme.primary + "60",
-                    }}
-                    thumbColor={sheetIsFastMoving ? theme.primary : "#94a3b8"}
-                  />
-                </View>
-                <View style={styles.divider} />
 
-                {/* Reserve */}
-                <View style={styles.settingRow}>
-                  <View style={styles.settingTextContainer}>
-                    <Text style={styles.fieldLabel}>RESERVE STOCK</Text>
-                    <Text style={styles.fieldHint}>
-                      Marks this as a special/private stock, not for regular sale.
-                    </Text>
+                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
+                      {[
+                        { id: "none", label: "Standard", icon: null, color: theme.textSecondary },
+                        { id: "fast", label: "Fast Wine", icon: Zap, color: "#d97706", bg: "#fef3c7" },
+                        { id: "fine", label: "Fine Wine", icon: Star, color: "#be185d", bg: "#fce7f3" },
+                        { id: "reserve", label: "Reserved Wine", icon: Lock, color: "#4338ca", bg: "#e0e7ff" }
+                      ].map(cat => {
+                        const isSelected = sheetWineCategory === cat.id;
+                        const Icon = cat.icon;
+                        return (
+                          <TouchableOpacity
+                            key={cat.id}
+                            onPress={() => setSheetWineCategory(cat.id as any)}
+                            style={{
+                              flexDirection: "row",
+                              alignItems: "center",
+                              gap: 6,
+                              paddingVertical: 8,
+                              paddingHorizontal: 12,
+                              borderRadius: 16,
+                              borderWidth: 1,
+                              borderColor: isSelected ? cat.color : theme.border,
+                              backgroundColor: isSelected ? (cat.bg || theme.card) : "transparent",
+                            }}
+                          >
+                            {Icon && <Icon size={14} color={isSelected ? cat.color : theme.textSecondary} />}
+                            <Text style={{
+                              fontSize: 12,
+                              fontWeight: isSelected ? "700" : "500",
+                              color: isSelected ? cat.color : theme.textSecondary
+                            }}>
+                              {cat.label}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
                   </View>
-                  <Switch
-                    value={sheetIsReserve}
-                    onValueChange={setSheetIsReserve}
-                    trackColor={{
-                      false: "#e2e8f0",
-                      true: theme.primary + "60",
-                    }}
-                    thumbColor={sheetIsReserve ? theme.primary : "#94a3b8"}
-                  />
                 </View>
                 <View style={styles.divider} />
 
@@ -1278,18 +1302,7 @@ export default function StoreMasterListScreen() {
                 )}
               </TouchableOpacity>
 
-              {selected && selected.stockCount > 0 && (
-                <TouchableOpacity
-                  style={[styles.saveBtn, { backgroundColor: "#10b981", marginTop: 12, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 8 }]}
-                  onPress={() => {
-                    closeSheet();
-                    router.push(`/sell?wineId=${selected.masterWine.id}`);
-                  }}
-                >
-                  <Tag size={18} color="#fff" strokeWidth={2.5} />
-                  <Text style={styles.saveBtnText}>SELL A BOTTLE</Text>
-                </TouchableOpacity>
-              )}
+
 
               {selected?.activeRequest ? (
                 <TouchableOpacity

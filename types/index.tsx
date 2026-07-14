@@ -219,6 +219,7 @@ export interface StoreWineSetting {
   updatedAt: any;
   isFastMoving: boolean;
   isReserve: boolean;
+  isFineWine?: boolean;
   sellingPrice?: number;
   vatMode?: "included" | "excluded";
 }
