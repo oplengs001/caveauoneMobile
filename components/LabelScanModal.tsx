@@ -171,9 +171,14 @@ export default function LabelScanModal({
         });
       }
 
-      if (bottles.length > 0) {
+      const uniqueLocations = new Set(bottles.map(b => b.locationName));
+
+      if (uniqueLocations.size <= 1 && bottles.length > 0) {
         onBottleSelected(bottles[0].bottleId);
         onClose();
+      } else if (uniqueLocations.size > 1) {
+        setBottlesList(bottles);
+        setPhase("bottle_picker");
       } else {
         alert("No bottles available for this wine.");
         setPhase("camera");
@@ -280,6 +285,20 @@ export default function LabelScanModal({
             </View>
           </View>
         ) : null}
+
+        {phase === "bottle_picker" && (
+          <BottlePickerModal
+            visible={true}
+            onClose={onClose}
+            onBottleSelected={(id) => {
+              onBottleSelected(id);
+              onClose();
+            }}
+            bottles={bottlesList}
+            title={`Select Storage Unit`}
+            theme={theme}
+          />
+        )}
       </View>
     </Modal>
   );

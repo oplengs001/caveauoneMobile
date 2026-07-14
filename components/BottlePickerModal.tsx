@@ -70,34 +70,25 @@ export default function BottlePickerModal({
             ) : (
               locationNames.map((locName) => (
                 <View key={locName} style={styles.groupContainer}>
-                  <View style={styles.groupHeader}>
-                    <MapPin size={16} color={theme.primary} />
-                    <Text style={[styles.groupTitle, { color: theme.primary }]}>
-                      {locName}
-                    </Text>
-                  </View>
-
-                  <View style={[styles.bottleList, { borderColor: theme.border }]}>
-                    {groupedBottles[locName].map((bottle) => (
-                      <TouchableOpacity
-                        key={bottle.bottleId}
-                        style={[styles.bottleRow, { borderBottomColor: theme.border }]}
-                        onPress={() => onBottleSelected(bottle.bottleId)}
-                      >
-                        <View style={styles.bottleInfo}>
-                          <Text style={[styles.bottleLabel, { color: theme.text }]}>
-                            Bottle ID
-                          </Text>
-                          <Text style={[styles.bottleId, { color: theme.textSecondary }]}>
-                            {bottle.bottleId.toUpperCase()}
-                          </Text>
-                        </View>
-                        <View style={[styles.selectBtn, { backgroundColor: theme.primary }]}>
-                          <Text style={styles.selectBtnText}>Select</Text>
-                        </View>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
+                  <TouchableOpacity
+                    style={[styles.bottleList, { borderColor: theme.border, padding: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }]}
+                    onPress={() => onBottleSelected(groupedBottles[locName][0].bottleId)}
+                  >
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
+                      <View style={{ backgroundColor: theme.primary + "20", padding: 12, borderRadius: 12 }}>
+                        <MapPin size={24} color={theme.primary} />
+                      </View>
+                      <View>
+                        <Text style={[styles.groupTitle, { color: theme.text }]}>{locName}</Text>
+                        <Text style={{ color: theme.textSecondary, marginTop: 4 }}>
+                          {groupedBottles[locName].length} bottle(s) available
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={[styles.selectBtn, { backgroundColor: theme.primary }]}>
+                      <Text style={styles.selectBtnText}>Select</Text>
+                    </View>
+                  </TouchableOpacity>
                 </View>
               ))
             )}

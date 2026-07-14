@@ -78,6 +78,7 @@ export default function SellScreen() {
   // Verification UI
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [isLabelModalOpen, setIsLabelModalOpen] = useState(false);
+  const [isPickerModalOpen, setIsPickerModalOpen] = useState(false);
   
   // Sell Form
   const [salePrice, setSalePrice] = useState("");
@@ -574,8 +575,11 @@ export default function SellScreen() {
             <TouchableOpacity 
               style={[styles.verifyOptionBtn, { backgroundColor: theme.card, borderColor: theme.border }]}
               onPress={() => {
-                if (bottlesList.length > 0) {
+                const uniqueLocs = new Set(bottlesList.map(b => b.locationName));
+                if (uniqueLocs.size <= 1 && bottlesList.length > 0) {
                   handleBottleSelected(bottlesList[0].bottleId);
+                } else if (uniqueLocs.size > 1) {
+                  setIsPickerModalOpen(true);
                 }
               }}
             >
@@ -597,6 +601,15 @@ export default function SellScreen() {
           storeId={profile?.locationId}
           masterWineId={selectedWine?.id}
           masterWineName={selectedWine?.name}
+          theme={theme}
+        />
+
+        <BottlePickerModal
+          visible={isPickerModalOpen}
+          onClose={() => setIsPickerModalOpen(false)}
+          onBottleSelected={handleBottleSelected}
+          bottles={bottlesList}
+          title="Select Storage Unit"
           theme={theme}
         />
       </View>
