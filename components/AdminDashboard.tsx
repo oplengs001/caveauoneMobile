@@ -70,6 +70,7 @@ export default function AdminDashboard() {
   const [loadingTasks, setLoadingTasks] = useState(true);
 
   const [refreshing, setRefreshing] = useState(false);
+  const [isFirstLoad, setIsFirstLoad] = useState(true);
 
   // ── Sales metrics ──────────────────────────────────────────────────────────
   const fetchSalesMetrics = useCallback(async () => {
@@ -201,6 +202,7 @@ export default function AdminDashboard() {
 
   const loadAll = useCallback(async () => {
     await Promise.all([fetchSalesMetrics(), fetchStoreAlerts(), fetchTasks()]);
+    setIsFirstLoad(false);
   }, [fetchSalesMetrics, fetchStoreAlerts, fetchTasks]);
 
   useFocusEffect(
@@ -232,9 +234,8 @@ export default function AdminDashboard() {
   const totalAlertStores = storeAlerts.filter(
     (s) => s.stockout + s.parAlert + s.underSafety > 0
   ).length;
-  const allDataLoaded = !loadingSales && !loadingAlerts && !loadingTasks;
 
-  if (!allDataLoaded && !refreshing) {
+  if (isFirstLoad) {
     return (
       <View style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
         <View style={[styles.logoBadge]}>
@@ -248,6 +249,7 @@ export default function AdminDashboard() {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView
+        style={{ flex: 1 }}
         contentContainerStyle={styles.scrollContent}
         refreshControl={
           <RefreshControl
@@ -314,15 +316,23 @@ export default function AdminDashboard() {
               onPress={() => router.push({ pathname: "/sales", params: { period: salesPeriod } })}
             >
               <Banknote size={22} color="#fff" strokeWidth={2.5} />
-              <Text style={styles.metricValue} numberOfLines={1} adjustsFontSizeToFit>
-                {formatCurrency(salesMetrics.totalRevenue)}
-              </Text>
+              {loadingSales && !isFirstLoad && !refreshing ? (
+                <ActivityIndicator color="#fff" size="small" style={{ marginVertical: 2 }} />
+              ) : (
+                <Text style={styles.metricValue} numberOfLines={1} adjustsFontSizeToFit>
+                  {formatCurrency(salesMetrics.totalRevenue)}
+                </Text>
+              )}
               <Text style={styles.metricLabel}>Total Revenue</Text>
             </TouchableOpacity>
 
             <View style={[styles.metricCard, { backgroundColor: theme.secondary, flex: 1 }]}>
               <Wine size={22} color="#fff" strokeWidth={2.5} />
-              <Text style={styles.metricValue}>{salesMetrics.totalItems}</Text>
+              {loadingSales && !isFirstLoad && !refreshing ? (
+                <ActivityIndicator color="#fff" size="small" style={{ marginVertical: 2 }} />
+              ) : (
+                <Text style={styles.metricValue}>{salesMetrics.totalItems}</Text>
+              )}
               <Text style={styles.metricLabel}>Bottles Sold</Text>
             </View>
           </View>

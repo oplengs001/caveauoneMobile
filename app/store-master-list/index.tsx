@@ -34,6 +34,7 @@ import {
   Wine,
   X,
   Zap,
+  Tag,
 } from "lucide-react-native";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -329,8 +330,11 @@ export default function StoreMasterListScreen() {
         "unset",
         "discontinued",
       ];
-      results.sort((a, b) => order.indexOf(a.status) - order.indexOf(b.status));
-      setEntries(results);
+      const validResults = results.filter(
+        (entry) => !(entry.stockCount === 0 && entry.status === "unset")
+      );
+      validResults.sort((a, b) => order.indexOf(a.status) - order.indexOf(b.status));
+      setEntries(validResults);
     } catch (err) {
       console.error("MasterList fetch error:", err);
     } finally {
@@ -1273,6 +1277,19 @@ export default function StoreMasterListScreen() {
                   <Text style={styles.saveBtnText}>SAVE SETTINGS</Text>
                 )}
               </TouchableOpacity>
+
+              {selected && selected.stockCount > 0 && (
+                <TouchableOpacity
+                  style={[styles.saveBtn, { backgroundColor: "#10b981", marginTop: 12, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 8 }]}
+                  onPress={() => {
+                    closeSheet();
+                    router.push(`/sell?wineId=${selected.masterWine.id}`);
+                  }}
+                >
+                  <Tag size={18} color="#fff" strokeWidth={2.5} />
+                  <Text style={styles.saveBtnText}>SELL A BOTTLE</Text>
+                </TouchableOpacity>
+              )}
 
               {selected?.activeRequest ? (
                 <TouchableOpacity

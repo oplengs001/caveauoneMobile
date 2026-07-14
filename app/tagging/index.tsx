@@ -51,9 +51,11 @@ import {
   View,
 } from "react-native";
 import CustomerPickerModal from "../../components/CustomerPickerModal";
+import LabelScanModal from "@/components/LabelScanModal";
+import BottlePickerModal, { BottleWithLocation } from "@/components/BottlePickerModal";
 import { Customer, InventoryBottle, Location, MasterWine } from "../../types";
 
-type TaggingState = "scanning" | "displaying" | "updating" | "success";
+type TaggingState = "entry" | "scanning_qr" | "displaying" | "updating" | "success";
 
 const STORAGE_CATEGORIES = [
   { label: "Locker", prefix: "L", icon: "🔒", major: "Locker", minor: "Box" },
@@ -65,213 +67,7 @@ const STORAGE_CATEGORIES = [
 
 const VAT_RATE = 0.12;
 
-// ── Small helper: formats a number as currency ──────────────────────────────
-function formatCurrency(value: number): string {
-  return value.toLocaleString("en-PH", {
-    style: "currency",
-    currency: "PHP",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
-
-// ── VAT Breakdown Card ───────────────────────────────────────────────────────
-function VatBreakdownCard({
-  basePrice,
-  theme,
-  isFastMoving,
-  vatMode,
-}: {
-  basePrice: string;
-  theme: any;
-  isFastMoving: boolean;
-  vatMode?: "excluded" | "included";
-}) {
-  const numericPrice = parseFloat(basePrice) || 0;
-  const isIncluded = vatMode === "included";
-
-  let netPrice = numericPrice;
-  let vatAmount = numericPrice * VAT_RATE;
-  let total = numericPrice + vatAmount;
-
-  if (isIncluded) {
-    netPrice = numericPrice / (1 + VAT_RATE);
-    vatAmount = numericPrice - netPrice;
-    total = numericPrice;
-  }
-
-  const hasValue = numericPrice > 0;
-
-  return (
-    <View
-      style={[
-        vatStyles.card,
-        {
-          backgroundColor: theme.card,
-          borderColor: hasValue ? theme.primary + "40" : theme.border,
-        },
-      ]}
-    >
-      {/* Header */}
-      <View style={vatStyles.cardHeader}>
-        <Receipt size={14} color={theme.primary} />
-        <Text style={[vatStyles.cardTitle, { color: theme.primary }]}>
-          VAT BREAKDOWN
-        </Text>
-        {isFastMoving && (
-          <View
-            style={[
-              vatStyles.fastMovingBadge,
-              { backgroundColor: "#f59e0b18", borderColor: "#f59e0b40" },
-            ]}
-          >
-            <Zap size={10} color="#f59e0b" />
-            <Text style={vatStyles.fastMovingText}>FAST MOVING</Text>
-          </View>
-        )}
-      </View>
-
-      {/* Rows */}
-      <View style={vatStyles.row}>
-        <Text style={[vatStyles.rowLabel, { color: theme.textSecondary }]}>
-          Selling Price
-        </Text>
-        <Text style={[vatStyles.rowValue, { color: theme.text }]}>
-          {hasValue ? formatCurrency(netPrice) : "—"}
-        </Text>
-      </View>
-
-      <View style={[vatStyles.divider, { backgroundColor: theme.border }]} />
-
-      <View style={vatStyles.row}>
-        <View style={vatStyles.rowLabelGroup}>
-          <Text style={[vatStyles.rowLabel, { color: theme.textSecondary }]}>
-            VAT
-          </Text>
-          <View
-            style={[
-              vatStyles.rateBadge,
-              { backgroundColor: theme.primary + "18" },
-            ]}
-          >
-            <Text style={[vatStyles.rateText, { color: theme.primary }]}>
-              12%
-            </Text>
-          </View>
-        </View>
-        <Text style={[vatStyles.rowValue, { color: theme.textSecondary }]}>
-          {hasValue ? formatCurrency(vatAmount) : "—"}
-        </Text>
-      </View>
-
-      <View style={[vatStyles.divider, { backgroundColor: theme.border }]} />
-
-      {/* Total */}
-      <View
-        style={[vatStyles.totalRow, { backgroundColor: theme.primary + "0C" }]}
-      >
-        <Text style={[vatStyles.totalLabel, { color: theme.text }]}>
-          {isIncluded ? "TOTAL (ENTERED)" : "TOTAL (VAT-INC)"}
-        </Text>
-        <Text
-          style={[
-            vatStyles.totalValue,
-            { color: hasValue ? theme.primary : theme.textSecondary },
-          ]}
-        >
-          {hasValue ? formatCurrency(total) : "—"}
-        </Text>
-      </View>
-    </View>
-  );
-}
-
-const vatStyles = StyleSheet.create({
-  card: {
-    borderRadius: 20,
-    borderWidth: 1,
-    marginBottom: 24,
-    overflow: "hidden",
-  },
-  cardHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-  },
-  cardTitle: {
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 1.5,
-    flex: 1,
-  },
-  fastMovingBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  fastMovingText: {
-    color: "#f59e0b",
-    fontSize: 9,
-    fontWeight: "900",
-    letterSpacing: 0.5,
-  },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-  },
-  rowLabelGroup: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  rowLabel: {
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  rowValue: {
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  rateBadge: {
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  rateText: {
-    fontSize: 10,
-    fontWeight: "800",
-  },
-  divider: {
-    height: 1,
-    marginHorizontal: 18,
-  },
-  totalRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 18,
-    paddingVertical: 14,
-  },
-  totalLabel: {
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 1,
-  },
-  totalValue: {
-    fontSize: 22,
-    fontWeight: "900",
-    letterSpacing: -0.5,
-  },
-});
+import VatBreakdownCard, { formatCurrency } from "../../components/VatBreakdownCard";
 
 // ── Main Screen ──────────────────────────────────────────────────────────────
 
@@ -312,8 +108,15 @@ export default function TaggingScreen() {
 
   const [permission, requestPermission] = useCameraPermissions();
   const [state, setState] = useState<TaggingState>(
-    isBulkMode || initialBottleId ? "displaying" : "scanning",
+    isBulkMode || initialBottleId ? "displaying" : "entry",
   );
+  
+  // Entry States
+  const [isLabelModalOpen, setIsLabelModalOpen] = useState(false);
+  const [isBottlePickerModalOpen, setIsBottlePickerModalOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [masterWines, setMasterWines] = useState<MasterWine[]>([]);
+  const [bottlesList, setBottlesList] = useState<BottleWithLocation[]>([]);
   const [loading, setLoading] = useState(false);
   const [bottle, setBottle] = useState<InventoryBottle | null>(null);
   const [wine, setWine] = useState<MasterWine | null>(null);
@@ -391,6 +194,13 @@ export default function TaggingScreen() {
   const router = useRouter();
 
   useEffect(() => {
+    const fetchMasterWines = async () => {
+      try {
+        const snap = await getDocs(collection(db, "master_wines"));
+        setMasterWines(snap.docs.map((d) => ({ id: d.id, ...d.data() } as MasterWine)));
+      } catch (err) {}
+    };
+    fetchMasterWines();
     fetchLocations();
     fetchStoreVatMode();
     if (initialBottleId && mode !== "sell") {
@@ -464,6 +274,58 @@ export default function TaggingScreen() {
   }, [wine, bottle, mode, profile?.locationId, profile?.role]);
 
 
+  const handleSelectWine = async (wineId: string) => {
+    try {
+      const q = query(
+        collection(db, "inventory_bottles"),
+        where("masterWineRef", "==", doc(db, "master_wines", wineId)),
+        where("status", "in", ["received", "shelved"])
+      );
+      const snap = await getDocs(q);
+      const bottles: BottleWithLocation[] = [];
+      const locationCache: Record<string, string> = {};
+
+      for (const d of snap.docs) {
+        const data = d.data() as InventoryBottle;
+        let locName = "Unassigned";
+        if (data.locationRef) {
+          if (locationCache[data.locationRef.id]) {
+            locName = locationCache[data.locationRef.id];
+          } else {
+            const locSnap = await getDoc(data.locationRef);
+            if (locSnap.exists()) {
+              locName = locSnap.data().name;
+              locationCache[data.locationRef.id] = locName;
+            }
+          }
+        }
+        bottles.push({
+          bottleId: d.id,
+          locationName: locName,
+          locationId: data.locationRef?.id || "unassigned",
+        });
+      }
+      setBottlesList(bottles);
+      if (bottles.length === 1) {
+        loadBottleData(bottles[0].bottleId);
+      } else {
+        setIsBottlePickerModalOpen(true);
+      }
+    } catch (err) {
+      console.error(err);
+      Alert.alert("Error", "Could not load bottles.");
+    }
+  };
+
+  const filteredWines = masterWines
+    .filter(
+      (w) =>
+        w.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        w.sku?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        w.vintage?.toLowerCase().includes(searchQuery.toLowerCase())
+    )
+    .slice(0, 10);
+
   const fetchLocations = async () => {
     if (!profile?.locationId) return;
     try {
@@ -503,7 +365,7 @@ export default function TaggingScreen() {
               onPress: () => {
                 setLoading(false);
                 isProcessing.current = false;
-                setState("scanning");
+                setState("entry");
               },
             },
           ],
@@ -588,7 +450,7 @@ export default function TaggingScreen() {
   };
 
   const handleBarcodeScanned = async ({ data }: { data: string }) => {
-    if (state !== "scanning") return;
+    if (state !== "entry" && state !== "scanning_qr") return;
     loadBottleData(data);
   };
 
@@ -825,7 +687,7 @@ export default function TaggingScreen() {
 
   const resetSellState = () => {
     isProcessing.current = false;
-    setState("scanning");
+    setState("entry");
     setBottle(null);
     setWine(null);
     setSelectedLocationId(null);
@@ -1071,8 +933,96 @@ export default function TaggingScreen() {
         </View>
       )}
 
-      {/* ── Scanner ── */}
-      {state === "scanning" && (
+      {/* ── Entry Options ── */}
+      {state === "entry" && (
+        <View style={{ flex: 1, padding: 24 }}>
+          <Text style={{ fontSize: 32, fontWeight: "900", marginBottom: 8, color: theme.text }}>Move or Tag</Text>
+          <Text style={{ fontSize: 16, color: theme.textSecondary, marginBottom: 24 }}>Find the bottle you want to move.</Text>
+
+          <View style={{ gap: 16, marginBottom: 32 }}>
+            <TouchableOpacity 
+              style={{ flexDirection: "row", alignItems: "center", padding: 20, borderWidth: 1, borderColor: theme.border, borderRadius: 16, backgroundColor: theme.card }}
+              onPress={() => setState("scanning_qr")}
+            >
+              <View style={{ width: 56, height: 56, borderRadius: 16, backgroundColor: theme.primary + "20", alignItems: "center", justifyContent: "center" }}>
+                <ScanQrCode size={24} color={theme.primary} />
+              </View>
+              <View style={{ flex: 1, marginLeft: 16 }}>
+                <Text style={{ fontSize: 18, fontWeight: "800", color: theme.text }}>Scan QR Code</Text>
+                <Text style={{ fontSize: 14, color: theme.textSecondary }}>Fastest if bottle has sticker.</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={{ flexDirection: "row", alignItems: "center", padding: 20, borderWidth: 1, borderColor: theme.border, borderRadius: 16, backgroundColor: theme.card }}
+              onPress={() => setIsLabelModalOpen(true)}
+            >
+              <View style={{ width: 56, height: 56, borderRadius: 16, backgroundColor: theme.primary + "20", alignItems: "center", justifyContent: "center" }}>
+                <Camera size={24} color={theme.primary} />
+              </View>
+              <View style={{ flex: 1, marginLeft: 16 }}>
+                <Text style={{ fontSize: 18, fontWeight: "800", color: theme.text }}>Scan Label (AI)</Text>
+                <Text style={{ fontSize: 14, color: theme.textSecondary }}>Verify physical wine label.</Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+
+          <Text style={{ fontSize: 14, fontWeight: "800", color: theme.textSecondary, marginBottom: 12, textTransform: "uppercase" }}>Search Wine</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12, borderRadius: 16, borderWidth: 1, borderColor: theme.border, backgroundColor: theme.card, marginBottom: 16 }}>
+            <Search size={20} color={theme.textSecondary} />
+            <TextInput
+              style={{ flex: 1, fontSize: 16, marginLeft: 12, color: theme.text }}
+              placeholder="Search by name, SKU..."
+              placeholderTextColor={theme.textSecondary}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery("")}>
+                <X size={20} color={theme.textSecondary} />
+              </TouchableOpacity>
+            )}
+          </View>
+
+          <ScrollView style={{ flex: 1 }}>
+            {filteredWines.map((w) => (
+              <TouchableOpacity
+                key={w.id}
+                style={{ flexDirection: "row", alignItems: "center", paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: theme.border }}
+                onPress={() => handleSelectWine(w.id)}
+              >
+                <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: "rgba(0,0,0,0.05)", alignItems: "center", justifyContent: "center" }}>
+                  <Wine size={20} color={theme.primary} />
+                </View>
+                <View style={{ flex: 1, marginLeft: 16 }}>
+                  <Text style={{ fontSize: 16, fontWeight: "800", color: theme.text }}>{w.name}</Text>
+                  <Text style={{ fontSize: 14, color: theme.textSecondary }}>{w.vintage} • {w.producer}</Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          <LabelScanModal 
+            visible={isLabelModalOpen}
+            onClose={() => setIsLabelModalOpen(false)}
+            onBottleSelected={(id) => loadBottleData(id)}
+            theme={theme}
+          />
+          <BottlePickerModal
+            visible={isBottlePickerModalOpen}
+            onClose={() => setIsBottlePickerModalOpen(false)}
+            onBottleSelected={(id) => {
+              setIsBottlePickerModalOpen(false);
+              loadBottleData(id);
+            }}
+            bottles={bottlesList}
+            theme={theme}
+          />
+        </View>
+      )}
+
+      {/* ── QR Scanner ── */}
+      {state === "scanning_qr" && (
         <View style={styles.scannerContainer}>
           <CameraView
             style={styles.camera}
@@ -1097,7 +1047,7 @@ export default function TaggingScreen() {
                 CENTER QR CODE IN FRAME
               </Text>
               <TouchableOpacity
-                onPress={() => router.back()}
+                onPress={() => setState("entry")}
                 style={styles.closeButton}
               >
                 <X size={28} color="#fff" />
@@ -1128,7 +1078,7 @@ export default function TaggingScreen() {
             <TouchableOpacity
               onPress={() => {
                 isProcessing.current = false;
-                setState("scanning");
+                setState("entry");
               }}
               style={[
                 styles.backButton,
@@ -1294,7 +1244,7 @@ export default function TaggingScreen() {
                 onPress={() =>
                   isStore
                     ? ((isProcessing.current = false),
-                      setState("scanning"),
+                      setState("entry"),
                       setIsIncoming(false))
                     : router.push("/onboarding")
                 }
@@ -1319,7 +1269,7 @@ export default function TaggingScreen() {
                 ]}
                 onPress={() => {
                   isProcessing.current = false;
-                  setState("scanning");
+                  setState("entry");
                   setIsIncoming(false);
                 }}
               >

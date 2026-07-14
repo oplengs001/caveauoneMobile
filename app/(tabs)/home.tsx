@@ -1048,7 +1048,7 @@ export default function HomeScreen() {
                 { backgroundColor: "#10b981" },
               ]}
               onPress={() =>
-                router.push({ pathname: "/tagging", params: { mode: "sell" } })
+                router.push({ pathname: "/sell" })
               }
             >
               <View style={styles.buttonContent}>
