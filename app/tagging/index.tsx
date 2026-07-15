@@ -1,3 +1,5 @@
+import BottlePickerModal, { BottleWithLocation } from "@/components/BottlePickerModal";
+import LabelScanModal from "@/components/LabelScanModal";
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { db } from "@/lib/firebase";
@@ -23,9 +25,9 @@ import {
   Box,
   Camera,
   CheckCircle2,
+  ChevronLeft,
   Map,
   Plus,
-  Receipt,
   RefreshCw,
   Save,
   ScanQrCode,
@@ -34,7 +36,7 @@ import {
   User,
   Wine,
   X,
-  Zap,
+  Zap
 } from "lucide-react-native";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -51,8 +53,6 @@ import {
   View,
 } from "react-native";
 import CustomerPickerModal from "../../components/CustomerPickerModal";
-import LabelScanModal from "@/components/LabelScanModal";
-import BottlePickerModal, { BottleWithLocation } from "@/components/BottlePickerModal";
 import { Customer, InventoryBottle, Location, MasterWine } from "../../types";
 
 type TaggingState = "entry" | "scanning_qr" | "displaying" | "updating" | "success";
@@ -110,12 +110,14 @@ export default function TaggingScreen() {
   const [state, setState] = useState<TaggingState>(
     isBulkMode || initialBottleId ? "displaying" : "entry",
   );
-  
+
   // Entry States
   const [isLabelModalOpen, setIsLabelModalOpen] = useState(false);
   const [isBottlePickerModalOpen, setIsBottlePickerModalOpen] = useState(false);
+  const [selectedWineForPicker, setSelectedWineForPicker] = useState<MasterWine | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [masterWines, setMasterWines] = useState<MasterWine[]>([]);
+  const [availableMasterWineIds, setAvailableMasterWineIds] = useState<Set<string>>(new Set());
   const [bottlesList, setBottlesList] = useState<BottleWithLocation[]>([]);
   const [loading, setLoading] = useState(false);
   const [bottle, setBottle] = useState<InventoryBottle | null>(null);
@@ -196,9 +198,30 @@ export default function TaggingScreen() {
   useEffect(() => {
     const fetchMasterWines = async () => {
       try {
-        const snap = await getDocs(collection(db, "master_wines"));
-        setMasterWines(snap.docs.map((d) => ({ id: d.id, ...d.data() } as MasterWine)));
-      } catch (err) {}
+        const queryConstraints: any[] = [
+          where("status", "in", ["received", "shelved"])
+        ];
+        if (profile?.locationId) {
+          queryConstraints.push(where("storeRef", "==", doc(db, "stores", profile.locationId)));
+        }
+
+        const [winesSnap, bottlesSnap] = await Promise.all([
+          getDocs(collection(db, "master_wines")),
+          getDocs(
+            query(
+              collection(db, "inventory_bottles"),
+              ...queryConstraints
+            ),
+          ),
+        ]);
+        setMasterWines(winesSnap.docs.map((d) => ({ id: d.id, ...d.data() } as MasterWine)));
+        const ids = new Set<string>();
+        bottlesSnap.docs.forEach((d) => {
+          const ref = d.data().masterWineRef;
+          if (ref?.id) ids.add(ref.id);
+        });
+        setAvailableMasterWineIds(ids);
+      } catch (err) { }
     };
     fetchMasterWines();
     fetchLocations();
@@ -276,11 +299,15 @@ export default function TaggingScreen() {
 
   const handleSelectWine = async (wineId: string) => {
     try {
-      const q = query(
-        collection(db, "inventory_bottles"),
+      const queryConstraints: any[] = [
         where("masterWineRef", "==", doc(db, "master_wines", wineId)),
         where("status", "in", ["received", "shelved"])
-      );
+      ];
+      if (profile?.locationId) {
+        queryConstraints.push(where("storeRef", "==", doc(db, "stores", profile.locationId)));
+      }
+
+      const q = query(collection(db, "inventory_bottles"), ...queryConstraints);
       const snap = await getDocs(q);
       const bottles: BottleWithLocation[] = [];
       const locationCache: Record<string, string> = {};
@@ -309,6 +336,8 @@ export default function TaggingScreen() {
       if (bottles.length === 1) {
         loadBottleData(bottles[0].bottleId);
       } else {
+        const selectedWine = masterWines.find((w) => w.id === wineId) || null;
+        setSelectedWineForPicker(selectedWine);
         setIsBottlePickerModalOpen(true);
       }
     } catch (err) {
@@ -320,9 +349,12 @@ export default function TaggingScreen() {
   const filteredWines = masterWines
     .filter(
       (w) =>
-        w.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        w.sku?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        w.vintage?.toLowerCase().includes(searchQuery.toLowerCase())
+        availableMasterWineIds.has(w.id) &&
+        (
+          w.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          w.sku?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          w.vintage?.toLowerCase().includes(searchQuery.toLowerCase())
+        )
     )
     .slice(0, 10);
 
@@ -936,11 +968,21 @@ export default function TaggingScreen() {
       {/* ── Entry Options ── */}
       {state === "entry" && (
         <View style={{ flex: 1, padding: 24 }}>
-          <Text style={{ fontSize: 32, fontWeight: "900", marginBottom: 8, color: theme.text }}>Move or Tag</Text>
-          <Text style={{ fontSize: 16, color: theme.textSecondary, marginBottom: 24 }}>Find the bottle you want to move.</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 24 }}>
+            <TouchableOpacity
+              onPress={() => router.back()}
+              style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: theme.card, borderWidth: 1, borderColor: theme.border, alignItems: "center", justifyContent: "center", marginRight: 12 }}
+            >
+              <ChevronLeft size={22} color={theme.text} strokeWidth={2.5} />
+            </TouchableOpacity>
+            <View>
+              <Text style={{ fontSize: 26, fontWeight: "900", color: theme.text }}>Move or Tag</Text>
+              <Text style={{ fontSize: 14, color: theme.textSecondary }}>Find the bottle you want to move.</Text>
+            </View>
+          </View>
 
           <View style={{ gap: 16, marginBottom: 32 }}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={{ flexDirection: "row", alignItems: "center", padding: 20, borderWidth: 1, borderColor: theme.border, borderRadius: 16, backgroundColor: theme.card }}
               onPress={() => setState("scanning_qr")}
             >
@@ -953,7 +995,7 @@ export default function TaggingScreen() {
               </View>
             </TouchableOpacity>
 
-            <TouchableOpacity 
+            <TouchableOpacity
               style={{ flexDirection: "row", alignItems: "center", padding: 20, borderWidth: 1, borderColor: theme.border, borderRadius: 16, backgroundColor: theme.card }}
               onPress={() => setIsLabelModalOpen(true)}
             >
@@ -1002,7 +1044,7 @@ export default function TaggingScreen() {
             ))}
           </ScrollView>
 
-          <LabelScanModal 
+          <LabelScanModal
             visible={isLabelModalOpen}
             onClose={() => setIsLabelModalOpen(false)}
             onBottleSelected={(id) => loadBottleData(id)}
@@ -1017,6 +1059,9 @@ export default function TaggingScreen() {
             }}
             bottles={bottlesList}
             theme={theme}
+            wineName={selectedWineForPicker?.name}
+            wineVintage={selectedWineForPicker?.vintage}
+            wineProducer={selectedWineForPicker?.producer}
           />
         </View>
       )}

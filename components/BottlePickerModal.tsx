@@ -23,6 +23,9 @@ interface Props {
   bottles: BottleWithLocation[];
   title?: string;
   theme?: any;
+  wineName?: string;
+  wineVintage?: string;
+  wineProducer?: string;
 }
 
 export default function BottlePickerModal({
@@ -32,6 +35,9 @@ export default function BottlePickerModal({
   bottles,
   title = "Select a Bottle",
   theme = Colors.store,
+  wineName,
+  wineVintage,
+  wineProducer,
 }: Props) {
   // Group bottles by location
   const groupedBottles = bottles.reduce((acc, bottle) => {
@@ -59,6 +65,17 @@ export default function BottlePickerModal({
               <X size={24} color={theme.textSecondary} />
             </TouchableOpacity>
           </View>
+
+          {(wineName || wineVintage || wineProducer) && (
+            <View style={[styles.wineCard, { backgroundColor: theme.primary + "12", borderColor: theme.primary + "30" }]}>
+              <Text style={[styles.wineCardName, { color: theme.text }]} numberOfLines={2}>
+                {wineName}
+              </Text>
+              <Text style={[styles.wineCardMeta, { color: theme.textSecondary }]}>
+                {[wineVintage, wineProducer].filter(Boolean).join(" · ")}
+              </Text>
+            </View>
+          )}
 
           <ScrollView style={styles.scrollArea}>
             {locationNames.length === 0 ? (
@@ -123,6 +140,23 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 20,
     fontWeight: "800",
+  },
+  wineCard: {
+    marginHorizontal: 24,
+    marginBottom: 8,
+    marginTop: 4,
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  wineCardName: {
+    fontSize: 17,
+    fontWeight: "800",
+    marginBottom: 4,
+  },
+  wineCardMeta: {
+    fontSize: 13,
+    fontWeight: "500",
   },
   closeButton: {
     padding: 4,
