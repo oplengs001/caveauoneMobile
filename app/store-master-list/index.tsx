@@ -14,6 +14,7 @@ import {
   serverTimestamp,
   setDoc,
   where,
+  writeBatch,
 } from "firebase/firestore";
 import {
   AlertTriangle,
@@ -395,7 +396,20 @@ export default function StoreMasterListScreen() {
         updatedAt: serverTimestamp(),
         createdAt: selected.setting?.createdAt ?? serverTimestamp(),
       };
-      await setDoc(doc(db, "store_wine_settings", docId), updateData);
+      const batch = writeBatch(db);
+      
+      // Update store_wine_settings
+      batch.set(doc(db, "store_wine_settings", docId), updateData);
+      
+      // Sync wineCategory to master_wines
+      const masterWineRef = doc(db, "master_wines", selected.masterWine.id);
+      batch.update(masterWineRef, {
+        wineCategory: sheetWineCategory === "none" ? null : sheetWineCategory,
+        updatedAt: serverTimestamp(),
+      });
+      
+      await batch.commit();
+      
       closeSheet();
       fetchData();
     } catch (err) {

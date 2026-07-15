@@ -20,6 +20,7 @@ export interface MasterWine {
   sku?: string;
   format?: string;
   grapeVariety?: string;
+  wineCategory?: "fast" | "fine" | "reserve" | null;
 }
 
 export interface InventoryBottle {
