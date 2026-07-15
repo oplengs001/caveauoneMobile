@@ -359,9 +359,9 @@ export default function StoreMasterListScreen() {
     setSheetDiscontinued(entry.setting?.discontinued ?? false);
 
     let cat: "fast" | "fine" | "reserve" | "none" = "none";
-    if (entry.setting?.isFastMoving) cat = "fast";
-    else if (entry.setting?.isFineWine) cat = "fine";
-    else if (entry.setting?.isReserve) cat = "reserve";
+    if (entry.setting?.wineCategory) {
+      cat = entry.setting.wineCategory as "fast" | "fine" | "reserve";
+    }
     setSheetWineCategory(cat);
 
     setSheetVatMode(entry.setting?.vatMode ?? "excluded");
@@ -390,9 +390,7 @@ export default function StoreMasterListScreen() {
         safetyStock: safety,
         sellingPrice: sheetSellingPrice ? parseFloat(sheetSellingPrice) : null,
         discontinued: sheetDiscontinued,
-        isFastMoving: sheetWineCategory === "fast",
-        isFineWine: sheetWineCategory === "fine",
-        isReserve: sheetWineCategory === "reserve",
+        wineCategory: sheetWineCategory === "none" ? null : sheetWineCategory,
         vatMode: sheetVatMode,
         updatedAt: serverTimestamp(),
         createdAt: selected.setting?.createdAt ?? serverTimestamp(),
@@ -598,36 +596,24 @@ export default function StoreMasterListScreen() {
           </View>
         </View>
 
-        {(item.setting?.isFastMoving || item.setting?.isFineWine || item.setting?.isReserve) && (
+        {item.setting?.wineCategory && (
           <View style={styles.tagsRow}>
-            {item.setting?.isFastMoving && (
-              <View
-                style={[styles.indicatorBadge, { backgroundColor: "#fef3c7" }]}
-              >
+            {item.setting.wineCategory === "fast" && (
+              <View style={[styles.indicatorBadge, { backgroundColor: "#fef3c7" }]}>
                 <Zap size={10} color="#d97706" strokeWidth={2.5} />
-                <Text style={[styles.indicatorText, { color: "#d97706" }]}>
-                  Fast Wine
-                </Text>
+                <Text style={[styles.indicatorText, { color: "#d97706" }]}>Fast Wine</Text>
               </View>
             )}
-            {item.setting?.isFineWine && (
-              <View
-                style={[styles.indicatorBadge, { backgroundColor: "#fce7f3" }]}
-              >
+            {item.setting.wineCategory === "fine" && (
+              <View style={[styles.indicatorBadge, { backgroundColor: "#fce7f3" }]}>
                 <Star size={10} color="#be185d" strokeWidth={2.5} />
-                <Text style={[styles.indicatorText, { color: "#be185d" }]}>
-                  Fine Wine
-                </Text>
+                <Text style={[styles.indicatorText, { color: "#be185d" }]}>Fine Wine</Text>
               </View>
             )}
-            {item.setting?.isReserve && (
-              <View
-                style={[styles.indicatorBadge, { backgroundColor: "#e0e7ff" }]}
-              >
+            {item.setting.wineCategory === "reserve" && (
+              <View style={[styles.indicatorBadge, { backgroundColor: "#e0e7ff" }]}>
                 <Lock size={10} color="#4338ca" strokeWidth={2.5} />
-                <Text style={[styles.indicatorText, { color: "#4338ca" }]}>
-                  Reserved Wine
-                </Text>
+                <Text style={[styles.indicatorText, { color: "#4338ca" }]}>Reserved Wine</Text>
               </View>
             )}
           </View>

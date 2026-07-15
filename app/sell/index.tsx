@@ -83,7 +83,7 @@ export default function SellScreen() {
   // Sell Form
   const [salePrice, setSalePrice] = useState("");
   const [storeVatMode, setStoreVatMode] = useState<"included" | "excluded">("excluded");
-  const [isFastMoving, setIsFastMoving] = useState(false);
+  const [wineCategory, setWineCategory] = useState<"fast" | "fine" | "reserve" | null>(null);
   const [priceError, setPriceError] = useState<string | null>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
@@ -200,7 +200,7 @@ export default function SellScreen() {
         );
         if (!settingsSnap.empty) {
           const setting = settingsSnap.docs[0].data();
-          setIsFastMoving(!!setting.isFastMoving);
+          setWineCategory(setting.wineCategory ?? null);
           if (setting.sellingPrice) setSalePrice(setting.sellingPrice.toString());
           if (setting.vatMode) setStoreVatMode(setting.vatMode);
         } else {
@@ -278,7 +278,7 @@ export default function SellScreen() {
           vatMode: storeVatMode,
           customerId: selectedCustomer?.id || null,
           customerName: selectedCustomer?.name || null,
-          isFastMoving,
+          wineCategory,
           masterWinePrice: selectedWine?.price || null,
         },
       });
@@ -301,7 +301,7 @@ export default function SellScreen() {
         vatMode: storeVatMode,
         customerId: selectedCustomer?.id || null,
         customerName: selectedCustomer?.name || null,
-        isFastMoving,
+        wineCategory,
         masterWinePrice: selectedWine?.price || null,
       });
 
@@ -650,7 +650,7 @@ export default function SellScreen() {
           <Tag size={15} color={theme.primary} />
           <Text style={[styles.sellSectionTitle, { color: theme.text }]}>Sale Price</Text>
           <View style={{ flex: 1 }} />
-          {!isFastMoving && (
+          {wineCategory !== "fast" && (
             <View style={{ flexDirection: "row", backgroundColor: theme.primary + "1A", borderRadius: 8, padding: 2 }}>
               <TouchableOpacity
                 onPress={() => setStoreVatMode("excluded")}
@@ -698,7 +698,7 @@ export default function SellScreen() {
       <VatBreakdownCard
         basePrice={salePrice}
         theme={theme}
-        isFastMoving={isFastMoving}
+        isFastMoving={wineCategory === "fast"}
         vatMode={storeVatMode}
       />
 

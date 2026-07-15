@@ -217,9 +217,7 @@ export interface StoreWineSetting {
   discontinued: boolean;
   createdAt: any;
   updatedAt: any;
-  isFastMoving: boolean;
-  isReserve: boolean;
-  isFineWine?: boolean;
+  wineCategory?: "fast" | "fine" | "reserve" | null;
   sellingPrice?: number;
   vatMode?: "included" | "excluded";
 }
