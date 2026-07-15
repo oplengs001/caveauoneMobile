@@ -591,6 +591,67 @@ export default function OnboardingDetailScreen() {
     }
   };
 
+  const handleBulkNoQR = async (bottleId: string) => {
+    if (!activeItem || !task || !profile?.locationId) return;
+
+    const locationId = profile.locationId;
+
+    Alert.alert(
+      "No QR Code?",
+      "Are you sure there is no QR code on this bottle? This will mark it as received without a label.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Confirm",
+          onPress: async () => {
+            setIsProcessing(true);
+            try {
+              // 1. Mark as received but untagged
+              await updateDoc(doc(db, "inventory_bottles", bottleId), {
+                status: "received",
+                isTagged: false,
+                updatedAt: serverTimestamp(),
+                storeRef: doc(db, "stores", locationId),
+              });
+
+              // 2. Add to verified set
+              const nextVerified = new Set(verifiedBottleIdsSet).add(bottleId);
+              setVerifiedBottleIdsSet(nextVerified);
+              setVerifiedBottleId(bottleId); // keep single ref for legacy success screen
+
+              // 3. Update task progress — increment per confirmed bottle
+              const totalDone = nextVerified.size + issuedBottleIdsSet.size;
+              const updatedItems = task.items.map((i) => {
+                if (i.id === activeItem.id) {
+                  return {
+                    ...i,
+                    onboardedQty: i.onboardedQty + 1,
+                  };
+                }
+                return i;
+              });
+              const isFullyDone = totalDone === batchBottleIds.length &&
+                updatedItems.every((i) => i.onboardedQty === i.qty);
+              await updateDoc(doc(db, "onboarding_tasks", task.id), {
+                items: updatedItems,
+                status: isFullyDone ? "completed" : "warehouse",
+                updatedAt: serverTimestamp(),
+              });
+              if (totalDone === batchBottleIds.length) {
+                setCurrentStep("success");
+              }
+            } catch (err: any) {
+              console.error(err);
+              alert("Error updating bottle: " + err.message);
+            } finally {
+              setIsProcessing(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
   const handleReportIssueForItem = (item: OnboardingItem) => {
     setActiveItem(item);
     setCurrentStep("select_bottle_for_report");
@@ -1459,19 +1520,54 @@ export default function OnboardingDetailScreen() {
                           : "Pending"}
                     </Text>
                     {isPending && (
-                      <TouchableOpacity
-                        onPress={() => handleBulkIssue(bottleId)}
-                      >
-                        <Text
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+                        <TouchableOpacity
+                          onPress={() => handleBulkNoQR(bottleId)}
                           style={{
-                            color: "#ef4444",
-                            fontSize: 11,
-                            fontWeight: "700",
+                            flexDirection: "row",
+                            alignItems: "center",
+                            gap: 4,
+                            backgroundColor: "rgba(245,158,11,0.1)",
+                            paddingHorizontal: 8,
+                            paddingVertical: 4,
+                            borderRadius: 6,
                           }}
                         >
-                          Report Issue
-                        </Text>
-                      </TouchableOpacity>
+                          <QrCode size={12} color="#f59e0b" strokeWidth={2.5} />
+                          <Text
+                            style={{
+                              color: "#f59e0b",
+                              fontSize: 11,
+                              fontWeight: "700",
+                            }}
+                          >
+                            Skip QR
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() => handleBulkIssue(bottleId)}
+                          style={{
+                            flexDirection: "row",
+                            alignItems: "center",
+                            gap: 4,
+                            backgroundColor: "rgba(239,68,68,0.1)",
+                            paddingHorizontal: 8,
+                            paddingVertical: 4,
+                            borderRadius: 6,
+                          }}
+                        >
+                          <AlertCircle size={12} color="#ef4444" strokeWidth={2.5} />
+                          <Text
+                            style={{
+                              color: "#ef4444",
+                              fontSize: 11,
+                              fontWeight: "700",
+                            }}
+                          >
+                            Report Issue
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
                     )}
                   </View>
                 </View>

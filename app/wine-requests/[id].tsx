@@ -1,12 +1,12 @@
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { db } from "@/lib/firebase";
 import { logActivity } from "@/lib/utils/activityLogger";
-import { InventoryBottle, WineRequest, PulloutRequest } from "@/types";
+import { InventoryBottle, PulloutRequest, WineRequest } from "@/types";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { doc, getDoc, serverTimestamp, updateDoc, collection, getDocs, limit, query, where, documentId } from "firebase/firestore";
+import { collection, doc, documentId, getDoc, getDocs, limit, query, serverTimestamp, updateDoc, where } from "firebase/firestore";
 import {
   ArrowLeft,
   Ban,
@@ -88,46 +88,46 @@ export default function WineRequestDetail() {
         const pulloutsRef = collection(db, "pullout_requests");
         const q = query(pulloutsRef, where("wineRequestId", "==", id), limit(1));
         const pulloutSnap = await getDocs(q);
-        
-        if (!pulloutSnap.empty) {
-           const poData = { id: pulloutSnap.docs[0].id, ...pulloutSnap.docs[0].data() } as PulloutRequest;
-           setPulloutRequest(poData);
-           
-           const bottles: any[] = [];
-           poData.items.forEach(item => {
-              if (item.pulledBottleIds) {
-                 item.pulledBottleIds.forEach(bid => {
-                    bottles.push({
-                       bottleId: bid,
-                       masterWineId: item.masterWineId,
-                       wineName: item.wineName,
-                       vintage: item.vintage,
-                       format: item.format,
-                       producer: item.producer
-                    });
-                 });
-              }
-           });
-           setBatchBottles(bottles);
 
-           // Verify which bottles are already received
-           const bIds = bottles.map(b => b.bottleId);
-           const verified = new Set<string>();
-           if (bIds.length > 0) {
-             const chunks = [];
-             for(let i = 0; i < bIds.length; i+=10) chunks.push(bIds.slice(i, i+10));
-             
-             for (const chunk of chunks) {
-               const bq = query(collection(db, "inventory_bottles"), where(documentId(), "in", chunk));
-               const bSnap = await getDocs(bq);
-               bSnap.docs.forEach(d => {
-                 if (d.data().status === "received" || d.data().status === "shelved") {
-                   verified.add(d.id);
-                 }
-               });
-             }
-           }
-           setVerifiedBottleIds(verified);
+        if (!pulloutSnap.empty) {
+          const poData = { id: pulloutSnap.docs[0].id, ...pulloutSnap.docs[0].data() } as PulloutRequest;
+          setPulloutRequest(poData);
+
+          const bottles: any[] = [];
+          poData.items.forEach(item => {
+            if (item.pulledBottleIds) {
+              item.pulledBottleIds.forEach(bid => {
+                bottles.push({
+                  bottleId: bid,
+                  masterWineId: item.masterWineId,
+                  wineName: item.wineName,
+                  vintage: item.vintage,
+                  format: item.format,
+                  producer: item.producer
+                });
+              });
+            }
+          });
+          setBatchBottles(bottles);
+
+          // Verify which bottles are already received
+          const bIds = bottles.map(b => b.bottleId);
+          const verified = new Set<string>();
+          if (bIds.length > 0) {
+            const chunks = [];
+            for (let i = 0; i < bIds.length; i += 10) chunks.push(bIds.slice(i, i + 10));
+
+            for (const chunk of chunks) {
+              const bq = query(collection(db, "inventory_bottles"), where(documentId(), "in", chunk));
+              const bSnap = await getDocs(bq);
+              bSnap.docs.forEach(d => {
+                if (d.data().status === "received" || d.data().status === "shelved") {
+                  verified.add(d.id);
+                }
+              });
+            }
+          }
+          setVerifiedBottleIds(verified);
         }
       }
     } catch (err) {
@@ -303,7 +303,7 @@ export default function WineRequestDetail() {
 
     const now = Date.now();
     if (now - lastBatchScanTime.current < 2000) return;
-    
+
     if (verifiedBottleIds.has(data) || skippedBottleIds.has(data)) return;
 
     const expectedBottle = batchBottles.find(b => b.bottleId === data);
@@ -312,10 +312,10 @@ export default function WineRequestDetail() {
       Alert.alert("Invalid QR", "This bottle is not part of this request.", [{ text: "OK" }]);
       return;
     }
-    
+
     lastBatchScanTime.current = now;
     isProcessing.current = true;
-    
+
     try {
       const bottleRef = doc(db, "inventory_bottles", data);
       await updateDoc(bottleRef, {
@@ -345,13 +345,13 @@ export default function WineRequestDetail() {
           status: newStatus,
           updatedAt: serverTimestamp(),
         });
-        
+
         setRequest(prev => prev ? { ...prev, items: newItems, status: newStatus as any } : prev);
       }
-      
+
       setVerifiedBottleIds(prev => new Set(prev).add(data));
       await AsyncStorage.removeItem(`dashboard_metrics_${request.storeId}`);
-      
+
     } catch (err) {
       console.error(err);
       Alert.alert("Error", "Failed to receive bottle.");
@@ -362,10 +362,11 @@ export default function WineRequestDetail() {
 
   const handleBatchSkip = async (bottleId: string, masterWineId: string) => {
     if (!request || isProcessing.current) return;
-    
+
     Alert.alert("Report Missing", "Mark this bottle as not arrived?", [
-       { text: "Cancel", style: "cancel" },
-       { text: "Confirm", style: "destructive", onPress: async () => {
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Confirm", style: "destructive", onPress: async () => {
           isProcessing.current = true;
           try {
             const itemIndex = request.items.findIndex((i) => i.masterWineId === masterWineId);
@@ -387,19 +388,96 @@ export default function WineRequestDetail() {
                 status: newStatus,
                 updatedAt: serverTimestamp(),
               });
-              
+
               setRequest(prev => prev ? { ...prev, items: newItems, status: newStatus as any } : prev);
             }
-            
+
             setSkippedBottleIds(prev => new Set(prev).add(bottleId));
-          } catch(err) {
-             console.error(err);
-             Alert.alert("Error", "Failed to skip bottle.");
+          } catch (err) {
+            console.error(err);
+            Alert.alert("Error", "Failed to skip bottle.");
           } finally {
-             isProcessing.current = false;
+            isProcessing.current = false;
           }
-       }}
+        }
+      }
     ]);
+  };
+
+  const handleBatchNoQR = async (bottleId: string) => {
+    if (!request || isProcessing.current) return;
+    
+    if (verifiedBottleIds.has(bottleId) || skippedBottleIds.has(bottleId)) return;
+
+    const expectedBottle = batchBottles.find(b => b.bottleId === bottleId);
+    if (!expectedBottle) return;
+
+    Alert.alert(
+      "No QR Code?",
+      "Mark this bottle as received even though there is no QR label?",
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Receive", 
+          onPress: async () => {
+            isProcessing.current = true;
+            try {
+              const bottleRef = doc(db, "inventory_bottles", bottleId);
+              await updateDoc(bottleRef, {
+                status: "received",
+                isTagged: false,
+                storeRef: doc(db, "stores", request.storeId),
+                outboundLocationRef: null,
+                updatedAt: serverTimestamp(),
+              });
+
+              logActivity({
+                action: "WINE_REQUEST_INGRESS_MANUAL",
+                entity: "wine_requests",
+                entityId: request.id,
+                summary: `Manually received bottle ${bottleId} (${expectedBottle.wineName}) at store`,
+                details: {
+                  bottleId,
+                  storeId: request.storeId,
+                  wineName: expectedBottle.wineName,
+                  manual_ingress: true
+                },
+                performedBy: profile?.email || "unknown",
+                performedByRole: profile?.role || "store",
+                source: (profile?.role as any) || "store"
+              });
+
+              const itemIndex = request.items.findIndex(i => i.masterWineId === expectedBottle.masterWineId);
+              if (itemIndex > -1) {
+                const newItems = [...request.items];
+                const currentIngressed = newItems[itemIndex].ingressedQty || 0;
+                newItems[itemIndex].ingressedQty = currentIngressed + 1;
+                
+                const isAllReceived = newItems.every(i => (i.ingressedQty || 0) + (i.skippedQty || 0) >= i.qty);
+                const newStatus = isAllReceived ? "ingress_complete" : request.status;
+
+                await updateDoc(doc(db, "wine_requests", request.id), {
+                  items: newItems,
+                  status: newStatus,
+                  updatedAt: serverTimestamp(),
+                });
+                
+                setRequest(prev => prev ? { ...prev, items: newItems, status: newStatus as any } : prev);
+              }
+              
+              setVerifiedBottleIds(prev => new Set(prev).add(bottleId));
+              await AsyncStorage.removeItem(`dashboard_metrics_${request.storeId}`);
+              
+            } catch (err) {
+              console.error(err);
+              Alert.alert("Error", "Failed to receive bottle manually.");
+            } finally {
+              isProcessing.current = false;
+            }
+          }
+        }
+      ]
+    );
   };
 
   const getStatusConfig = (status: string) => {
@@ -470,25 +548,25 @@ export default function WineRequestDetail() {
   }
 
   if (isBatchMode) {
-    const isAllBatchHandled = batchBottles.length > 0 && 
+    const isAllBatchHandled = batchBottles.length > 0 &&
       (verifiedBottleIds.size + skippedBottleIds.size) === batchBottles.length;
 
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-         <Stack.Screen options={{ headerShown: false }} />
-         <View style={styles.header}>
-            <TouchableOpacity onPress={() => setIsBatchMode(false)} style={styles.backButton}>
-              <ArrowLeft size={24} color={theme.primary} />
-            </TouchableOpacity>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.title, { color: theme.primary }]}>Batch Receive</Text>
-              <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-                REQ: {request?.id.slice(0, 8).toUpperCase()}
-              </Text>
-            </View>
-         </View>
+        <Stack.Screen options={{ headerShown: false }} />
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => setIsBatchMode(false)} style={styles.backButton}>
+            <ArrowLeft size={24} color={theme.primary} />
+          </TouchableOpacity>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.title, { color: theme.primary }]}>Batch Receive</Text>
+            <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
+              REQ: {request?.id.slice(0, 8).toUpperCase()}
+            </Text>
+          </View>
+        </View>
 
-         <View style={{ flex: 1 }}>
+        <View style={{ flex: 1 }}>
           {!isAllBatchHandled ? (
             <View
               style={{
@@ -538,81 +616,86 @@ export default function WineRequestDetail() {
           )}
 
           <ScrollView style={{ flex: 1, paddingHorizontal: 16 }} showsVerticalScrollIndicator={false}>
-             {batchBottles.map((bottle, index) => {
-                const isVerified = verifiedBottleIds.has(bottle.bottleId);
-                const isSkipped = skippedBottleIds.has(bottle.bottleId);
-                const isPending = !isVerified && !isSkipped;
-                
-                return (
-                   <View key={bottle.bottleId} style={{ flexDirection: "row", alignItems: "center", backgroundColor: theme.card, padding: 16, borderRadius: 16, marginBottom: 10, borderWidth: 1, borderColor: isVerified ? "#10b981" : isSkipped ? "#ef4444" : theme.border, gap: 14 }}>
-                      <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: isVerified ? "rgba(16,185,129,0.15)" : isSkipped ? "rgba(239,68,68,0.15)" : theme.background, alignItems: "center", justifyContent: "center" }}>
-                        {isVerified ? <CheckCircle2 size={18} color="#10b981" /> : isSkipped ? <Ban size={18} color="#ef4444" /> : <Text style={{ color: theme.textSecondary, fontSize: 13, fontWeight: "900" }}>{index + 1}</Text>}
+            {batchBottles.map((bottle, index) => {
+              const isVerified = verifiedBottleIds.has(bottle.bottleId);
+              const isSkipped = skippedBottleIds.has(bottle.bottleId);
+              const isPending = !isVerified && !isSkipped;
+
+              return (
+                <View key={bottle.bottleId} style={{ flexDirection: "row", alignItems: "center", backgroundColor: theme.card, padding: 16, borderRadius: 16, marginBottom: 10, borderWidth: 1, borderColor: isVerified ? "#10b981" : isSkipped ? "#ef4444" : theme.border, gap: 14 }}>
+                  <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: isVerified ? "rgba(16,185,129,0.15)" : isSkipped ? "rgba(239,68,68,0.15)" : theme.background, alignItems: "center", justifyContent: "center" }}>
+                    {isVerified ? <CheckCircle2 size={18} color="#10b981" /> : isSkipped ? <Ban size={18} color="#ef4444" /> : <Text style={{ color: theme.textSecondary, fontSize: 13, fontWeight: "900" }}>{index + 1}</Text>}
+                  </View>
+                  <View style={{ flex: 1, paddingRight: 8 }}>
+                    <Text style={{ color: theme.text, fontSize: 13, fontWeight: "700" }}>
+                      {bottle.wineName}
+                    </Text>
+                    <Text style={{ color: theme.textSecondary, fontSize: 11, fontWeight: "500", marginTop: 2 }}>
+                      {[bottle.producer, bottle.vintage, bottle.format].filter(Boolean).join(" · ")}
+                    </Text>
+                    <Text style={{ color: theme.textSecondary, fontSize: 11, fontWeight: "700", fontFamily: "monospace", marginTop: 4 }}>
+                      {bottle.bottleId.slice(-12)}
+                    </Text>
+                  </View>
+                  <View style={{ alignItems: "flex-end", gap: 6 }}>
+                    {(isVerified || isSkipped) && (
+                      <Text style={{ color: isVerified ? "#10b981" : "#ef4444", fontSize: 11, fontWeight: "800", textTransform: "uppercase" }}>
+                        {isVerified ? "✓ Received" : "Not Arrived"}
+                      </Text>
+                    )}
+                    {isPending && (
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                        <TouchableOpacity onPress={() => handleBatchNoQR(bottle.bottleId)} style={{ paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, backgroundColor: "rgba(245,158,11,0.1)" }}>
+                          <Text style={{ color: "#f59e0b", fontSize: 11, fontWeight: "700" }}>No QR</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={() => handleBatchSkip(bottle.bottleId, bottle.masterWineId)} style={{ paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, backgroundColor: "rgba(239,68,68,0.1)" }}>
+                          <Text style={{ color: "#ef4444", fontSize: 11, fontWeight: "700" }}>Skip</Text>
+                        </TouchableOpacity>
                       </View>
-                      <View style={{ flex: 1, paddingRight: 8 }}>
-                         <Text style={{ color: theme.text, fontSize: 13, fontWeight: "700" }}>
-                            {bottle.wineName}
-                         </Text>
-                         <Text style={{ color: theme.textSecondary, fontSize: 11, fontWeight: "500", marginTop: 2 }}>
-                            {[bottle.producer, bottle.vintage, bottle.format].filter(Boolean).join(" · ")}
-                         </Text>
-                         <Text style={{ color: theme.textSecondary, fontSize: 11, fontWeight: "700", fontFamily: "monospace", marginTop: 4 }}>
-                            {bottle.bottleId.slice(-12)}
-                         </Text>
-                      </View>
-                      <View style={{ alignItems: "flex-end", gap: 6 }}>
-                         {(isVerified || isSkipped) && (
-                           <Text style={{ color: isVerified ? "#10b981" : "#ef4444", fontSize: 11, fontWeight: "800", textTransform: "uppercase" }}>
-                              {isVerified ? "✓ Received" : "Not Arrived"}
-                           </Text>
-                         )}
-                         {isPending && (
-                            <TouchableOpacity onPress={() => handleBatchSkip(bottle.bottleId, bottle.masterWineId)} style={{ paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, backgroundColor: "rgba(239,68,68,0.1)" }}>
-                               <Text style={{ color: "#ef4444", fontSize: 11, fontWeight: "700" }}>Skip</Text>
-                            </TouchableOpacity>
-                         )}
-                      </View>
-                   </View>
-                )
-             })}
-             <View style={{ height: 40 }} />
+                    )}
+                  </View>
+                </View>
+              )
+            })}
+            <View style={{ height: 40 }} />
           </ScrollView>
 
           <View style={{ padding: 24, backgroundColor: theme.background }}>
-             {verifiedBottleIds.size > 0 && (
-                <TouchableOpacity
-                   style={[styles.scanButton, { marginBottom: 12, backgroundColor: "#10b981", shadowColor: "#10b981" }]}
-                   onPress={() => {
-                      const firstBottleId = Array.from(verifiedBottleIds)[0];
-                      const firstBottle = batchBottles.find(b => b.bottleId === firstBottleId);
-                      const isMultipleWines = Array.from(verifiedBottleIds).some(id => {
-                        const b = batchBottles.find(x => x.bottleId === id);
-                        return b?.masterWineId !== firstBottle?.masterWineId;
-                      });
+            {verifiedBottleIds.size > 0 && (
+              <TouchableOpacity
+                style={[styles.scanButton, { marginBottom: 12, backgroundColor: "#10b981", shadowColor: "#10b981" }]}
+                onPress={() => {
+                  const firstBottleId = Array.from(verifiedBottleIds)[0];
+                  const firstBottle = batchBottles.find(b => b.bottleId === firstBottleId);
+                  const isMultipleWines = Array.from(verifiedBottleIds).some(id => {
+                    const b = batchBottles.find(x => x.bottleId === id);
+                    return b?.masterWineId !== firstBottle?.masterWineId;
+                  });
 
-                      router.replace({
-                        pathname: "/tagging",
-                        params: {
-                          bottleIds: Array.from(verifiedBottleIds).join(","),
-                          mode: "tagging",
-                          source: "wine-request",
-                          fromRequestId: id,
-                          wineName: isMultipleWines ? "Multiple Wines" : firstBottle?.wineName,
-                          wineVintage: isMultipleWines ? "" : firstBottle?.vintage,
-                          wineProducer: isMultipleWines ? "" : firstBottle?.producer,
-                          wineFormat: isMultipleWines ? "" : firstBottle?.format,
-                        },
-                      });
-                   }}
-                >
-                   <MapPin size={24} color="#fff" strokeWidth={2.5} />
-                   <Text style={styles.scanButtonText}>Tag {verifiedBottleIds.size} Locations</Text>
-                </TouchableOpacity>
-             )}
-             <TouchableOpacity style={[styles.scanButton, { backgroundColor: theme.card, borderWidth: 1, borderColor: theme.border, shadowOpacity: 0 }]} onPress={() => setIsBatchMode(false)}>
-                <Text style={[styles.scanButtonText, { color: theme.text }]}>Cancel Batch</Text>
-             </TouchableOpacity>
+                  router.replace({
+                    pathname: "/tagging",
+                    params: {
+                      bottleIds: Array.from(verifiedBottleIds).join(","),
+                      mode: "tagging",
+                      source: "wine-request",
+                      fromRequestId: id,
+                      wineName: isMultipleWines ? "Multiple Wines" : firstBottle?.wineName,
+                      wineVintage: isMultipleWines ? "" : firstBottle?.vintage,
+                      wineProducer: isMultipleWines ? "" : firstBottle?.producer,
+                      wineFormat: isMultipleWines ? "" : firstBottle?.format,
+                    },
+                  });
+                }}
+              >
+                <MapPin size={24} color="#fff" strokeWidth={2.5} />
+                <Text style={styles.scanButtonText}>Tag {verifiedBottleIds.size} Locations</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity style={[styles.scanButton, { backgroundColor: theme.card, borderWidth: 1, borderColor: theme.border, shadowOpacity: 0 }]} onPress={() => setIsBatchMode(false)}>
+              <Text style={[styles.scanButtonText, { color: theme.text }]}>Cancel Batch</Text>
+            </TouchableOpacity>
           </View>
-         </View>
+        </View>
       </SafeAreaView>
     );
   }
@@ -901,13 +984,13 @@ export default function WineRequestDetail() {
           (request.status === "ingress_complete" && !isAllReceived)) && (
           <View style={styles.footer}>
             {batchBottles.length > 0 && (
-               <TouchableOpacity
-                 style={[styles.scanButton, { marginBottom: 12, backgroundColor: "#4f46e5", shadowColor: "#4f46e5" }]}
-                 onPress={() => setIsBatchMode(true)}
-               >
-                 <ScanQrCode size={24} color="#fff" strokeWidth={2.5} />
-                 <Text style={styles.scanButtonText}>Batch Receive</Text>
-               </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.scanButton, { marginBottom: 12, backgroundColor: "#4f46e5", shadowColor: "#4f46e5" }]}
+                onPress={() => setIsBatchMode(true)}
+              >
+                <ScanQrCode size={24} color="#fff" strokeWidth={2.5} />
+                <Text style={styles.scanButtonText}>Batch Receive</Text>
+              </TouchableOpacity>
             )}
             <TouchableOpacity
               style={[styles.scanButton, { backgroundColor: theme.card, borderWidth: 1, borderColor: theme.border, shadowOpacity: 0 }]}

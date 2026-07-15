@@ -24,7 +24,8 @@ import {
   ChevronLeft,
   MapPin,
   PackageSearch,
-  Search
+  Search,
+  QrCode
 } from "lucide-react-native";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -261,6 +262,129 @@ export default function PulloutDetailScreen() {
       console.error("Error skipping item:", error);
       Alert.alert("Error", "Failed to skip item.");
     }
+  };
+
+  const handlePullWithoutQR = async (index: number) => {
+    if (!request || isProcessing.current) return;
+    const item = request.items[index];
+    const remaining = Math.max(0, item.requestedQty - item.pulledQty - (item.skippedQty || 0));
+    if (remaining <= 0) return;
+
+    if (!request.outBoundStoreId) {
+      Alert.alert("Error", "Request is missing outbound store ID.");
+      return;
+    }
+
+    const outBoundStoreId = request.outBoundStoreId;
+
+    Alert.alert(
+      "Pull Without QR",
+      `Are you sure you want to pull 1 bottle of ${item.wineName} manually? This will bypass the QR scan.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Pull Manually",
+          onPress: async () => {
+            isProcessing.current = true;
+            setLoading(true);
+            try {
+              // 1. Find an available bottle for this masterWineId
+              const bottlesRef = collection(db, "inventory_bottles");
+              const constraints: any[] = [
+                where("masterWineRef", "==", doc(db, "master_wines", item.masterWineId)),
+                where("status", "in", ["received", "shelved"]),
+                limit(1)
+              ];
+
+              if (profile?.locationId) {
+                constraints.push(where("storeRef", "==", doc(db, "stores", profile.locationId)));
+              }
+              const q = query(bottlesRef, ...constraints);
+              const snap = await getDocs(q);
+
+              if (snap.empty) {
+                Alert.alert("No Stock", "Could not find an available bottle for this wine to pull.");
+                setLoading(false);
+                isProcessing.current = false;
+                return;
+              }
+
+              const bottleDoc = snap.docs[0];
+              const bottleData = { id: bottleDoc.id, ...bottleDoc.data() } as InventoryBottle;
+
+              // 2. Update Bottle
+              await updateDoc(doc(db, "inventory_bottles", bottleData.id), {
+                status: "outbound",
+                storeRef: null,
+                outboundLocationRef: doc(db, "stores", outBoundStoreId),
+                updatedAt: Timestamp.now(),
+              });
+
+              // 3. Update Request
+              const updatedItems = [...request.items];
+              updatedItems[index].pulledQty += 1;
+              updatedItems[index].pulledBottleIds = [
+                ...(updatedItems[index].pulledBottleIds || []),
+                bottleData.id,
+              ];
+
+              const allFulfilled = updatedItems.every(
+                (i) => i.pulledQty + (i.skippedQty || 0) >= i.requestedQty,
+              );
+
+              await updateDoc(doc(db, "pullout_requests", request.id), {
+                items: updatedItems,
+                status: allFulfilled ? "completed" : "in_progress",
+                updatedAt: Timestamp.now(),
+              });
+
+              if (request.wineRequestId && allFulfilled) {
+                const wineRequestRef = doc(db, "wine_requests", request.wineRequestId);
+                await updateDoc(wineRequestRef, {
+                  updatedAt: new Date(),
+                  status: "receiving",
+                });
+              }
+
+              // 4. Log the manual activity
+              logActivity({
+                action: "PULLOUT_BOTTLE_MANUAL",
+                entity: "pullout_requests",
+                entityId: request.id,
+                summary: `Manually pulled bottle ${bottleData.id} (${updatedItems[index].wineName}) for pullout ${request.id}${allFulfilled ? " — request now complete" : ""
+                  }`,
+                details: {
+                  bottleId: bottleData.id,
+                  wineName: updatedItems[index].wineName,
+                  pulledQty: updatedItems[index].pulledQty,
+                  requestedQty: updatedItems[index].requestedQty,
+                  allFulfilled,
+                  wineRequestId: request.wineRequestId,
+                  manual_override: true,
+                },
+                performedBy: profile?.email || "unknown",
+                performedByRole: profile?.role || "warehouse",
+                source: (profile?.role as any) || "warehouse",
+              });
+
+              await fetchRequest();
+
+              if (allFulfilled) {
+                Alert.alert("All Done!", `Pulled ${updatedItems[index].wineName} manually. Request fully fulfilled.`, [
+                  { text: "Finish", onPress: () => { isProcessing.current = false; fetchRequest(); } },
+                ]);
+              }
+            } catch (error) {
+              console.error("Error processing manual pullout:", error);
+              Alert.alert("Error", "Failed to process pullout manually.");
+            } finally {
+              setLoading(false);
+              isProcessing.current = false;
+            }
+          }
+        }
+      ]
+    );
   };
 
   const handleSkipItem = (index: number) => {
@@ -918,6 +1042,23 @@ export default function PulloutDetailScreen() {
                                   <Search
                                     size={18}
                                     color={theme.primary}
+                                    strokeWidth={2}
+                                  />
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                  onPress={() => handlePullWithoutQR(index)}
+                                  style={[
+                                    styles.actionIcon,
+                                    {
+                                      backgroundColor: "#f59e0b1A",
+                                      borderColor: "#f59e0b33",
+                                      marginRight: 6
+                                    },
+                                  ]}
+                                >
+                                  <QrCode
+                                    size={18}
+                                    color="#f59e0b"
                                     strokeWidth={2}
                                   />
                                 </TouchableOpacity>
