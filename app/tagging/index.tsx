@@ -2099,11 +2099,11 @@ export default function TaggingScreen() {
         </Animated.View>
       )}
 
-      {profile?.locationId && (
+      {(profile?.locationId || (bottle as any)?.storeRef?.id) && (
         <CustomerPickerModal
           isOpen={isCustomerModalOpen}
           onClose={() => setIsCustomerModalOpen(false)}
-          storeId={profile.locationId}
+          storeId={profile?.locationId || (bottle as any)?.storeRef?.id}
           theme={theme}
           onSelectCustomer={setSelectedCustomer}
           selectedCustomerId={selectedCustomer?.id}

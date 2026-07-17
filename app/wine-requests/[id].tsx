@@ -6,7 +6,7 @@ import { InventoryBottle, PulloutRequest, WineRequest } from "@/types";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { collection, doc, documentId, getDoc, getDocs, limit, query, serverTimestamp, updateDoc, where } from "firebase/firestore";
+import { collection, doc, documentId, getDoc, getDocs, limit, query, serverTimestamp, updateDoc, where, writeBatch } from "firebase/firestore";
 import {
   ArrowLeft,
   Ban,
@@ -405,6 +405,92 @@ export default function WineRequestDetail() {
     ]);
   };
 
+  const handleBatchBulkNoQR = async () => {
+    if (!request || isProcessing.current) return;
+
+    const pendingBottles = batchBottles.filter(b => !verifiedBottleIds.has(b.bottleId) && !skippedBottleIds.has(b.bottleId));
+    if (pendingBottles.length === 0) return;
+
+    Alert.alert(
+      "Batch Skip QR?",
+      `Are you sure you want to mark the remaining ${pendingBottles.length} bottle(s) as received without scanning their QR labels?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Receive All",
+          onPress: async () => {
+            isProcessing.current = true;
+            try {
+              const batch = writeBatch(db);
+              
+              pendingBottles.forEach(b => {
+                const bottleRef = doc(db, "inventory_bottles", b.bottleId);
+                batch.update(bottleRef, {
+                  status: "received",
+                  isTagged: false,
+                  storeRef: doc(db, "stores", request.storeId),
+                  outboundLocationRef: null,
+                  updatedAt: serverTimestamp(),
+                });
+              });
+
+              const newItems = [...request.items];
+              pendingBottles.forEach(b => {
+                const itemIndex = newItems.findIndex(i => i.masterWineId === b.masterWineId);
+                if (itemIndex > -1) {
+                  newItems[itemIndex] = {
+                    ...newItems[itemIndex],
+                    ingressedQty: (newItems[itemIndex].ingressedQty || 0) + 1
+                  };
+                }
+              });
+
+              const isAllReceived = newItems.every(i => (i.ingressedQty || 0) + (i.skippedQty || 0) >= i.qty);
+              const newStatus = isAllReceived ? "ingress_complete" : request.status;
+
+              batch.update(doc(db, "wine_requests", request.id), {
+                items: newItems,
+                status: newStatus,
+                updatedAt: serverTimestamp(),
+              });
+
+              await batch.commit();
+
+              logActivity({
+                action: "WINE_REQUEST_INGRESS_MANUAL_BATCH",
+                entity: "wine_requests",
+                entityId: request.id,
+                summary: `Manually received ${pendingBottles.length} bottle(s) at store without QR`,
+                details: {
+                  bottleIds: pendingBottles.map(b => b.bottleId),
+                  storeId: request.storeId,
+                  manual_ingress: true
+                },
+                performedBy: profile?.email || "unknown",
+                performedByRole: profile?.role || "store",
+                source: (profile?.role as any) || "store"
+              });
+
+              setRequest(prev => prev ? { ...prev, items: newItems, status: newStatus as any } : prev);
+              
+              const nextVerified = new Set(verifiedBottleIds);
+              pendingBottles.forEach(b => nextVerified.add(b.bottleId));
+              setVerifiedBottleIds(nextVerified);
+
+              await AsyncStorage.removeItem(`dashboard_metrics_${request.storeId}`);
+
+            } catch (err) {
+              console.error(err);
+              Alert.alert("Error", "Failed to receive bottles manually.");
+            } finally {
+              isProcessing.current = false;
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const handleBatchNoQR = async (bottleId: string) => {
     if (!request || isProcessing.current) return;
     
@@ -702,6 +788,15 @@ export default function WineRequestDetail() {
               >
                 <MapPin size={24} color="#fff" strokeWidth={2.5} />
                 <Text style={styles.scanButtonText}>Tag {verifiedBottleIds.size} Locations</Text>
+              </TouchableOpacity>
+            )}
+            {!isAllBatchHandled && (
+              <TouchableOpacity
+                style={[styles.scanButton, { marginBottom: 12, backgroundColor: "#f59e0b", shadowColor: "#f59e0b", borderWidth: 0 }]}
+                onPress={handleBatchBulkNoQR}
+              >
+                <QrCode size={24} color="#fff" strokeWidth={2.5} />
+                <Text style={styles.scanButtonText}>Batch Skip QR</Text>
               </TouchableOpacity>
             )}
             <TouchableOpacity style={[styles.scanButton, { backgroundColor: theme.card, borderWidth: 1, borderColor: theme.border, shadowOpacity: 0 }]} onPress={() => setIsBatchMode(false)}>
