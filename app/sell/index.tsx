@@ -7,8 +7,10 @@ import {
   TouchableOpacity,
   TextInput,
   ScrollView,
+  FlatList,
   Alert,
   ActivityIndicator,
+  Linking,
 } from "react-native";
 import { Stack, useRouter, useLocalSearchParams } from "expo-router";
 import {
@@ -80,6 +82,8 @@ export default function SellScreen() {
   const [isLabelModalOpen, setIsLabelModalOpen] = useState(false);
   const [isPickerModalOpen, setIsPickerModalOpen] = useState(false);
   
+  const [displayLimit, setDisplayLimit] = useState(20);
+  
   // Sell Form
   const [salePrice, setSalePrice] = useState("");
   const [storeVatMode, setStoreVatMode] = useState<"included" | "excluded">("excluded");
@@ -132,14 +136,19 @@ export default function SellScreen() {
       available = masterWines.filter(w => inStockWineIds.has(w.id));
     }
     
-    if (!searchQuery) return available.slice(0, 10);
+    if (!searchQuery) return available.slice(0, displayLimit);
     const q = searchQuery.toLowerCase();
     return available.filter(w => 
       w.name?.toLowerCase().includes(q) || 
       w.sku?.toLowerCase().includes(q) ||
-      w.vintage?.toLowerCase().includes(q)
-    ).slice(0, 20);
-  }, [searchQuery, masterWines, inStockWineIds, profile?.locationId]);
+      w.vintage?.toLowerCase().includes(q) ||
+      w.producer?.toLowerCase().includes(q)
+    ).slice(0, displayLimit);
+  }, [searchQuery, masterWines, inStockWineIds, profile?.locationId, displayLimit]);
+
+  useEffect(() => {
+    setDisplayLimit(20); // Reset limit on search change
+  }, [searchQuery]);
 
   const handleSelectWine = async (wine: MasterWine) => {
     setSelectedWine(wine);
@@ -455,7 +464,7 @@ export default function SellScreen() {
         <Search size={20} color={theme.textSecondary} />
         <TextInput
           style={[styles.searchInput, { color: theme.text }]}
-          placeholder="Search by name, SKU, or vintage..."
+          placeholder="Search by name, producer, SKU, or vintage..."
           placeholderTextColor={theme.textSecondary}
           value={searchQuery}
           onChangeText={setSearchQuery}
@@ -467,10 +476,14 @@ export default function SellScreen() {
           </TouchableOpacity>
         )}
       </View>
-      <ScrollView style={styles.listArea}>
-        {filteredWines.map((w) => (
+      <FlatList
+        style={styles.listArea}
+        data={filteredWines}
+        keyExtractor={(w) => w.id}
+        onEndReached={() => setDisplayLimit((prev) => prev + 20)}
+        onEndReachedThreshold={0.5}
+        renderItem={({ item: w }) => (
           <TouchableOpacity
-            key={w.id}
             style={[styles.wineRow, { borderBottomColor: theme.border }]}
             onPress={() => handleSelectWine(w)}
           >
@@ -486,8 +499,8 @@ export default function SellScreen() {
               </Text>
             </View>
           </TouchableOpacity>
-        ))}
-      </ScrollView>
+        )}
+      />
     </View>
   );
 
@@ -536,9 +549,33 @@ export default function SellScreen() {
     if (!permission) return null;
     if (!permission.granted) {
       return (
-        <View style={styles.content}>
-          <Text style={{ color: theme.text }}>Camera permission required.</Text>
-          <TouchableOpacity onPress={requestPermission}><Text style={{ color: theme.primary }}>Grant Permission</Text></TouchableOpacity>
+        <View style={[styles.content, { alignItems: "center", justifyContent: "center" }]}>
+          <View style={[styles.wineIconContainer, { width: 80, height: 80, borderRadius: 40, backgroundColor: theme.primary + "1A", marginBottom: 24 }]}>
+            <Camera size={40} color={theme.primary} />
+          </View>
+          <Text style={[styles.headerText, { color: theme.text, textAlign: "center", fontSize: 24 }]}>Camera Access Needed</Text>
+          <Text style={[styles.subText, { color: theme.textSecondary, textAlign: "center", marginBottom: 32 }]}>
+            We need camera access to scan QR codes and verify wine labels.
+          </Text>
+          <TouchableOpacity 
+            style={[styles.primaryBtn, { backgroundColor: theme.primary }]} 
+            onPress={async () => {
+              if (permission && !permission.canAskAgain) {
+                Alert.alert(
+                  "Permission Denied",
+                  "Please enable camera permissions in your device settings to continue.",
+                  [
+                    { text: "Cancel", style: "cancel" },
+                    { text: "Open Settings", onPress: () => Linking.openSettings() }
+                  ]
+                );
+              } else {
+                await requestPermission();
+              }
+            }}
+          >
+            <Text style={styles.primaryBtnText}>Grant Permission</Text>
+          </TouchableOpacity>
         </View>
       );
     }

@@ -45,7 +45,7 @@ interface MasterWineWithCount extends MasterWine {
   untaggedCount?: number;
 }
 
-import { normalizeStr, similarityScore } from "@/lib/utils/wineMatching";
+import { similarityScore } from "@/lib/utils/wineMatching";
 
 export default function BottleTaggingScreen() {
   const router = useRouter();
@@ -75,13 +75,20 @@ export default function BottleTaggingScreen() {
   const lastBulkScanTime = useRef<number>(0);
 
   useEffect(() => {
-    fetchMasterWines();
-  }, []);
+    if (profile?.locationId) {
+      fetchMasterWines();
+    }
+  }, [profile?.locationId]);
 
   const fetchMasterWines = async () => {
+    if (!profile?.locationId) return;
     try {
       // 1. Get all bottles that are untagged
-      const untaggedQ = query(collection(db, "inventory_bottles"), where("isTagged", "==", false));
+      const untaggedQ = query(
+        collection(db, "inventory_bottles"),
+        where("isTagged", "==", false),
+        where("storeRef", "==", doc(db, "stores", profile.locationId))
+      );
       const untaggedSnap = await getDocs(untaggedQ);
 
       // 2. Extract unique master wine IDs and their counts
@@ -170,11 +177,17 @@ export default function BottleTaggingScreen() {
     setSelectedWine(wine);
     try {
       // Find untagged bottles: isTagged === false for this masterWine
+      if (!profile?.locationId) {
+        throw new Error("No location assigned to profile.");
+      }
+
       const q = query(
         collection(db, "inventory_bottles"),
         where("masterWineRef", "==", doc(db, "master_wines", wine.id)),
+        where("storeRef", "==", doc(db, "stores", profile.locationId)),
         where("isTagged", "==", false)
       );
+
       const snap = await getDocs(q);
       const bottles = snap.docs.map(
         (d) => ({ id: d.id, ...d.data() } as InventoryBottle)

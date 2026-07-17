@@ -139,7 +139,7 @@ export default function LoginScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.testButton}
-              onPress={() => quickLogin("gstore@gmail.com", "123456")}
+              onPress={() => quickLogin("kong@gmail.com", "123456")}
             >
               <Text style={styles.testButtonText}>Login as Store</Text>
             </TouchableOpacity>

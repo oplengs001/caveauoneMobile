@@ -8,6 +8,7 @@ import {
   serverTimestamp,
   Timestamp,
   updateDoc,
+  writeBatch,
 } from "firebase/firestore";
 import {
   AlertCircle,
@@ -643,6 +644,79 @@ export default function OnboardingDetailScreen() {
             } catch (err: any) {
               console.error(err);
               alert("Error updating bottle: " + err.message);
+            } finally {
+              setIsProcessing(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const handleBatchBulkNoQR = async () => {
+    if (!activeItem || !task || !profile?.locationId) return;
+
+    const locationId = profile.locationId;
+    const pendingIds = batchBottleIds.filter(id => !verifiedBottleIdsSet.has(id) && !issuedBottleIdsSet.has(id));
+
+    if (pendingIds.length === 0) return;
+
+    Alert.alert(
+      "Batch Skip?",
+      `Are you sure you want to mark the remaining ${pendingIds.length} bottle(s) as received without a QR label?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Confirm",
+          onPress: async () => {
+            setIsProcessing(true);
+            try {
+              const batch = writeBatch(db);
+
+              // 1. Mark as received but untagged
+              pendingIds.forEach((bottleId) => {
+                batch.update(doc(db, "inventory_bottles", bottleId), {
+                  status: "received",
+                  isTagged: false,
+                  updatedAt: serverTimestamp(),
+                  storeRef: doc(db, "stores", locationId),
+                });
+              });
+              
+              await batch.commit();
+
+              // 2. Add to verified set
+              const nextVerified = new Set(verifiedBottleIdsSet);
+              pendingIds.forEach(id => nextVerified.add(id));
+              setVerifiedBottleIdsSet(nextVerified);
+              setVerifiedBottleId(pendingIds[pendingIds.length - 1]); 
+
+              // 3. Update task progress 
+              const totalDone = nextVerified.size + issuedBottleIdsSet.size;
+              const updatedItems = task.items.map((i) => {
+                if (i.id === activeItem.id) {
+                  return {
+                    ...i,
+                    onboardedQty: i.onboardedQty + pendingIds.length,
+                  };
+                }
+                return i;
+              });
+              const isFullyDone = totalDone === batchBottleIds.length &&
+                updatedItems.every((i) => i.onboardedQty === i.qty);
+
+              await updateDoc(doc(db, "onboarding_tasks", task.id), {
+                items: updatedItems,
+                status: isFullyDone ? "completed" : "warehouse",
+                updatedAt: serverTimestamp(),
+              });
+
+              if (totalDone === batchBottleIds.length) {
+                setCurrentStep("success");
+              }
+            } catch (err: any) {
+              console.error(err);
+              alert("Error updating bottles: " + err.message);
             } finally {
               setIsProcessing(false);
             }
@@ -1396,7 +1470,7 @@ export default function OnboardingDetailScreen() {
               </Text>
             </View>
             <View
-              style={{ height: 6, backgroundColor: "#1e293b", borderRadius: 3 }}
+              style={{ height: 6, backgroundColor: "#1e293b", borderRadius: 3, marginBottom: 16 }}
             >
               <View
                 style={{
@@ -1407,6 +1481,26 @@ export default function OnboardingDetailScreen() {
                 }}
               />
             </View>
+
+            {verifiedBottleIdsSet.size + issuedBottleIdsSet.size < batchBottleIds.length && (
+              <TouchableOpacity
+                style={{
+                  backgroundColor: "rgba(245,158,11,0.1)",
+                  paddingVertical: 12,
+                  borderRadius: 12,
+                  alignItems: "center",
+                  flexDirection: "row",
+                  justifyContent: "center",
+                  gap: 8,
+                }}
+                onPress={handleBatchBulkNoQR}
+              >
+                <QrCode size={16} color="#f59e0b" strokeWidth={2.5} />
+                <Text style={{ color: "#f59e0b", fontSize: 13, fontWeight: "800", textTransform: "uppercase" }}>
+                  Batch Skip Label (No QR)
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
 
           {/* Bottle list */}

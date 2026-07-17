@@ -285,7 +285,6 @@ export default function TaggingScreen() {
             setStoreVatMode(setting.vatMode);
           }
         } else {
-          setIsFastMoving(false);
           setSalePrice("");
         }
       } catch (err) {
@@ -729,7 +728,7 @@ export default function TaggingScreen() {
     setSelectedCustomer(null);
     setIsCustomerModalOpen(false);
     setPriceError(null);
-    setIsFastMoving(false);
+
   };
 
   // ── Derived VAT values ─────────────────────────────────────────────────────

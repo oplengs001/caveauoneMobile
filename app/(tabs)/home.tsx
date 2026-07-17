@@ -790,6 +790,26 @@ export default function HomeScreen() {
                     All
                   </Text>
                 </TouchableOpacity>
+                <View style={{ width: 1, height: 16, backgroundColor: theme.border, marginHorizontal: 4 }} />
+                <TouchableOpacity
+                  onPress={() => router.push("/sales")}
+                  style={[
+                    styles.filterButton,
+                    {
+                      backgroundColor: theme.primary,
+                      borderColor: theme.primary,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.filterButtonText,
+                      { color: "#fff", fontWeight: "900" },
+                    ]}
+                  >
+                    View All →
+                  </Text>
+                </TouchableOpacity>
               </View>
             </View>
 
@@ -816,7 +836,7 @@ export default function HomeScreen() {
                   adjustsFontSizeToFit
                 >
                   ₱
-                  {salesDashboardMetrics.totalRevenue.toLocaleString(
+                  {salesDashboardMetrics.totalRevenue?.toLocaleString(
                     undefined,
                     {
                       minimumFractionDigits: 2,
@@ -881,19 +901,6 @@ export default function HomeScreen() {
               </View>
             </View>
 
-            <TouchableOpacity
-              style={[
-                styles.viewAllButton,
-                { backgroundColor: theme.card, marginTop: 16 },
-              ]}
-              onPress={() => router.push("/sales")}
-            >
-              <Text
-                style={[styles.viewAllButtonText, { color: theme.primary }]}
-              >
-                View All Sales
-              </Text>
-            </TouchableOpacity>
           </View>
         )}
 
