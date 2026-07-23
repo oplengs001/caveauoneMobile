@@ -1,5 +1,6 @@
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
+import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { auth, db } from "@/lib/firebase";
 import { getSalesByPeriodAllStores, getStores } from "@/lib/queries";
 import { Delivery, PulloutRequest } from "@/types";
@@ -23,7 +24,7 @@ import {
   Truck,
   Wine
 } from "lucide-react-native";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useState, useEffect } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -56,6 +57,7 @@ function formatCurrency(value: number) {
 export default function AdminDashboard() {
   const router = useRouter();
   const { profile } = useAuth();
+  const { notification } = usePushNotifications();
 
   const [salesPeriod, setSalesPeriod] = useState<"today" | "week" | "all">("today");
   const [salesMetrics, setSalesMetrics] = useState({ totalRevenue: 0, totalItems: 0 });
@@ -210,6 +212,12 @@ export default function AdminDashboard() {
       loadAll();
     }, [loadAll])
   );
+
+  useEffect(() => {
+    if (notification) {
+      loadAll();
+    }
+  }, [notification, loadAll]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);

@@ -39,29 +39,35 @@ export const usePushNotifications = (): PushNotificationState => {
     }
 
     if (Device.isDevice) {
-      const { status: existingStatus } = await Notifications.getPermissionsAsync();
-      let finalStatus = existingStatus;
+      try {
+        const { status: existingStatus } = await Notifications.getPermissionsAsync();
+        let finalStatus = existingStatus;
 
-      if (existingStatus !== "granted") {
-        const { status } = await Notifications.requestPermissionsAsync();
-        finalStatus = status;
+        if (existingStatus !== "granted") {
+          const { status } = await Notifications.requestPermissionsAsync();
+          finalStatus = status;
+        }
+
+        if (finalStatus !== "granted") {
+          console.log("Push Permission Denied", "Push notification permission was not granted.");
+          return;
+        }
+
+        const projectId =
+          Constants?.expoConfig?.extra?.eas?.projectId ??
+          Constants?.easConfig?.projectId;
+
+        token = await Notifications.getExpoPushTokenAsync({
+          projectId,
+        });
+        console.log("🟢 [PUSH TOKEN SUCCESS]:", token?.data);
+        console.log("Push Token Success", `Token: ${token?.data}`);
+      } catch (error: any) {
+        console.error("🔴 [PUSH TOKEN ERROR]: Failed to get push token:", error);
+        console.log("Push Token Error", error?.message || String(error));
       }
-
-      if (finalStatus !== "granted") {
-        console.log("Failed to get push token for push notification!");
-        return;
-      }
-
-      const projectId =
-        Constants?.expoConfig?.extra?.eas?.projectId ??
-        Constants?.easConfig?.projectId;
-
-      token = await Notifications.getExpoPushTokenAsync({
-        projectId,
-      });
-
     } else {
-      console.log("Must use physical device for Push Notifications");
+      console.log("Push Notification", "Must use physical device for Push Notifications");
     }
 
     return token;
@@ -70,13 +76,18 @@ export const usePushNotifications = (): PushNotificationState => {
   useEffect(() => {
     registerForPushNotificationsAsync().then((token) => {
       setExpoPushToken(token);
-
+    }).catch((err) => {
+      console.log("Registration Error", String(err));
     });
 
     notificationListener.current = Notifications.addNotificationReceivedListener(
       (notification) => {
         console.log("🔔 [PUSH NOTIFICATION] RECEIVED IN FOREGROUND:", JSON.stringify(notification, null, 2));
         setNotification(notification);
+        console.log(
+          notification.request.content.title || "Notification Received",
+          notification.request.content.body || ""
+        );
       }
     );
 

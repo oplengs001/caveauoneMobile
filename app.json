@@ -12,7 +12,10 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.prosource.caveauone",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "UIBackgroundModes": [
+          "remote-notification"
+        ]
       }
     },
     "android": {
