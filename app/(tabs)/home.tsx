@@ -38,7 +38,7 @@ import {
 export default function HomeScreen() {
   const router = useRouter();
   const { width } = useWindowDimensions();
-  const { profile, loading } = useAuth();
+  const { profile, loading, refreshProfile } = useAuth();
   const [dashboardMetrics, setDashboardMetrics] = useState({
     stockout: { wines: 0, bottles: 0 },
     parAlert: { wines: 0, bottles: 0 },
@@ -310,6 +310,7 @@ export default function HomeScreen() {
         onPress: async () => {
           try {
             await clearToken();
+            await refreshProfile();
             router.replace("/login");
           } catch (error) {
             console.error("Sign out error:", error);

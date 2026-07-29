@@ -1,3 +1,4 @@
+import { useAuth } from "@/context/AuthContext";
 import { saveToken } from "@/lib/auth";
 import { useRouter } from "expo-router";
 import { Lock, LogIn, Mail, ShieldCheck, Warehouse } from "lucide-react-native";
@@ -20,6 +21,7 @@ export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const { refreshProfile } = useAuth();
   const router = useRouter();
 
   const handleLogin = async (loginEmail?: string, loginPassword?: string) => {
@@ -52,6 +54,7 @@ export default function LoginScreen() {
 
       const { token } = await res.json();
       await saveToken(token);
+      await refreshProfile();
       router.replace("/(tabs)/home");
     } catch (error: any) {
       Alert.alert(
@@ -151,7 +154,7 @@ export default function LoginScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.testButton}
-              onPress={() => quickLogin("kong@gmail.com", "123456")}
+              onPress={() => quickLogin("gstore@gmail.com", "123456")}
             >
               <Text style={styles.testButtonText}>Login as Store</Text>
             </TouchableOpacity>

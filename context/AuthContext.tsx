@@ -7,18 +7,43 @@ interface AuthContextType {
   user: any | null;
   profile: AppUser | null;
   loading: boolean;
+  refreshProfile: () => Promise<AppUser | null>;
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
   profile: null,
   loading: true,
+  refreshProfile: async () => null,
 });
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<any | null>(null);
   const [profile, setProfile] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const refreshProfile = async (): Promise<AppUser | null> => {
+    try {
+      const token = await getToken();
+      if (!token) {
+        setUser(null);
+        setProfile(null);
+        return null;
+      }
+
+      const data = await apiFetch('/auth/me');
+      const userData = (data?.user || data) as AppUser;
+      setUser(userData);
+      setProfile(userData);
+      return userData;
+    } catch (err) {
+      console.error('Auth refresh error:', err);
+      await clearToken();
+      setUser(null);
+      setProfile(null);
+      return null;
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -43,7 +68,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       } catch (err) {
         console.error('Auth bootstrap error:', err);
-        // Token invalid — clear it
         await clearToken();
         if (!cancelled) {
           setUser(null);
@@ -59,7 +83,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading }}>
+    <AuthContext.Provider value={{ user, profile, loading, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   );
