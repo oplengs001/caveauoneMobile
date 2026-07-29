@@ -474,9 +474,29 @@ export default function InventoryScreen() {
   }, [fetchInventory]);
 
   useEffect(() => {
-    const filteredBottles = filterType
-      ? bottles.filter((b) => b.masterWineData?.type === filterType)
-      : bottles;
+    let filteredBottles = bottles;
+
+    if (filterType) {
+      filteredBottles = filteredBottles.filter((b) => b.masterWineData?.type === filterType);
+    }
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      filteredBottles = filteredBottles.filter((b) => {
+        const mwName = b.masterWineData?.name?.toLowerCase() || "";
+        const producer = b.masterWineData?.producer?.toLowerCase() || "";
+        const sku = (b.masterWineData?.sku || (b as any).sku || "").toLowerCase();
+        const bId = (b.id || "").toLowerCase();
+        const vintage = (b.masterWineData?.vintage || "").toLowerCase();
+        return (
+          mwName.includes(q) ||
+          producer.includes(q) ||
+          sku.includes(q) ||
+          bId.includes(q) ||
+          vintage.includes(q)
+        );
+      });
+    }
 
     const grouped = filteredBottles.reduce(
       (
@@ -486,7 +506,7 @@ export default function InventoryScreen() {
         string,
         { title: string; masterWineData?: MasterWine; data: BottleView[] }
       > => {
-        const wineId = bottle.masterWineRef?.id || "unknown";
+        const wineId = bottle.masterWineId || bottle.masterWineRef?.id || bottle.masterWineData?.id || "unknown";
         if (!acc[wineId]) {
           acc[wineId] = {
             title: bottle.masterWineData?.name || "Unknown Wine",
@@ -512,7 +532,7 @@ export default function InventoryScreen() {
       groupsArray.sort((a, b) => a.data.length - b.data.length);
 
     setSections(groupsArray);
-  }, [bottles, sortBy, filterType]);
+  }, [bottles, sortBy, filterType, searchQuery]);
 
   return (
     <SafeAreaView

@@ -60,7 +60,7 @@ export default function PulloutRequestsScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      if (profile) fetchRequests(selectedTab, true);
+      if (profile) fetchRequests(selectedTab, false);
     }, [selectedTab, profile]),
   );
 
@@ -212,9 +212,6 @@ export default function PulloutRequestsScreen() {
           renderItem={renderItem}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
-          onEndReached={() => fetchRequests(selectedTab, false)}
-          onEndReachedThreshold={0.5}
-          ListFooterComponent={() => null}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}

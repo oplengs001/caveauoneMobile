@@ -381,8 +381,6 @@ export default function WineRequestsIndex() {
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
           contentContainerStyle={styles.listContent}
-          onEndReached={() => fetchRequests()}
-          onEndReachedThreshold={0.5}
           ListFooterComponent={renderFooter}
           refreshControl={
             <RefreshControl
