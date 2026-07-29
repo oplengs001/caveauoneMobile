@@ -320,10 +320,11 @@ export default function TaggingScreen() {
     )
     .slice(0, 10);
 
-  const fetchLocations = async () => {
-    if (!profile?.locationId) return;
+  const fetchLocations = async (targetStoreId?: string) => {
+    const storeId = targetStoreId || profile?.locationId;
     try {
-      const data = await apiFetch(`/locations?storeId=${profile.locationId}`);
+      const url = storeId ? `/locations?storeId=${storeId}` : "/locations";
+      const data = await apiFetch(url);
       const locs: Location[] = data.locations || data;
       setLocations(locs);
     } catch (error) {
@@ -341,6 +342,8 @@ export default function TaggingScreen() {
       setBottle(bottleData);
 
       const bottleStoreId = bottleData.storeId || (bottleData as any).storeRef?.id;
+      fetchLocations(bottleStoreId || profile?.locationId);
+
       if (profile?.role === "admin" && mode === "sell" && bottleStoreId) {
         fetchStoreVatMode(bottleStoreId);
       }
