@@ -25,10 +25,14 @@ export interface MasterWine {
 
 export interface InventoryBottle {
   id: string;
-  masterWineRef: DocumentReference;
-  locationRef: DocumentReference | null;
-  storeRef: DocumentReference | null;
-  outboundLocationRef?: DocumentReference | null;
+  masterWineRef?: any;
+  locationRef?: any;
+  storeRef?: any;
+  outboundLocationRef?: any;
+  masterWineId?: string;
+  locationId?: string | null;
+  storeId?: string | null;
+  outboundStoreId?: string | null;
   sku: string;
   readableId?: string;
   isTagged?: boolean;

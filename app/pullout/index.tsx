@@ -1,16 +1,6 @@
 import { useAuth } from "@/context/AuthContext";
-import { db } from "@/lib/firebase";
+import { apiFetch } from "@/lib/api";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
-import {
-  collection,
-  getDocs,
-  limit,
-  orderBy,
-  query,
-  QueryDocumentSnapshot,
-  startAfter,
-  where,
-} from "firebase/firestore";
 import {
   ArrowRight,
   ChevronLeft,
@@ -35,9 +25,6 @@ const PAGE_SIZE = 10;
 export default function PulloutRequestsScreen() {
   const [requests, setRequests] = useState<PulloutRequest[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [lastDoc, setLastDoc] = useState<QueryDocumentSnapshot | null>(null);
-  const [hasMore, setHasMore] = useState(true);
   const [selectedTab, setSelectedTab] = useState<
     "pending" | "in_progress" | "completed"
   >("pending");
@@ -49,63 +36,24 @@ export default function PulloutRequestsScreen() {
     status: string = selectedTab,
     isRefresh = false,
   ) => {
-    if (loadingMore || (!hasMore && !isRefresh) || !profile) return;
-
-    if (isRefresh) {
-      setRefreshing(true);
-      setHasMore(true);
-    } else {
-      if (requests.length > 0) setLoadingMore(true);
-      else setLoading(true);
-    }
+    if (!profile) return;
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
 
     try {
       const sourceIds = ["warehouse"];
-      if (profile.locationId) {
-        sourceIds.push(profile.locationId);
-      }
+      if (profile.locationId) sourceIds.push(profile.locationId);
 
-      let q = query(
-        collection(db, "pullout_requests"),
-        where("status", "==", status),
-        where("sourceStoreId", "in", sourceIds),
-        orderBy("createdAt", "desc"),
-        limit(PAGE_SIZE),
-      );
-
-      if (!isRefresh && lastDoc) {
-        q = query(
-          collection(db, "pullout_requests"),
-          where("status", "==", status),
-          where("sourceStoreId", "in", sourceIds),
-          orderBy("createdAt", "desc"),
-          startAfter(lastDoc),
-          limit(PAGE_SIZE),
-        );
-      }
-
-      const snap = await getDocs(q);
-      const data = snap.docs.map((doc) => ({
-        id: doc.id,
-        ...(doc.data() as object),
-      })) as PulloutRequest[];
-
-      if (isRefresh) {
-        setRequests(data);
-        setLastDoc(snap.docs[snap.docs.length - 1]);
-        setHasMore(snap.docs.length === PAGE_SIZE);
-      } else {
-        setRequests((prev) => [...prev, ...data]);
-        if (snap.docs.length > 0) {
-          setLastDoc(snap.docs[snap.docs.length - 1]);
-        }
-        setHasMore(snap.docs.length === PAGE_SIZE);
-      }
+      const params = new URLSearchParams({
+        status,
+        sourceStoreId: sourceIds.join(","),
+      });
+      const data = await apiFetch(`/pullout-requests?${params}`);
+      setRequests((data.pulloutRequests || data) as PulloutRequest[]);
     } catch (error) {
       console.error("Error fetching pullout requests:", error);
     } finally {
       setLoading(false);
-      setLoadingMore(false);
       setRefreshing(false);
     }
   };
@@ -266,15 +214,7 @@ export default function PulloutRequestsScreen() {
           contentContainerStyle={styles.listContent}
           onEndReached={() => fetchRequests(selectedTab, false)}
           onEndReachedThreshold={0.5}
-          ListFooterComponent={() =>
-            loadingMore ? (
-              <ActivityIndicator
-                size="small"
-                color="#4f46e5"
-                style={{ marginVertical: 20 }}
-              />
-            ) : null
-          }
+          ListFooterComponent={() => null}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}

@@ -13,8 +13,7 @@ import { X, Camera, AlertCircle, RefreshCw } from "lucide-react-native";
 import { Colors } from "@/constants/theme";
 import BottlePickerModal, { BottleWithLocation } from "./BottlePickerModal";
 import { similarityScore } from "@/lib/utils/wineMatching";
-import { collection, getDocs, query, where, doc, getDoc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { apiFetch } from "@/lib/api";
 import { MasterWine, InventoryBottle } from "@/types";
 
 const NEXT_JS_API_URL = process.env.EXPO_PUBLIC_API_URL || "https://caveauone.vercel.app";
@@ -59,8 +58,9 @@ export default function LabelScanModal({
 
   const fetchMasterWines = async () => {
     try {
-      const snap = await getDocs(collection(db, "master_wines"));
-      setMasterWines(snap.docs.map((d) => ({ id: d.id, ...d.data() } as MasterWine)));
+      const data = await apiFetch("/wines");
+      const list: MasterWine[] = data.wines || data;
+      setMasterWines(list);
     } catch (err) {
       console.error("Error fetching master wines", err);
     }
@@ -136,56 +136,41 @@ export default function LabelScanModal({
 
   const fetchBottlesForWine = async (wineId: string) => {
     try {
-      const constraints = [
-        where("masterWineRef", "==", doc(db, "master_wines", wineId)),
-        where("status", "in", ["received", "shelved"]),
-      ];
-      if (storeId) {
-        constraints.push(where("storeRef", "==", doc(db, "stores", storeId)));
-      }
+      const params = new URLSearchParams({
+        masterWineId: wineId,
+        status: "received,shelved",
+      });
+      if (storeId) params.set("storeId", storeId);
 
-      const q = query(collection(db, "inventory_bottles"), ...constraints);
-      const snap = await getDocs(q);
+      const [bottlesData, locationsData] = await Promise.all([
+        apiFetch(`/bottles?${params}`),
+        apiFetch("/locations"),
+      ]);
 
-      const bottles: BottleWithLocation[] = [];
-      const locationCache: Record<string, string> = {};
+      const bottles: InventoryBottle[] = bottlesData.bottles || bottlesData;
+      const locationsList: any[] = locationsData.locations || locationsData;
+      const locationMap: Record<string, string> = {};
+      locationsList.forEach((l) => (locationMap[l.id] = l.name));
 
-      for (const d of snap.docs) {
-        const data = d.data() as InventoryBottle;
-        let locName = "Unassigned";
-        if (data.locationRef) {
-          if (locationCache[data.locationRef.id]) {
-            locName = locationCache[data.locationRef.id];
-          } else {
-            const locSnap = await getDoc(data.locationRef);
-            if (locSnap.exists()) {
-              locName = locSnap.data().name;
-              locationCache[data.locationRef.id] = locName;
-            }
-          }
-        }
-        bottles.push({
-          bottleId: d.id,
-          locationName: locName,
-          locationId: data.locationRef?.id || "unassigned",
-        });
-      }
+      const bottleList: BottleWithLocation[] = bottles.map((b: any) => ({
+        bottleId: b.id,
+        locationName: b.locationId ? (locationMap[b.locationId] || "Assigned") : "Unassigned",
+        locationId: b.locationId || "unassigned",
+      }));
 
-      const uniqueLocations = new Set(bottles.map(b => b.locationName));
+      const uniqueLocations = new Set(bottleList.map(b => b.locationName));
 
-      if (uniqueLocations.size <= 1 && bottles.length > 0) {
-        onBottleSelected(bottles[0].bottleId);
+      if (uniqueLocations.size <= 1 && bottleList.length > 0) {
+        onBottleSelected(bottleList[0].bottleId);
         onClose();
       } else if (uniqueLocations.size > 1) {
-        setBottlesList(bottles);
+        setBottlesList(bottleList);
         setPhase("bottle_picker");
       } else {
-        alert("No bottles available for this wine.");
-        setPhase("camera");
+        setPhase(masterWineId ? "mismatch" : "no_match");
       }
     } catch (err) {
       console.error("Error fetching bottles:", err);
-      alert("Error finding bottles for this wine.");
       setPhase("camera");
     }
   };

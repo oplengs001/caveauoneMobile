@@ -1,17 +1,8 @@
 import { useAuth } from "@/context/AuthContext";
-import { db } from "@/lib/firebase";
+import { apiFetch } from "@/lib/api";
 import { InventoryBottle, MasterWine } from "@/types";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { Stack, useRouter } from "expo-router";
-import {
-  collection,
-  doc,
-  getDocs,
-  query,
-  serverTimestamp,
-  updateDoc,
-  where
-} from "firebase/firestore";
 import {
   AlertCircle,
   Camera,
@@ -84,30 +75,26 @@ export default function BottleTaggingScreen() {
     if (!profile?.locationId) return;
     try {
       // 1. Get all bottles that are untagged
-      const untaggedQ = query(
-        collection(db, "inventory_bottles"),
-        where("isTagged", "==", false),
-        where("storeRef", "==", doc(db, "stores", profile.locationId))
-      );
-      const untaggedSnap = await getDocs(untaggedQ);
+      const untaggedData = await apiFetch(`/bottles?storeId=${profile.locationId}&isTagged=false`);
+      const untaggedBottlesList: InventoryBottle[] = untaggedData.bottles || untaggedData;
 
       // 2. Extract unique master wine IDs and their counts
       const untaggedCounts: Record<string, number> = {};
-      untaggedSnap.docs.forEach((d) => {
-        const id = d.data().masterWineRef?.id;
+      untaggedBottlesList.forEach((b) => {
+        const id = b.masterWineId || (b as any).masterWineRef?.id;
         if (id) {
           untaggedCounts[id] = (untaggedCounts[id] || 0) + 1;
         }
       });
 
       // 3. Fetch master wines and filter
-      const snap = await getDocs(collection(db, "master_wines"));
-      const wines = snap.docs
-        .filter((doc) => untaggedCounts[doc.id] > 0)
-        .map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-          untaggedCount: untaggedCounts[doc.id],
+      const masterData = await apiFetch("/wines");
+      const masterWinesList: MasterWine[] = masterData.wines || masterData;
+      const wines = masterWinesList
+        .filter((w) => untaggedCounts[w.id] > 0)
+        .map((w) => ({
+          ...w,
+          untaggedCount: untaggedCounts[w.id],
         } as MasterWineWithCount));
 
       setMasterWines(wines);
@@ -176,22 +163,12 @@ export default function BottleTaggingScreen() {
     setLoading(true);
     setSelectedWine(wine);
     try {
-      // Find untagged bottles: isTagged === false for this masterWine
       if (!profile?.locationId) {
         throw new Error("No location assigned to profile.");
       }
 
-      const q = query(
-        collection(db, "inventory_bottles"),
-        where("masterWineRef", "==", doc(db, "master_wines", wine.id)),
-        where("storeRef", "==", doc(db, "stores", profile.locationId)),
-        where("isTagged", "==", false)
-      );
-
-      const snap = await getDocs(q);
-      const bottles = snap.docs.map(
-        (d) => ({ id: d.id, ...d.data() } as InventoryBottle)
-      );
+      const data = await apiFetch(`/bottles?storeId=${profile.locationId}&masterWineId=${wine.id}&isTagged=false`);
+      const bottles: InventoryBottle[] = data.bottles || data;
       setUntaggedBottles(bottles);
       setQtyToTag(bottles.length > 0 ? 1 : 0);
       setPhase("confirm");
@@ -232,9 +209,9 @@ export default function BottleTaggingScreen() {
     setIsProcessingAI(true);
 
     try {
-      await updateDoc(doc(db, "inventory_bottles", data), {
-        isTagged: true,
-        updatedAt: serverTimestamp(),
+      await apiFetch(`/bottles/${data}`, {
+        method: "PATCH",
+        body: JSON.stringify({ isTagged: true }),
       });
 
       const nextVerified = new Set(verifiedIds).add(data);

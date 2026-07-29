@@ -27,21 +27,8 @@ import {
   Wine,
 } from "lucide-react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
-import {
-  collection,
-  query,
-  getDocs,
-  where,
-  doc,
-  getDoc,
-  updateDoc,
-  serverTimestamp,
-  addDoc,
-  increment,
-  getCountFromServer,
-} from "firebase/firestore";
-
 import { db } from "@/lib/firebase";
+import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { Colors } from "@/constants/theme";
 import { MasterWine, InventoryBottle, Customer } from "@/types";
@@ -98,21 +85,17 @@ export default function SellScreen() {
 
   const fetchMasterWines = async () => {
     try {
-      const snap = await getDocs(collection(db, "master_wines"));
-      setMasterWines(snap.docs.map((d) => ({ id: d.id, ...d.data() } as MasterWine)));
+      const winesData = await apiFetch("/wines");
+      const winesList: MasterWine[] = winesData.wines || winesData;
+      setMasterWines(winesList);
 
       if (profile?.locationId) {
-        const bottlesSnap = await getDocs(
-          query(
-            collection(db, "inventory_bottles"),
-            where("storeRef", "==", doc(db, "stores", profile.locationId)),
-            where("status", "in", ["received", "shelved"])
-          )
-        );
+        const bottlesData = await apiFetch(`/bottles?storeId=${profile.locationId}&status=received,shelved`);
+        const bottlesList: InventoryBottle[] = bottlesData.bottles || bottlesData;
         const inStockIds = new Set<string>();
-        bottlesSnap.docs.forEach(d => {
-          const ref = d.data().masterWineRef;
-          if (ref) inStockIds.add(ref.id);
+        bottlesList.forEach((b: any) => {
+          const refId = b.masterWineId || b.masterWineRef?.id;
+          if (refId) inStockIds.add(refId);
         });
         setInStockWineIds(inStockIds);
       }
@@ -158,68 +141,42 @@ export default function SellScreen() {
     // Fetch bottles for this wine at this store
     setIsFetchingLocations(true);
     try {
-      const constraints = [
-        where("masterWineRef", "==", doc(db, "master_wines", wine.id)),
-        where("status", "in", ["received", "shelved"])
-      ];
+      const params = new URLSearchParams({
+        masterWineId: wine.id,
+        status: "received,shelved",
+      });
+      if (profile?.locationId) params.set("storeId", profile.locationId);
+
+      const bottlesData = await apiFetch(`/bottles?${params}`);
+      const bottles: InventoryBottle[] = bottlesData.bottles || bottlesData;
+
+      const locationsData = await apiFetch("/locations");
+      const locs: any[] = locationsData.locations || locationsData;
+      const locationMap: Record<string, string> = {};
+      locs.forEach((l) => (locationMap[l.id] = l.name));
+
+      const bottlePickerList: BottleWithLocation[] = bottles.map((b: any) => ({
+        bottleId: b.id,
+        locationName: b.locationId ? (locationMap[b.locationId] || "Assigned") : "Unassigned",
+        locationId: b.locationId || "unassigned",
+      }));
+
+      setBottlesList(bottlePickerList);
+
       if (profile?.locationId) {
-        constraints.push(where("storeRef", "==", doc(db, "stores", profile.locationId)));
-      }
-
-      const q = query(collection(db, "inventory_bottles"), ...constraints);
-      const snap = await getDocs(q);
-
-      const bottles: BottleWithLocation[] = [];
-      const locationCache: Record<string, string> = {};
-
-      for (const d of snap.docs) {
-        const data = d.data() as InventoryBottle;
-        let locName = "Unassigned";
-        if (data.locationRef) {
-          if (locationCache[data.locationRef.id]) {
-            locName = locationCache[data.locationRef.id];
-          } else {
-            const locSnap = await getDoc(data.locationRef);
-            if (locSnap.exists()) {
-              locName = locSnap.data().name;
-              locationCache[data.locationRef.id] = locName;
-            }
-          }
-        }
-        bottles.push({
-          bottleId: d.id,
-          locationName: locName,
-          locationId: data.locationRef?.id || "unassigned",
-        });
-      }
-      
-      setBottlesList(bottles);
-      
-      // Auto-skip to verification if bottles exist?
-      // No, the plan says LOCATE is an explicit step to see where bottles are.
-
-      // Also check store settings for fast moving and price
-      if (profile?.locationId) {
-        const settingsSnap = await getDocs(
-          query(
-            collection(db, "store_wine_settings"),
-            where("storeId", "==", profile.locationId),
-            where("masterWineId", "==", wine.id)
-          )
-        );
-        if (!settingsSnap.empty) {
-          const setting = settingsSnap.docs[0].data();
+        const settingsData = await apiFetch(`/stock-settings?storeId=${profile.locationId}&masterWineId=${wine.id}`);
+        const settingsList: any[] = settingsData.settings || settingsData;
+        if (settingsList.length > 0) {
+          const setting = settingsList[0];
           setWineCategory(setting.wineCategory ?? null);
           if (setting.sellingPrice) setSalePrice(setting.sellingPrice.toString());
           if (setting.vatMode) setStoreVatMode(setting.vatMode);
-        } else {
-          // fallback to master wine price
-          if (wine.price) setSalePrice(wine.price.toString());
+        } else if (wine.price) {
+          setSalePrice(wine.price.toString());
         }
-      } else {
-        if (wine.price) setSalePrice(wine.price.toString());
+      } else if (wine.price) {
+        setSalePrice(wine.price.toString());
       }
-      
     } catch (err) {
       console.error(err);
       Alert.alert("Error", "Could not load bottle locations.");
@@ -268,19 +225,19 @@ export default function SellScreen() {
         totalAmount = numericPrice;
       }
 
-      const bottleRef = doc(db, "inventory_bottles", selectedBottleId);
-
-      // Log sale activity
-      await addDoc(collection(db, "activity_logs"), {
-        action: "bottle_sold",
-        entity: "inventory_bottles",
-        entityId: selectedBottleId,
-        summary: `Sold bottle of ${selectedWine?.name}`,
-        performedBy: profile?.email || "unknown",
-        performedByRole: profile?.role || "unknown",
-        source: profile?.role === "admin" ? "admin" : "warehouse",
-        timestamp: serverTimestamp(),
-        details: {
+      // Create a sales record
+      await apiFetch("/sales", {
+        method: "POST",
+        body: JSON.stringify({
+          bottleId: selectedBottleId,
+          masterWineId: selectedWine?.id || null,
+          wineName: selectedWine?.name,
+          vintage: selectedWine?.vintage,
+          producer: selectedWine?.producer,
+          format: selectedWine?.format,
+          storeId: profile?.locationId || null,
+          soldById: profile?.id,
+          soldByEmail: profile?.email,
           price: netPrice,
           vatAmount,
           totalAmount,
@@ -289,122 +246,81 @@ export default function SellScreen() {
           customerName: selectedCustomer?.name || null,
           wineCategory,
           masterWinePrice: selectedWine?.price || null,
-        },
+        }),
       });
 
-      // Create a sales record
-      await addDoc(collection(db, "sales"), {
-        bottleId: selectedBottleId,
-        masterWineId: selectedWine?.id || null,
-        wineName: selectedWine?.name,
-        vintage: selectedWine?.vintage,
-        producer: selectedWine?.producer,
-        format: selectedWine?.format,
-        storeId: profile?.locationId || null,
-        soldById: profile?.id,
-        soldByEmail: profile?.email,
-        soldAt: serverTimestamp(),
-        price: netPrice,
-        vatAmount,
-        totalAmount,
-        vatMode: storeVatMode,
-        customerId: selectedCustomer?.id || null,
-        customerName: selectedCustomer?.name || null,
-        wineCategory,
-        masterWinePrice: selectedWine?.price || null,
-      });
-
-      // Update customer spend if selected
-      if (selectedCustomer?.id) {
-        await updateDoc(doc(db, "customers", selectedCustomer.id), {
-          totalSpend: increment(totalAmount),
-          totalOrders: increment(1),
-          lastPurchaseDate: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        });
-      }
-
-      await updateDoc(bottleRef, {
-        status: "consumed",
-        soldAt: serverTimestamp(),
-        locationRef: null,
-        updatedAt: serverTimestamp(),
+      // Update bottle status to consumed
+      await apiFetch(`/bottles/${selectedBottleId}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          status: "consumed",
+          locationId: null,
+        }),
       });
 
       // PAR Alert logic
       if (profile?.role === "store" && profile?.locationId && selectedWine) {
         const storeId = profile.locationId;
-        const settingsSnap = await getDocs(
-          query(
-            collection(db, "store_wine_settings"),
-            where("storeId", "==", storeId),
-            where("masterWineId", "==", selectedWine.id)
-          )
-        );
+        try {
+          const settingsData = await apiFetch(`/stock-settings?storeId=${storeId}&masterWineId=${selectedWine.id}`);
+          const settingsList: any[] = settingsData.settings || settingsData;
 
-        if (!settingsSnap.empty) {
-          const setting = settingsSnap.docs[0].data();
-          if (
-            !setting.discontinued &&
-            setting.parLevel !== undefined &&
-            setting.safetyStock !== undefined
-          ) {
-            const countSnap = await getCountFromServer(
-              query(
-                collection(db, "inventory_bottles"),
-                where("storeRef", "==", doc(db, "stores", storeId)),
-                where("masterWineRef", "==", doc(db, "master_wines", selectedWine.id)),
-                where("status", "in", ["received", "shelved"])
-              )
-            );
-            const stockCount = countSnap.data().count;
+          if (settingsList.length > 0) {
+            const setting = settingsList[0];
+            if (
+              !setting.discontinued &&
+              setting.parLevel !== undefined &&
+              setting.safetyStock !== undefined
+            ) {
+              const bottlesData = await apiFetch(`/bottles?storeId=${storeId}&masterWineId=${selectedWine.id}&status=received,shelved`);
+              const bottlesList: any[] = bottlesData.bottles || bottlesData;
+              const stockCount = bottlesList.length;
 
-            if (stockCount <= setting.parLevel) {
-              const pendingRequestsSnap = await getDocs(
-                query(
-                  collection(db, "wine_requests"),
-                  where("storeId", "==", storeId),
-                  where("status", "==", "pending")
-                )
-              );
+              if (stockCount <= setting.parLevel) {
+                const requestsData = await apiFetch(`/wine-requests?storeId=${storeId}&status=pending`);
+                const pendingRequests: any[] = requestsData.wineRequests || requestsData;
 
-              let hasPending = false;
-              pendingRequestsSnap.docs.forEach((reqDoc) => {
-                reqDoc.data().items?.forEach((item: any) => {
-                  if (item.masterWineId === selectedWine.id) hasPending = true;
-                });
-              });
-
-              if (!hasPending) {
-                const requestedQty = Math.max(0, setting.safetyStock - stockCount);
-                if (requestedQty > 0) {
-                  await addDoc(collection(db, "wine_requests"), {
-                    storeId,
-                    targetStoreId: "warehouse",
-                    createdBy: profile.email || "System",
-                    requesterId: profile.id || "system",
-                    status: "pending",
-                    items: [
-                      {
-                        masterWineId: selectedWine.id,
-                        wineName: selectedWine.name,
-                        vintage: selectedWine.vintage || "",
-                        sku: selectedWine.sku || "",
-                        format: selectedWine.format || "",
-                        producer: selectedWine.producer || "",
-                        qty: requestedQty,
-                        price: selectedWine.price || 0,
-                        pulledQty: 0,
-                      },
-                    ],
-                    totalAmount: (selectedWine.price || 0) * requestedQty,
-                    createdAt: serverTimestamp(),
-                    updatedAt: serverTimestamp(),
+                let hasPending = false;
+                pendingRequests.forEach((req: any) => {
+                  req.items?.forEach((item: any) => {
+                    if (item.masterWineId === selectedWine.id) hasPending = true;
                   });
+                });
+
+                if (!hasPending) {
+                  const requestedQty = Math.max(0, setting.safetyStock - stockCount);
+                  if (requestedQty > 0) {
+                    await apiFetch("/wine-requests", {
+                      method: "POST",
+                      body: JSON.stringify({
+                        storeId,
+                        targetStoreId: "warehouse",
+                        createdBy: profile.email || "System",
+                        requesterId: profile.id || "system",
+                        status: "pending",
+                        items: [
+                          {
+                            masterWineId: selectedWine.id,
+                            wineName: selectedWine.name,
+                            vintage: selectedWine.vintage || "",
+                            sku: selectedWine.sku || "",
+                            format: selectedWine.format || "",
+                            producer: selectedWine.producer || "",
+                            qty: requestedQty,
+                            price: selectedWine.price || 0,
+                            pulledQty: 0,
+                          },
+                        ],
+                        totalAmount: (selectedWine.price || 0) * requestedQty,
+                      }),
+                    });
+                  }
                 }
               }
             }
           }
+        } catch (e) {
+          console.error("Error checking PAR alert in sell screen:", e);
         }
       }
 

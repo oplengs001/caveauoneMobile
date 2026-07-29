@@ -1,9 +1,8 @@
 import { Colors } from "@/constants/theme";
-import { db } from "@/lib/firebase";
+import { apiFetch } from "@/lib/api";
 import { InventoryBottle, Delivery } from "@/types";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { doc, getDoc, serverTimestamp, updateDoc } from "firebase/firestore";
 import {
   ArrowLeft,
   CheckCircle2,
@@ -57,14 +56,8 @@ export default function DeliveryDetail() {
     if (!id) return;
     setLoading(true);
     try {
-      const snap = await getDoc(doc(db, "deliveries", id as string));
-      if (snap.exists()) {
-        setDelivery({
-          id: snap.id,
-          ...snap.data(),
-          createdAt: snap.data().createdAt?.toDate() || new Date(),
-        } as Delivery);
-      }
+      const data = await apiFetch(`/deliveries/${id}`);
+      setDelivery(data as Delivery);
     } catch (err) {
       console.error("Failed to fetch delivery:", err);
     } finally {
@@ -78,18 +71,18 @@ export default function DeliveryDetail() {
     setScanning(false);
 
     try {
-      const bottleRef = doc(db, "inventory_bottles", data);
-      const bottleSnap = await getDoc(bottleRef);
-
-      if (!bottleSnap.exists()) {
+      // Fetch bottle details from REST API
+      let bottleData: InventoryBottle;
+      try {
+        bottleData = await apiFetch(`/bottles/${data}`);
+      } catch {
         Alert.alert("Not Found", `No bottle found with ID: ${data}`, [
           { text: "OK", onPress: () => setScanning(true) },
         ]);
         return;
       }
 
-      const bottleData = bottleSnap.data() as InventoryBottle;
-      if (bottleData.storeRef?.id === delivery.storeId) {
+      if (bottleData.storeId === delivery.storeId) {
         Alert.alert(
           "Already Received",
           "This bottle has already been received at this store.",
@@ -97,7 +90,7 @@ export default function DeliveryDetail() {
         );
         return;
       }
-      if (bottleData.outboundLocationRef?.id !== delivery.storeId) {
+      if (bottleData.outboundStoreId !== delivery.storeId) {
         Alert.alert(
           "Wrong Store",
           "This bottle is not designated for your location.",
@@ -115,7 +108,7 @@ export default function DeliveryDetail() {
         return;
       }
 
-      const masterWineId = bottleData.masterWineRef.id;
+      const masterWineId = bottleData.masterWineId;
       const itemIndex = delivery.items.findIndex(
         (i) => i.masterWineId === masterWineId,
       );
@@ -140,12 +133,15 @@ export default function DeliveryDetail() {
         return;
       }
 
-      await updateDoc(bottleRef, {
-        status: "received",
-        storeRef: doc(db, "stores", delivery.storeId),
-        locationRef: null,
-        outboundLocationRef: null,
-        updatedAt: serverTimestamp(),
+      // Update bottle status via REST API
+      await apiFetch(`/bottles/${data}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          status: "received",
+          storeId: delivery.storeId,
+          locationId: null,
+          outboundStoreId: null,
+        }),
       });
 
       const newItems = [...delivery.items];
@@ -156,10 +152,12 @@ export default function DeliveryDetail() {
       const allReceived = newItems.every((i) => (i.ingressedQty || 0) >= i.qty);
       const newStatus = allReceived ? "ingress_complete" : "receiving";
 
-      await updateDoc(doc(db, "deliveries", delivery.id), {
-        items: newItems,
-        status: newStatus,
-        updatedAt: serverTimestamp(),
+      await apiFetch(`/deliveries/${delivery.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          items: newItems,
+          status: newStatus,
+        }),
       });
 
       const scannedBottleId = data;

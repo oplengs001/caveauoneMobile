@@ -1,94 +1,80 @@
-import { db } from "@/lib/firebase";
-import { collection, doc, DocumentReference, getCountFromServer, getDocs, limit, query, where } from "firebase/firestore";
+import { apiFetch } from "@/lib/api";
 import { InventoryBottle } from "@/types";
 import { withCache } from "./cache";
 
 export async function getReceivedAndShelvedBottles(limitCount: number = 3000): Promise<InventoryBottle[]> {
   return withCache(`active_bottles_${limitCount}`, 2 * 60 * 1000, async () => {
-    const q = query(
-      collection(db, "inventory_bottles"),
-      where("status", "in", ["received", "shelved"]),
-      limit(limitCount)
-    );
-    const snap = await getDocs(q);
-    return snap.docs.map(d => ({ id: d.id, ...(d.data() as Omit<InventoryBottle, 'id'>) } as InventoryBottle));
+    const params = new URLSearchParams({
+      status: "received,shelved",
+      limit: String(limitCount),
+    });
+    const data = await apiFetch(`/bottles?${params}`);
+    return (data.bottles || data) as InventoryBottle[];
   });
 }
 
-
 export async function countBottlesByWineAndStore(
-  wineRef: DocumentReference,
-  storeRef: DocumentReference,
+  wineId: string,
+  storeId: string,
   statuses: string[]
 ): Promise<number> {
-  const countSnap = await getCountFromServer(
-    query(
-      collection(db, "inventory_bottles"),
-      where("storeRef", "==", storeRef),
-      where("masterWineRef", "==", wineRef),
-      where("status", "in", statuses)
-    )
-  );
-  return countSnap.data().count;
+  const params = new URLSearchParams({
+    masterWineId: wineId,
+    storeId,
+    status: statuses.join(","),
+    countOnly: "true",
+  });
+  const data = await apiFetch(`/bottles?${params}`);
+  return data.count ?? (data.bottles?.length ?? 0);
 }
 
 export async function countBottlesByWine(
-  wineRef: DocumentReference,
+  wineId: string,
   statuses: string[]
 ): Promise<number> {
-  const countSnap = await getCountFromServer(
-    query(
-      collection(db, "inventory_bottles"),
-      where("masterWineRef", "==", wineRef),
-      where("status", "in", statuses)
-    )
-  );
-  return countSnap.data().count;
+  const params = new URLSearchParams({
+    masterWineId: wineId,
+    status: statuses.join(","),
+    countOnly: "true",
+  });
+  const data = await apiFetch(`/bottles?${params}`);
+  return data.count ?? (data.bottles?.length ?? 0);
 }
 
 export async function getBottlesByWine(
-  wineRef: DocumentReference,
+  wineId: string,
   statuses: string[],
-  storeRef?: DocumentReference,
+  storeId?: string,
   limitCount?: number
 ): Promise<InventoryBottle[]> {
-  let q: any = query(
-    collection(db, "inventory_bottles"),
-    where("masterWineRef", "==", wineRef),
-    where("status", "in", statuses)
-  );
-  if (storeRef) {
-    q = query(q, where("storeRef", "==", storeRef));
-  }
-  if (limitCount) {
-    q = query(q, limit(limitCount));
-  }
-  const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...(d.data() as Omit<InventoryBottle, 'id'>) } as InventoryBottle));
+  const params = new URLSearchParams({
+    masterWineId: wineId,
+    status: statuses.join(","),
+  });
+  if (storeId) params.set("storeId", storeId);
+  if (limitCount) params.set("limit", String(limitCount));
+  const data = await apiFetch(`/bottles?${params}`);
+  return (data.bottles || data) as InventoryBottle[];
 }
 
 export async function batchCountBottles(
-  pairs: { wineRef: DocumentReference; storeRef: DocumentReference }[],
+  pairs: { wineId: string; storeId: string }[],
   statuses: string[]
 ) {
   // Execute in parallel
   const results = await Promise.all(
-    pairs.map(p => countBottlesByWineAndStore(p.wineRef, p.storeRef, statuses))
+    pairs.map(p => countBottlesByWineAndStore(p.wineId, p.storeId, statuses))
   );
   return results;
 }
 
 export async function countBottlesForStoreDashboard(
-  storeRef: DocumentReference,
+  storeId: string,
   settings: any[]
 ) {
   const pairs = settings.map(s => {
-    // Determine the wine ID from the setting
     const wineId = s.masterWineId || s.wineId || (s.masterWineRef?.id) || (s.wineRef?.id);
-    return {
-      wineRef: doc(db, "master_wines", wineId),
-      storeRef
-    };
+    return { wineId, storeId };
   });
   return batchCountBottles(pairs, ["shelved", "received"]);
 }

@@ -1,20 +1,12 @@
 import AdminDashboard from "@/components/AdminDashboard";
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
-import { auth, db } from "@/lib/firebase";
+import { apiFetch } from "@/lib/api";
+import { clearToken } from "@/lib/auth";
 import { countBottlesForStoreDashboard, getSalesByPeriod, getStores } from "@/lib/queries";
 import { Delivery, PulloutRequest, WineRequest } from "@/types";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
-import { signOut } from "firebase/auth";
-import {
-  collection,
-  doc,
-  getCountFromServer,
-  getDocs,
-  query,
-  where,
-} from "firebase/firestore";
 import {
   AlertOctagon,
   AlertTriangle,
@@ -126,40 +118,28 @@ export default function HomeScreen() {
       }
 
       // Fetch ACTIVE pending requests to exclude wines already being re-ordered
-      const pendingRequestsSnap = await getDocs(
-        query(
-          collection(db, "wine_requests"),
-          where("storeId", "==", storeId),
-          where("status", "in", ["pending", "approved", "in_progress", "receiving"]),
-        ),
-      );
+      const [pendingData, settingsData] = await Promise.all([
+        apiFetch(`/wine-requests?storeId=${storeId}&status=pending,approved,in_progress,receiving`),
+        apiFetch(`/stock-settings?storeId=${storeId}&discontinued=false`),
+      ]);
+
       const pendingWineIds = new Set<string>();
-      pendingRequestsSnap.docs.forEach((reqDoc) => {
-        reqDoc.data().items?.forEach((item: { masterWineId: string }) => {
-          if (item.masterWineId) {
-            pendingWineIds.add(item.masterWineId);
-          }
+      const pendingRequests = pendingData.wineRequests || pendingData;
+      pendingRequests.forEach((req: any) => {
+        req.items?.forEach((item: { masterWineId: string }) => {
+          if (item.masterWineId) pendingWineIds.add(item.masterWineId);
         });
       });
 
-      const settingsSnap = await getDocs(
-        query(
-          collection(db, "store_wine_settings"),
-          where("storeId", "==", storeId),
-          where("discontinued", "==", false),
-        ),
-      );
-
+      const allSettings: any[] = settingsData.settings || settingsData;
       const metrics = {
         stockout: { wines: 0, bottles: 0 },
         parAlert: { wines: 0, bottles: 0 },
         underSafety: { wines: 0, bottles: 0 },
       };
 
-      const storeRef = doc(db, "stores", storeId);
-      const validSettings = settingsSnap.docs.map(d => d.data()).filter(s => !pendingWineIds.has(s.masterWineId));
-
-      const counts = await countBottlesForStoreDashboard(storeRef, validSettings);
+      const validSettings = allSettings.filter(s => !pendingWineIds.has(s.masterWineId));
+      const counts = await countBottlesForStoreDashboard(storeId, validSettings);
 
       validSettings.forEach((setting, index) => {
         const { parLevel = 0, safetyStock = 0 } = setting;
@@ -214,43 +194,19 @@ export default function HomeScreen() {
 
     try {
       setLoadingRequests(true);
-      const [reqSnap, delSnap, pulloutSnap, storesData] = await Promise.all([
-        getDocs(
-          query(
-            collection(db, "wine_requests"),
-            where("storeId", "==", profile.locationId),
-            where("status", "==", "receiving"),
-          ),
-        ),
-        getDocs(
-          query(
-            collection(db, "deliveries"),
-            where("storeId", "==", profile.locationId),
-            where("status", "in", ["dispatched", "receiving"]),
-          ),
-        ),
-        getDocs(
-          query(
-            collection(db, "pullout_requests"),
-            where("sourceStoreId", "==", profile.locationId),
-            where("status", "in", ["pending", "in_progress"]),
-          ),
-        ),
+      const [reqData, delData, pulloutData, storesData] = await Promise.all([
+        apiFetch(`/wine-requests?storeId=${profile.locationId}&status=receiving`),
+        apiFetch(`/deliveries?storeId=${profile.locationId}&status=dispatched,receiving`),
+        apiFetch(`/pullout-requests?sourceStoreId=${profile.locationId}&status=pending,in_progress`),
         getStores(),
       ]);
 
       const locMap: Record<string, string> = {};
       storesData.forEach((d) => (locMap[d.id] = d.name));
 
-      const requests = reqSnap.docs.map(
-        (doc) => ({ id: doc.id, ...doc.data() }) as WineRequest,
-      );
-      const deliveries = delSnap.docs.map(
-        (doc) => ({ id: doc.id, ...doc.data() }) as Delivery,
-      );
-      const pullouts = pulloutSnap.docs.map(
-        (doc) => ({ id: doc.id, ...doc.data() }) as PulloutRequest,
-      );
+      const requests = (reqData.wineRequests || reqData) as WineRequest[];
+      const deliveries = (delData.deliveries || delData) as Delivery[];
+      const pullouts = (pulloutData.pulloutRequests || pulloutData) as PulloutRequest[];
 
       outboundCache.current = {
         data: { requests, deliveries, pullouts, locMap },
@@ -278,14 +234,8 @@ export default function HomeScreen() {
 
     try {
       setLoadingSales(true);
-      const activeBottlesSnap = await getCountFromServer(
-        query(
-          collection(db, "inventory_bottles"),
-          where("storeRef", "==", doc(db, "stores", storeId)),
-          where("status", "in", ["received", "shelved"]),
-        ),
-      );
-      const activeBottles = activeBottlesSnap.data().count;
+      const bottlesData = await apiFetch(`/bottles?storeId=${storeId}&status=received,shelved&countOnly=true`);
+      const activeBottles = bottlesData.count ?? 0;
 
       let startDate;
       if (salesPeriod === "today") {
@@ -359,7 +309,7 @@ export default function HomeScreen() {
         style: "destructive",
         onPress: async () => {
           try {
-            await signOut(auth);
+            await clearToken();
             router.replace("/login");
           } catch (error) {
             console.error("Sign out error:", error);

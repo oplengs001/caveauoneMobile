@@ -31,13 +31,8 @@ export default function StackLayout() {
           headerRight: () => (
             <TouchableOpacity
               onPress={async () => {
-                const { getAuth, signOut } = await import("firebase/auth");
-                const auth = getAuth();
-                try {
-                  await signOut(auth);
-                } catch (e) {
-                  console.error(e);
-                }
+                const { clearToken } = await import("@/lib/auth");
+                await clearToken();
                 const { router } = await import("expo-router");
                 router.replace("/login");
               }}

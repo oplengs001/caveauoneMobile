@@ -1,21 +1,8 @@
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
-import { db } from "@/lib/firebase";
+import { apiFetch } from "@/lib/api";
 import { MasterWine, StockStatus, StoreWineSetting } from "@/types";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import {
-  addDoc,
-  collection,
-  doc,
-  getCountFromServer,
-  getDoc,
-  getDocs,
-  query,
-  serverTimestamp,
-  setDoc,
-  where,
-  writeBatch,
-} from "firebase/firestore";
 import {
   AlertTriangle,
   BarChart3,
@@ -140,7 +127,7 @@ const STATUS_CONFIG: Record<
 };
 
 export default function StoreMasterListScreen() {
-  const { profile } = useAuth();
+  const { profile, loading: authLoading } = useAuth();
   const router = useRouter();
   const storeId = profile?.locationId ?? "";
 
@@ -182,10 +169,9 @@ export default function StoreMasterListScreen() {
   useEffect(() => {
     const fetchMasterWines = async () => {
       try {
-        const snap = await getDocs(collection(db, "master_wines"));
-        setMasterWinesList(
-          snap.docs.map((d) => ({ id: d.id, ...d.data() }) as MasterWine),
-        );
+        const data = await apiFetch("/wines");
+        const wines: MasterWine[] = data.wines || data;
+        setMasterWinesList(wines);
       } catch (err) {
         console.error("Failed to fetch master wines:", err);
       }
@@ -206,120 +192,113 @@ export default function StoreMasterListScreen() {
   }, [masterWinesList, wineSearchTerm]);
 
   const fetchData = useCallback(async () => {
-    if (!storeId) return;
+    if (authLoading) return;
+    if (!storeId) {
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
     try {
-      const [bottlesSnap, settingsSnap] = await Promise.all([
-        getDocs(
-          query(
-            collection(db, "inventory_bottles"),
-            where("storeRef", "==", doc(db, "stores", storeId)),
-          ),
-        ),
-        getDocs(
-          query(
-            collection(db, "store_wine_settings"),
-            where("storeId", "==", storeId),
-          ),
-        ),
-      ]);
+      const fetchBottles = apiFetch(`/bottles?storeId=${storeId}`).catch((err) => {
+        console.error("Error fetching bottles:", err);
+        return [];
+      });
 
-      const wineRefMap = new Map<string, any>();
+      const fetchSettings = apiFetch(`/stock-settings?storeId=${storeId}`).catch((err) => {
+        console.error("Error fetching settings:", err);
+        return [];
+      });
+
+      const fetchMasterWinesDocs = apiFetch("/wines").catch((err) => {
+        console.error("Error fetching master wines:", err);
+        return [];
+      });
+
+      const fetchPendingRequests = apiFetch(`/wine-requests?storeId=${storeId}&status=pending,converted,outbound,receiving`).catch((err) => {
+        console.error("Error fetching pending requests:", err);
+        return [];
+      });
+
+      const [bottlesRes, settingsRes, masterWinesRes, pendingRequestsRes] =
+        await Promise.all([
+          fetchBottles,
+          fetchSettings,
+          fetchMasterWinesDocs,
+          fetchPendingRequests,
+        ]);
+
+      const wineIdsSet = new Set<string>();
+      const stockCountMap = new Map<string, number>();
       const settingsMap = new Map<string, StoreWineSetting>();
+      const masterWinesMap = new Map<string, MasterWine>();
 
-      bottlesSnap.docs.forEach((d) => {
-        const ref = d.data().masterWineRef;
-        if (ref && !wineRefMap.has(ref.id)) {
-          wineRefMap.set(ref.id, ref);
+      const bottlesList: any[] = bottlesRes.bottles || bottlesRes || [];
+      const settingsList: any[] = settingsRes.settings || settingsRes || [];
+      const masterWinesListRes: any[] = masterWinesRes.wines || masterWinesRes || [];
+      const pendingRequestsList: any[] = pendingRequestsRes.wineRequests || pendingRequestsRes || [];
+
+      bottlesList.forEach((data: any) => {
+        const refId = data.masterWineId || data.masterWineRef?.id;
+        if (refId) {
+          wineIdsSet.add(refId);
+          if (data.status === "received" || data.status === "shelved") {
+            stockCountMap.set(refId, (stockCountMap.get(refId) || 0) + 1);
+          }
         }
       });
 
-      settingsSnap.docs.forEach((d) => {
-        const settingData = d.data();
-        settingsMap.set(settingData.masterWineId, {
-          id: d.id,
-          ...settingData,
-        } as StoreWineSetting);
-
-        if (
-          settingData.masterWineId &&
-          !wineRefMap.has(settingData.masterWineId)
-        ) {
-          wineRefMap.set(
-            settingData.masterWineId,
-            doc(db, "master_wines", settingData.masterWineId),
-          );
+      settingsList.forEach((settingData: any) => {
+        if (settingData.masterWineId) {
+          settingsMap.set(settingData.masterWineId, settingData as StoreWineSetting);
+          wineIdsSet.add(settingData.masterWineId);
         }
       });
 
-      const pendingRequestsSnap = await getDocs(
-        query(
-          collection(db, "wine_requests"),
-          where("storeId", "==", storeId),
-          where("status", "in", [
-            "pending",
-            "converted",
-            "outbound",
-            "receiving",
-          ]),
-        ),
-      );
+      masterWinesListRes.forEach((w: any) => {
+        masterWinesMap.set(w.id, w as MasterWine);
+      });
+
       const pendingWineRequestMap = new Map<
         string,
         { id: string; status: string }
       >();
-      pendingRequestsSnap.docs.forEach((reqDoc) => {
-        const request = reqDoc.data();
+      pendingRequestsList.forEach((request: any) => {
         request.items?.forEach((item: { masterWineId: string }) => {
           if (item.masterWineId) {
             pendingWineRequestMap.set(item.masterWineId, {
-              id: reqDoc.id,
+              id: request.id,
               status: request.status,
             });
           }
         });
       });
 
-      const results: WineEntry[] = await Promise.all(
-        Array.from(wineRefMap.entries()).map(async ([wineId, wineRef]) => {
-          const [wineSnap, countSnap] = await Promise.all([
-            getDoc(wineRef),
-            getCountFromServer(
-              query(
-                collection(db, "inventory_bottles"),
-                where("storeRef", "==", doc(db, "stores", storeId)),
-                where("masterWineRef", "==", wineRef),
-                where("status", "in", ["received", "shelved"]),
-              ),
-            ),
-          ]);
+      const results: WineEntry[] = Array.from(wineIdsSet).map((wineId) => {
+        const masterWine: MasterWine = masterWinesMap.get(wineId) ?? {
+          id: wineId,
+          name: "Unknown Wine",
+          vintage: "",
+          price: 0,
+        };
+        const stockCount = stockCountMap.get(wineId) || 0;
+        const setting = settingsMap.get(wineId) ?? null;
+        const activeRequest = pendingWineRequestMap.get(wineId);
 
-          const masterWine: MasterWine = wineSnap.exists()
-            ? ({
-              id: wineSnap.id,
-              ...(wineSnap.data() as object),
-            } as MasterWine)
-            : { id: wineId, name: "Unknown Wine", vintage: "", price: 0 };
+        const { status, requestedQty } = computeStatus(
+          stockCount,
+          setting,
+          !!activeRequest,
+        );
 
-          const stockCount = countSnap.data().count;
-          const setting = settingsMap.get(wineId) ?? null;
-          const activeRequest = pendingWineRequestMap.get(wineId);
-
-          const { status, requestedQty } = computeStatus(
-            stockCount,
-            setting,
-            !!activeRequest,
-          );
-
-          return {
-            masterWine,
-            stockCount,
-            setting,
-            status,
-            requestedQty,
-            activeRequest,
-          };
-        }),
-      );
+        return {
+          masterWine,
+          stockCount,
+          setting,
+          status,
+          requestedQty,
+          activeRequest,
+        };
+      });
 
       const order: StockStatus[] = [
         "stockout",
@@ -335,13 +314,14 @@ export default function StoreMasterListScreen() {
       );
       validResults.sort((a, b) => order.indexOf(a.status) - order.indexOf(b.status));
       setEntries(validResults);
-    } catch (err) {
+    } catch (err: any) {
       console.error("MasterList fetch error:", err);
+      Alert.alert("Fetch Error", err?.message || String(err));
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [storeId]);
+  }, [storeId, authLoading]);
 
   useEffect(() => {
     fetchData();
@@ -383,33 +363,27 @@ export default function StoreMasterListScreen() {
     }
     setSaving(true);
     try {
-      const docId = `${storeId}_${selected.masterWine.id}`;
-      const updateData = {
-        storeId,
-        masterWineId: selected.masterWine.id,
-        parLevel: par,
-        safetyStock: safety,
-        sellingPrice: sheetSellingPrice ? parseFloat(sheetSellingPrice) : null,
-        discontinued: sheetDiscontinued,
-        wineCategory: sheetWineCategory === "none" ? null : sheetWineCategory,
-        vatMode: sheetVatMode,
-        updatedAt: serverTimestamp(),
-        createdAt: selected.setting?.createdAt ?? serverTimestamp(),
-      };
-      const batch = writeBatch(db);
-      
-      // Update store_wine_settings
-      batch.set(doc(db, "store_wine_settings", docId), updateData);
-      
-      // Sync wineCategory to master_wines
-      const masterWineRef = doc(db, "master_wines", selected.masterWine.id);
-      batch.update(masterWineRef, {
-        wineCategory: sheetWineCategory === "none" ? null : sheetWineCategory,
-        updatedAt: serverTimestamp(),
+      await apiFetch("/stock-settings", {
+        method: "POST",
+        body: JSON.stringify({
+          storeId,
+          masterWineId: selected.masterWine.id,
+          parLevel: par,
+          safetyStock: safety,
+          sellingPrice: sheetSellingPrice ? parseFloat(sheetSellingPrice) : null,
+          discontinued: sheetDiscontinued,
+          wineCategory: sheetWineCategory === "none" ? null : sheetWineCategory,
+          vatMode: sheetVatMode,
+        }),
       });
-      
-      await batch.commit();
-      
+
+      await apiFetch(`/wines/${selected.masterWine.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          wineCategory: sheetWineCategory === "none" ? null : sheetWineCategory,
+        }),
+      });
+
       closeSheet();
       fetchData();
     } catch (err) {
@@ -435,29 +409,30 @@ export default function StoreMasterListScreen() {
           onPress: async () => {
             setRequesting(true);
             try {
-              await addDoc(collection(db, "wine_requests"), {
-                storeId,
-                targetStoreId: "warehouse",
-                createdBy: profile.email,
-                requesterId: profile.id,
-                status: "pending",
-                items: [
-                  {
-                    masterWineId: selected.masterWine.id,
-                    wineName: selected.masterWine.name,
-                    vintage: selected.masterWine.vintage,
-                    sku: selected.masterWine.sku ?? "",
-                    format: selected.masterWine.format,
-                    producer: selected.masterWine.producer,
-                    qty,
-                    price: selected.masterWine.price,
-                    pulledQty: 0,
-                    ingressedQty: 0,
-                  },
-                ],
-                totalAmount: selected.masterWine.price * qty,
-                createdAt: serverTimestamp(),
-                updatedAt: serverTimestamp(),
+              await apiFetch("/wine-requests", {
+                method: "POST",
+                body: JSON.stringify({
+                  storeId,
+                  targetStoreId: "warehouse",
+                  createdBy: profile.email,
+                  requesterId: profile.id,
+                  status: "pending",
+                  items: [
+                    {
+                      masterWineId: selected.masterWine.id,
+                      wineName: selected.masterWine.name,
+                      vintage: selected.masterWine.vintage,
+                      sku: selected.masterWine.sku ?? "",
+                      format: selected.masterWine.format,
+                      producer: selected.masterWine.producer,
+                      qty,
+                      price: selected.masterWine.price,
+                      pulledQty: 0,
+                      ingressedQty: 0,
+                    },
+                  ],
+                  totalAmount: selected.masterWine.price * qty,
+                }),
               });
               Alert.alert(
                 "Submitted!",
@@ -501,16 +476,17 @@ export default function StoreMasterListScreen() {
         0,
       );
 
-      await addDoc(collection(db, "wine_requests"), {
-        storeId,
-        targetStoreId: "warehouse",
-        createdBy: profile.email,
-        requesterId: profile.id,
-        status: "pending",
-        items: requestItems,
-        totalAmount,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
+      await apiFetch("/wine-requests", {
+        method: "POST",
+        body: JSON.stringify({
+          storeId,
+          targetStoreId: "warehouse",
+          createdBy: profile.email,
+          requesterId: profile.id,
+          status: "pending",
+          items: requestItems,
+          totalAmount,
+        }),
       });
 
       setIsBatchConfirmVisible(false);

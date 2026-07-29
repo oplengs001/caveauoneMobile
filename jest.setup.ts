@@ -86,10 +86,22 @@ const firestoreMock = {
   makeDocSnap,
 };
 
-jest.mock('@/lib/firebase', () => firestoreMock);
-jest.mock('firebase/firestore', () => firestoreMock);
+// Mock apiFetch for REST API v2 queries
+const mockApiFetch = jest.fn().mockImplementation((path: string) => {
+  if (path.includes('/wines')) return Promise.resolve({ wines: [] });
+  if (path.includes('/stores')) return Promise.resolve({ stores: [] });
+  if (path.includes('/bottles')) return Promise.resolve({ bottles: [] });
+  if (path.includes('/stock-settings')) return Promise.resolve({ settings: [] });
+  if (path.includes('/pullout-requests')) return Promise.resolve({ pulloutRequests: [] });
+  if (path.includes('/wine-requests')) return Promise.resolve({ wineRequests: [] });
+  return Promise.resolve({});
+});
 
-// Mock activityLogger so tests don't trigger real Firestore writes
+jest.mock('@/lib/api', () => ({
+  apiFetch: mockApiFetch,
+}));
+
+// Mock activityLogger so tests don't trigger real network calls
 jest.mock('@/lib/utils/activityLogger', () => ({
   logActivity: jest.fn().mockResolvedValue(undefined),
 }));

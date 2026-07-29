@@ -1,9 +1,8 @@
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
-import { db } from "@/lib/firebase";
+import { apiFetch } from "@/lib/api";
 import { calculateDashboardSalesMetrics } from "@/lib/utils/salesMath";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { collection, count, getAggregateFromServer, getDocs, orderBy, query, sum, where } from "firebase/firestore";
 import {
   Banknote,
   Calendar,
@@ -92,70 +91,6 @@ export default function SalesScreen() {
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
 
-  const buildBaseQuery = useCallback(() => {
-    let startDate: Date | null = null;
-    let endDate: Date | null = null;
-    const now = new Date();
-
-    if (period === "today") {
-      startDate = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate(),
-      );
-    } else if (period === "week") {
-      startDate = new Date();
-      startDate.setDate(startDate.getDate() - startDate.getDay());
-      startDate.setHours(0, 0, 0, 0);
-    } else if (period === "month") {
-      startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-    } else if (period === "lastMonth") {
-      startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      endDate = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        0,
-        23,
-        59,
-        59,
-        999,
-      );
-    } else if (period === "custom") {
-      startDate = customStart ? new Date(customStart) : null;
-      if (startDate) startDate.setHours(0, 0, 0, 0);
-
-      endDate = customEnd ? new Date(customEnd) : null;
-      if (endDate) endDate.setHours(23, 59, 59, 999);
-    }
-
-    const baseConstraints = [where("storeId", "==", profile?.locationId)];
-    let salesQuery;
-
-    if (period === "all" || (!startDate && period === "custom")) {
-      salesQuery = query(
-        collection(db, "sales"),
-        ...baseConstraints,
-        orderBy("soldAt", "desc"),
-      );
-    } else if (startDate && endDate) {
-      salesQuery = query(
-        collection(db, "sales"),
-        ...baseConstraints,
-        where("soldAt", ">=", startDate),
-        where("soldAt", "<=", endDate),
-        orderBy("soldAt", "desc"),
-      );
-    } else {
-      salesQuery = query(
-        collection(db, "sales"),
-        ...baseConstraints,
-        where("soldAt", ">=", startDate),
-        orderBy("soldAt", "desc"),
-      );
-    }
-    return salesQuery;
-  }, [period, customStart, customEnd, profile]);
-
   const fetchSales = async () => {
     if (!profile?.locationId) {
       setLoading(false);
@@ -165,28 +100,50 @@ export default function SalesScreen() {
 
     setLoading(true);
     try {
-      const baseQuery = buildBaseQuery();
+      let startDate: Date | null = null;
+      let endDate: Date | null = null;
+      const now = new Date();
 
-      // Fetch Aggregates first
-      const aggregateSnapshot = await getAggregateFromServer(baseQuery, {
-        totalBaseSales: sum("price"),
-        totalGrossSales: sum("totalAmount"),
-        totalCost: sum("masterWinePrice"),
-        totalBottles: count()
-      });
+      if (period === "today") {
+        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      } else if (period === "week") {
+        startDate = new Date();
+        startDate.setDate(startDate.getDate() - startDate.getDay());
+        startDate.setHours(0, 0, 0, 0);
+      } else if (period === "month") {
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+      } else if (period === "lastMonth") {
+        startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        endDate = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+      } else if (period === "custom") {
+        startDate = customStart ? new Date(customStart) : null;
+        if (startDate) startDate.setHours(0, 0, 0, 0);
+        endDate = customEnd ? new Date(customEnd) : null;
+        if (endDate) endDate.setHours(23, 59, 59, 999);
+      }
+
+      const params = new URLSearchParams({ storeId: profile.locationId });
+      if (startDate) params.set("from", startDate.toISOString());
+      if (endDate) params.set("to", endDate.toISOString());
+
+      const data = await apiFetch(`/sales?${params}`);
+      const salesData: Sale[] = (data.sales || data).map((s: any) => ({
+        ...s,
+        soldAt: {
+          toDate: () => new Date(s.soldAt),
+        },
+      }));
+
+      const totalBase = salesData.reduce((sum, s) => sum + (s.price || 0), 0);
+      const totalGross = salesData.reduce((sum, s) => sum + ((s as any).totalAmount || s.price || 0), 0);
+      const totalCost = salesData.reduce((sum, s) => sum + (s.masterWinePrice || 0), 0);
 
       setAggregates({
-        totalBaseSales: aggregateSnapshot.data().totalBaseSales || 0,
-        totalGrossSales: aggregateSnapshot.data().totalGrossSales || 0,
-        totalCost: aggregateSnapshot.data().totalCost || 0,
-        totalBottles: aggregateSnapshot.data().totalBottles || 0
+        totalBaseSales: totalBase,
+        totalGrossSales: totalGross,
+        totalCost: totalCost,
+        totalBottles: salesData.length,
       });
-
-      const querySnapshot = await getDocs(baseQuery);
-      const salesData = querySnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as Sale[];
 
       setSales(salesData);
     } catch (error) {

@@ -1,12 +1,10 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { onAuthStateChanged, User } from 'firebase/auth';
-import { doc, getDoc, updateDoc, arrayUnion } from 'firebase/firestore';
-import { auth, db } from '@/lib/firebase';
+import { apiFetch } from '@/lib/api';
+import { clearToken, getToken } from '@/lib/auth';
 import { AppUser } from '@/types';
-import { usePushNotifications } from '@/hooks/usePushNotifications';
+import React, { createContext, useContext, useEffect, useState } from 'react';
 
 interface AuthContextType {
-  user: User | null;
+  user: any | null;
   profile: AppUser | null;
   loading: boolean;
 }
@@ -18,46 +16,46 @@ const AuthContext = createContext<AuthContextType>({
 });
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<any | null>(null);
   const [profile, setProfile] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
-  const { expoPushToken } = usePushNotifications();
 
   useEffect(() => {
-    if (user && expoPushToken?.data) {
-      const docRef = doc(db, 'users', user.uid);
-      updateDoc(docRef, {
-        pushTokens: arrayUnion(expoPushToken.data)
-      }).catch(err => console.error("Error saving push token:", err));
-    }
-  }, [user, expoPushToken]);
+    let cancelled = false;
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      setUser(firebaseUser);
-      
-      if (firebaseUser) {
-        try {
-          const docRef = doc(db, 'users', firebaseUser.uid);
-          const docSnap = await getDoc(docRef);
-          
-          if (docSnap.exists()) {
-            setProfile({ id: docSnap.id, ...docSnap.data() } as AppUser);
-          } else {
+    async function bootstrap() {
+      try {
+        const token = await getToken();
+        if (!token) {
+          if (!cancelled) {
+            setUser(null);
             setProfile(null);
+            setLoading(false);
           }
-        } catch (error) {
-          console.error("Error fetching user profile:", error);
+          return;
+        }
+
+        const data = await apiFetch('/auth/me');
+        if (!cancelled) {
+          const userData = data?.user || data;
+          setUser(userData);
+          setProfile(userData as AppUser);
+        }
+      } catch (err) {
+        console.error('Auth bootstrap error:', err);
+        // Token invalid — clear it
+        await clearToken();
+        if (!cancelled) {
+          setUser(null);
           setProfile(null);
         }
-      } else {
-        setProfile(null);
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-      
-      setLoading(false);
-    });
+    }
 
-    return unsubscribe;
+    bootstrap();
+    return () => { cancelled = true; };
   }, []);
 
   return (

@@ -1,15 +1,7 @@
 import { useAuth } from "@/context/AuthContext";
-import { db } from "@/lib/firebase";
+import { apiFetch } from "@/lib/api";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import {
-  doc,
-  onSnapshot,
-  serverTimestamp,
-  Timestamp,
-  updateDoc,
-  writeBatch,
-} from "firebase/firestore";
 import {
   AlertCircle,
   Camera,
@@ -333,16 +325,25 @@ export default function OnboardingDetailScreen() {
 
   useEffect(() => {
     if (!id) return;
-    const unsubscribe = onSnapshot(
-      doc(db, "onboarding_tasks", id as string),
-      (snap) => {
-        if (snap.exists()) {
-          setTask({ id: snap.id, ...snap.data() } as OnboardingTask);
+    let isMounted = true;
+    const fetchTask = async () => {
+      try {
+        const data = await apiFetch(`/onboarding/${id}`);
+        if (isMounted) {
+          setTask(data as OnboardingTask);
+          setLoading(false);
         }
-        setLoading(false);
-      },
-    );
-    return () => unsubscribe();
+      } catch (err) {
+        console.error("Error fetching onboarding task:", err);
+        if (isMounted) setLoading(false);
+      }
+    };
+    fetchTask();
+    const interval = setInterval(fetchTask, 4000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
   }, [id]);
 
   const handleScanLabel = async () => {
@@ -422,14 +423,13 @@ export default function OnboardingDetailScreen() {
       const bottleId = activeItem.bottleIds[activeItem.onboardedQty];
       setVerifiedBottleId(bottleId);
 
-      const bottleRef = doc(db, "inventory_bottles", scannedData);
-      const storeRef = doc(db, "stores", profile.locationId);
-
-      await updateDoc(bottleRef, {
-        status: "received",
-        isTagged: true,
-        updatedAt: serverTimestamp(),
-        storeRef: storeRef,
+      await apiFetch(`/bottles/${scannedData}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          status: "received",
+          isTagged: true,
+          storeId: profile.locationId,
+        }),
       });
 
       const updatedItems = task.items.map((i) => {
@@ -441,10 +441,12 @@ export default function OnboardingDetailScreen() {
 
       const isFullyDone = updatedItems.every((i) => i.onboardedQty === i.qty);
 
-      await updateDoc(doc(db, "onboarding_tasks", task.id), {
-        items: updatedItems,
-        status: isFullyDone ? "completed" : "warehouse",
-        updatedAt: serverTimestamp(),
+      await apiFetch(`/onboarding/${task.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          items: updatedItems,
+          status: isFullyDone ? "completed" : "warehouse",
+        }),
       });
 
       setCurrentStep("success");
@@ -480,11 +482,13 @@ export default function OnboardingDetailScreen() {
     lastBulkScanTime.current = now;
     setIsProcessing(true);
     try {
-      await updateDoc(doc(db, "inventory_bottles", data), {
-        status: "received",
-        isTagged: true,
-        updatedAt: serverTimestamp(),
-        storeRef: doc(db, "stores", profile.locationId),
+      await apiFetch(`/bottles/${data}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          status: "received",
+          isTagged: true,
+          storeId: profile.locationId,
+        }),
       });
 
       const nextVerified = new Set(verifiedBottleIdsSet).add(data);
@@ -504,10 +508,12 @@ export default function OnboardingDetailScreen() {
           return i;
         });
         const isFullyDone = updatedItems.every((i) => i.onboardedQty === i.qty);
-        await updateDoc(doc(db, "onboarding_tasks", task.id), {
-          items: updatedItems,
-          status: isFullyDone ? "completed" : "warehouse",
-          updatedAt: serverTimestamp(),
+        await apiFetch(`/onboarding/${task.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            items: updatedItems,
+            status: isFullyDone ? "completed" : "warehouse",
+          }),
         });
         setCurrentStep("success");
       }
@@ -553,7 +559,7 @@ export default function OnboardingDetailScreen() {
         wineName: activeItem.wineName,
         sku: activeItem.sku,
         reportedBy: profile.email,
-        reportedAt: Timestamp.now(),
+        reportedAt: new Date().toISOString(),
         reason,
         bottleId,
       };
@@ -571,17 +577,21 @@ export default function OnboardingDetailScreen() {
           return i;
         });
         const isFullyDone = updatedItems.every((i) => i.onboardedQty === i.qty);
-        await updateDoc(doc(db, "onboarding_tasks", task.id), {
-          items: updatedItems,
-          reports: [...(task.reports || []), newReport],
-          status: isFullyDone ? "completed" : "warehouse",
-          updatedAt: serverTimestamp(),
+        await apiFetch(`/onboarding/${task.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            items: updatedItems,
+            reports: [...(task.reports || []), newReport],
+            status: isFullyDone ? "completed" : "warehouse",
+          }),
         });
         setCurrentStep("success");
       } else {
-        await updateDoc(doc(db, "onboarding_tasks", task.id), {
-          reports: [...(task.reports || []), newReport],
-          updatedAt: serverTimestamp(),
+        await apiFetch(`/onboarding/${task.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            reports: [...(task.reports || []), newReport],
+          }),
         });
       }
     } catch (err: any) {
@@ -593,6 +603,7 @@ export default function OnboardingDetailScreen() {
   };
 
   const handleBulkNoQR = async (bottleId: string) => {
+
     if (!activeItem || !task || !profile?.locationId) return;
 
     const locationId = profile.locationId;
@@ -608,11 +619,13 @@ export default function OnboardingDetailScreen() {
             setIsProcessing(true);
             try {
               // 1. Mark as received but untagged
-              await updateDoc(doc(db, "inventory_bottles", bottleId), {
-                status: "received",
-                isTagged: false,
-                updatedAt: serverTimestamp(),
-                storeRef: doc(db, "stores", locationId),
+              await apiFetch(`/bottles/${bottleId}`, {
+                method: "PATCH",
+                body: JSON.stringify({
+                  status: "received",
+                  isTagged: false,
+                  storeId: locationId,
+                }),
               });
 
               // 2. Add to verified set
@@ -633,17 +646,21 @@ export default function OnboardingDetailScreen() {
               });
               const isFullyDone = totalDone === batchBottleIds.length &&
                 updatedItems.every((i) => i.onboardedQty === i.qty);
-              await updateDoc(doc(db, "onboarding_tasks", task.id), {
-                items: updatedItems,
-                status: isFullyDone ? "completed" : "warehouse",
-                updatedAt: serverTimestamp(),
+              const updatedTaskData = await apiFetch(`/onboarding/${task.id}`, {
+                method: "PATCH",
+                body: JSON.stringify({
+                  items: updatedItems,
+                  status: isFullyDone ? "completed" : "warehouse",
+                }),
               });
+              setTask(updatedTaskData as OnboardingTask);
+
               if (totalDone === batchBottleIds.length) {
                 setCurrentStep("success");
               }
             } catch (err: any) {
-              console.error(err);
-              alert("Error updating bottle: " + err.message);
+              console.error("Error in handleNoQR:", err);
+              alert("Error updating bottle: " + (err.message || err));
             } finally {
               setIsProcessing(false);
             }
@@ -658,7 +675,6 @@ export default function OnboardingDetailScreen() {
 
     const locationId = profile.locationId;
     const pendingIds = batchBottleIds.filter(id => !verifiedBottleIdsSet.has(id) && !issuedBottleIdsSet.has(id));
-
     if (pendingIds.length === 0) return;
 
     Alert.alert(
@@ -671,25 +687,24 @@ export default function OnboardingDetailScreen() {
           onPress: async () => {
             setIsProcessing(true);
             try {
-              const batch = writeBatch(db);
-
-              // 1. Mark as received but untagged
-              pendingIds.forEach((bottleId) => {
-                batch.update(doc(db, "inventory_bottles", bottleId), {
-                  status: "received",
-                  isTagged: false,
-                  updatedAt: serverTimestamp(),
-                  storeRef: doc(db, "stores", locationId),
-                });
+              // 1. Mark all pending bottles as received but untagged via batch API
+              await apiFetch("/bottles/batch", {
+                method: "POST",
+                body: JSON.stringify({
+                  bottleIds: pendingIds,
+                  data: {
+                    status: "received",
+                    isTagged: false,
+                    storeId: locationId,
+                  },
+                }),
               });
-              
-              await batch.commit();
 
               // 2. Add to verified set
               const nextVerified = new Set(verifiedBottleIdsSet);
               pendingIds.forEach(id => nextVerified.add(id));
               setVerifiedBottleIdsSet(nextVerified);
-              setVerifiedBottleId(pendingIds[pendingIds.length - 1]); 
+              setVerifiedBottleId(pendingIds[pendingIds.length - 1]);
 
               // 3. Update task progress 
               const totalDone = nextVerified.size + issuedBottleIdsSet.size;
@@ -705,18 +720,21 @@ export default function OnboardingDetailScreen() {
               const isFullyDone = totalDone === batchBottleIds.length &&
                 updatedItems.every((i) => i.onboardedQty === i.qty);
 
-              await updateDoc(doc(db, "onboarding_tasks", task.id), {
-                items: updatedItems,
-                status: isFullyDone ? "completed" : "warehouse",
-                updatedAt: serverTimestamp(),
+              const updatedTaskData = await apiFetch(`/onboarding/${task.id}`, {
+                method: "PATCH",
+                body: JSON.stringify({
+                  items: updatedItems,
+                  status: isFullyDone ? "completed" : "warehouse",
+                }),
               });
+              setTask(updatedTaskData as OnboardingTask);
 
               if (totalDone === batchBottleIds.length) {
                 setCurrentStep("success");
               }
             } catch (err: any) {
-              console.error(err);
-              alert("Error updating bottles: " + err.message);
+              console.error("Error in handleBatchBulkNoQR:", err);
+              alert("Error updating bottles: " + (err.message || err));
             } finally {
               setIsProcessing(false);
             }
@@ -759,7 +777,7 @@ export default function OnboardingDetailScreen() {
         wineName: item.wineName,
         sku: item.sku,
         reportedBy: profile.email,
-        reportedAt: Timestamp.now(),
+        reportedAt: new Date().toISOString(),
         reason,
         bottleId,
       };
@@ -787,11 +805,13 @@ export default function OnboardingDetailScreen() {
 
       const isFullyDone = updatedItems.every((i) => i.onboardedQty === i.qty);
 
-      await updateDoc(doc(db, "onboarding_tasks", task.id), {
-        items: updatedItems,
-        reports: [...(task.reports || []), newReport],
-        status: isFullyDone ? "completed" : "warehouse",
-        updatedAt: serverTimestamp(),
+      await apiFetch(`/onboarding/${task.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          items: updatedItems,
+          reports: [...(task.reports || []), newReport],
+          status: isFullyDone ? "completed" : "warehouse",
+        }),
       });
 
       alert("Issue reported. You can now scan the next bottle.");
@@ -853,11 +873,13 @@ export default function OnboardingDetailScreen() {
                 (i) => i.onboardedQty === i.qty && (!i.issues || i.issues.length === 0),
               );
 
-              await updateDoc(doc(db, "onboarding_tasks", task.id), {
-                items: updatedItems,
-                reports: updatedReports,
-                status: isFullyDone ? "completed" : "warehouse",
-                updatedAt: serverTimestamp(),
+              await apiFetch(`/onboarding/${task.id}`, {
+                method: "PATCH",
+                body: JSON.stringify({
+                  items: updatedItems,
+                  reports: updatedReports,
+                  status: isFullyDone ? "completed" : "warehouse",
+                }),
               });
             } catch (err: any) {
               console.error(err);

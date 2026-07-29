@@ -1,9 +1,8 @@
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
-import { db } from "@/lib/firebase";
+import { apiFetch } from "@/lib/api";
 import { Delivery } from "@/types";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
-import { collection, getDocs, query, where } from "firebase/firestore";
 import {
   ArrowLeft,
   CheckCircle2,
@@ -38,19 +37,15 @@ export default function DeliveriesIndex() {
     if (!profile?.locationId) return;
 
     try {
-      const q = query(
-        collection(db, "deliveries"),
-        where("storeId", "==", profile.locationId),
-      );
-      const snapshot = await getDocs(q);
-      const data = snapshot.docs.map(
-        (doc) => ({ id: doc.id, ...doc.data() }) as Delivery,
-      );
-      
-      // Sort by createdAt desc locally since we can't easily compound query
-      data.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
-      
-      setDeliveries(data);
+      const data = await apiFetch(`/deliveries?storeId=${profile.locationId}`);
+      const deliveries: Delivery[] = data.deliveries || data;
+      // Sort by createdAt desc
+      deliveries.sort((a: any, b: any) => {
+        const aTime = a.createdAt?._seconds ?? new Date(a.createdAt).getTime() / 1000;
+        const bTime = b.createdAt?._seconds ?? new Date(b.createdAt).getTime() / 1000;
+        return bTime - aTime;
+      });
+      setDeliveries(deliveries);
     } catch (error) {
       console.error("Error fetching deliveries:", error);
     } finally {

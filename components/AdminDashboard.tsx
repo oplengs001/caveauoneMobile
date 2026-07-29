@@ -1,18 +1,11 @@
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
-import { auth, db } from "@/lib/firebase";
+import { apiFetch } from "@/lib/api";
+import { clearToken } from "@/lib/auth";
 import { getSalesByPeriodAllStores, getStores } from "@/lib/queries";
 import { Delivery, PulloutRequest } from "@/types";
 import { useFocusEffect, useRouter } from "expo-router";
-import { signOut } from "firebase/auth";
-import {
-  collection,
-  doc,
-  getDocs,
-  query,
-  where,
-} from "firebase/firestore";
 import {
   AlertOctagon,
   AlertTriangle,
@@ -109,43 +102,35 @@ export default function AdminDashboard() {
 
       const alertsList: StoreAlerts[] = await Promise.all(
         boutiqueStores.map(async (store) => {
-          const storeRef = doc(db, "stores", store.id);
-          const settingsSnap = await getDocs(
-            query(
-              collection(db, "store_wine_settings"),
-              where("storeId", "==", store.id),
-              where("discontinued", "==", false),
-            )
-          );
+          const settingsData = await apiFetch(`/stock-settings?storeId=${store.id}`);
+          const settingsList: any[] = settingsData.settings || settingsData;
+          const activeSettings = settingsList.filter((s: any) => !s.discontinued);
+
+          const bottlesData = await apiFetch(`/bottles?storeId=${store.id}&status=received,shelved`);
+          const bottlesList: any[] = bottlesData.bottles || bottlesData;
+
+          const countsByWine: Record<string, number> = {};
+          bottlesList.forEach((b) => {
+            const wId = b.masterWineId || b.masterWineRef?.id;
+            if (wId) countsByWine[wId] = (countsByWine[wId] || 0) + 1;
+          });
 
           let stockout = 0;
           let parAlert = 0;
           let underSafety = 0;
 
-          await Promise.all(
-            settingsSnap.docs.map(async (settingDoc) => {
-              const setting = settingDoc.data();
-              const { parLevel = 0, safetyStock = 0, masterWineId } = setting;
+          activeSettings.forEach((setting: any) => {
+            const { parLevel = 0, safetyStock = 0, masterWineId } = setting;
+            const count = countsByWine[masterWineId] || 0;
 
-              const bottlesSnap = await getDocs(
-                query(
-                  collection(db, "inventory_bottles"),
-                  where("storeRef", "==", storeRef),
-                  where("masterWineRef", "==", doc(db, "master_wines", masterWineId)),
-                  where("status", "in", ["received", "shelved"]),
-                )
-              );
-              const count = bottlesSnap.size;
-
-              if (count === 0) {
-                stockout++;
-              } else if (safetyStock > 0 && count < safetyStock) {
-                underSafety++;
-              } else if (parLevel > 0 && count <= parLevel) {
-                parAlert++;
-              }
-            })
-          );
+            if (count === 0) {
+              stockout++;
+            } else if (safetyStock > 0 && count < safetyStock) {
+              underSafety++;
+            } else if (parLevel > 0 && count <= parLevel) {
+              parAlert++;
+            }
+          });
 
           return {
             storeId: store.id,
@@ -169,19 +154,9 @@ export default function AdminDashboard() {
   const fetchTasks = useCallback(async () => {
     setLoadingTasks(true);
     try {
-      const [pulloutSnap, deliverySnap, allStores] = await Promise.all([
-        getDocs(
-          query(
-            collection(db, "pullout_requests"),
-            where("status", "in", ["pending", "in_progress"]),
-          )
-        ),
-        getDocs(
-          query(
-            collection(db, "deliveries"),
-            where("status", "in", ["dispatched", "receiving"]),
-          )
-        ),
+      const [pulloutsData, deliveriesData, allStores] = await Promise.all([
+        apiFetch("/pullout-requests?status=pending,in_progress"),
+        apiFetch("/deliveries?status=dispatched,receiving"),
         getStores(),
       ]);
 
@@ -189,12 +164,8 @@ export default function AdminDashboard() {
       allStores.forEach((s) => (locMap[s.id] = s.name));
       setStoreMap(locMap);
 
-      setPulloutTasks(
-        pulloutSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as PulloutRequest)
-      );
-      setIncomingDeliveries(
-        deliverySnap.docs.map((d) => ({ id: d.id, ...d.data() }) as Delivery)
-      );
+      setPulloutTasks((pulloutsData.pulloutRequests || pulloutsData) as PulloutRequest[]);
+      setIncomingDeliveries((deliveriesData.deliveries || deliveriesData) as Delivery[]);
     } catch (e) {
       console.error("Admin: failed to fetch tasks", e);
     } finally {
@@ -232,7 +203,7 @@ export default function AdminDashboard() {
         text: "Exit System",
         style: "destructive",
         onPress: async () => {
-          await signOut(auth);
+          await clearToken();
           router.replace("/login");
         },
       },

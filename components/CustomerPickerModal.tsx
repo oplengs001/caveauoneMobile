@@ -13,8 +13,7 @@ import {
   Alert,
 } from "react-native";
 import { Search, Plus, X, User, Check, Mail, Phone } from "lucide-react-native";
-import { collection, addDoc, getDocs, query, where, serverTimestamp, orderBy } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { apiFetch } from "@/lib/api";
 import { Customer } from "@/types";
 
 interface CustomerPickerModalProps {
@@ -60,14 +59,9 @@ export default function CustomerPickerModal({
   const fetchCustomers = async () => {
     setLoading(true);
     try {
-      const q = query(
-        collection(db, "customers"),
-        where("storeId", "==", storeId),
-        orderBy("updatedAt", "desc")
-      );
-      const snapshot = await getDocs(q);
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Customer));
-      setCustomers(data);
+      const data = await apiFetch(`/customers?storeId=${storeId}`);
+      const list: Customer[] = data.customers || data;
+      setCustomers(list);
     } catch (err) {
       console.error("Failed to fetch customers", err);
     } finally {
@@ -114,37 +108,24 @@ export default function CustomerPickerModal({
   const proceedSaveNew = async () => {
     setSavingNew(true);
     try {
-      const docRef = await addDoc(collection(db, "customers"), {
-        name: newName.trim(),
-        email: newEmail.trim() || null,
-        contactNo: newContact.trim() || null,
-        notes: newNotes.trim() || null,
-        storeId,
-        totalSpend: 0,
-        totalOrders: 0,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
+      const newCustomer = await apiFetch("/customers", {
+        method: "POST",
+        body: JSON.stringify({
+          name: newName.trim(),
+          email: newEmail.trim() || null,
+          contactNo: newContact.trim() || null,
+          notes: newNotes.trim() || null,
+          storeId,
+          totalSpend: 0,
+          totalOrders: 0,
+        }),
       });
 
-      const newCustomer: Customer = {
-        id: docRef.id,
-        name: newName.trim(),
-        email: newEmail.trim() || undefined,
-        contactNo: newContact.trim() || undefined,
-        notes: newNotes.trim() || undefined,
-        storeId,
-        totalSpend: 0,
-        totalOrders: 0,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-
-      setCustomers([newCustomer, ...customers]);
-      onSelectCustomer(newCustomer);
+      onSelectCustomer(newCustomer as Customer);
       onClose();
     } catch (err) {
-      console.error("Failed to save customer", err);
-      Alert.alert("Error", "Could not save customer.");
+      console.error("Error creating customer", err);
+      Alert.alert("Error", "Failed to save customer.");
     } finally {
       setSavingNew(false);
     }

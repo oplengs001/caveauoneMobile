@@ -1,19 +1,12 @@
-import { db } from "@/lib/firebase";
-import { Stack, useRouter } from "expo-router";
-import {
-  collection,
-  onSnapshot,
-  orderBy,
-  query,
-  where,
-} from "firebase/firestore";
+import { apiFetch } from "@/lib/api";
+import { Stack, useFocusEffect, useRouter } from "expo-router";
 import {
   ArrowRight,
   ChevronLeft,
   FileDown,
   Package,
 } from "lucide-react-native";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -33,47 +26,36 @@ export default function OnboardingTasksScreen() {
   >("incoming");
   const router = useRouter();
 
-  useEffect(() => {
-    // Map tabs to Firestore statuses
-    const statusMap = {
-      incoming: "warehouse", // From admin: moves to warehouse status
-      active: "warehouse", // We track "active" locally or by checking if any item has onboardedQty > 0
-      completed: "completed",
-    };
+  useFocusEffect(
+    useCallback(() => {
+      setLoading(true);
+      const statusMap = {
+        incoming: "warehouse",
+        active: "warehouse",
+        completed: "completed",
+      };
 
-    const q = query(
-      collection(db, "onboarding_tasks"),
-      where("status", "==", statusMap[selectedTab]),
-      orderBy("createdAt", "desc"),
-    );
-
-    const unsubscribe = onSnapshot(q, (snap) => {
-      const data = snap.docs.map((doc) => ({
-        id: doc.id,
-        ...(doc.data() as object),
-      })) as OnboardingTask[];
-
-      // Local filtering for "Active" vs "Incoming"
-      if (selectedTab === "incoming") {
-        setTasks(
-          data.filter((t) => t.items.every((i) => i.onboardedQty === 0)),
-        );
-      } else if (selectedTab === "active") {
-        setTasks(
-          data.filter(
-            (t) =>
-              t.items.some((i) => i.onboardedQty > 0) &&
-              t.items.some((i) => i.onboardedQty < i.qty),
-          ),
-        );
-      } else {
-        setTasks(data);
-      }
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [selectedTab]);
+      apiFetch(`/onboarding?status=${statusMap[selectedTab]}`)
+        .then((data) => {
+          const all: OnboardingTask[] = data.onboardingTasks || data;
+          if (selectedTab === "incoming") {
+            setTasks(all.filter((t) => t.items.every((i) => i.onboardedQty === 0)));
+          } else if (selectedTab === "active") {
+            setTasks(
+              all.filter(
+                (t) =>
+                  t.items.some((i) => i.onboardedQty > 0) &&
+                  t.items.some((i) => i.onboardedQty < i.qty),
+              ),
+            );
+          } else {
+            setTasks(all);
+          }
+        })
+        .catch((err) => console.error("Failed to load onboarding tasks:", err))
+        .finally(() => setLoading(false));
+    }, [selectedTab])
+  );
 
   const renderItem = ({ item }: { item: OnboardingTask }) => {
     const totalQty = item.items.reduce((sum, i) => sum + i.qty, 0);

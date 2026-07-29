@@ -41,7 +41,7 @@ export default function ScanScreen() {
       // Navigate to review screen, passing the URI
       if (photo && photo.uri) {
         router.push({
-          pathname: '/intake/review',
+          pathname: '/intake/review' as any,
           params: { imageUri: photo.uri },
         });
       }
