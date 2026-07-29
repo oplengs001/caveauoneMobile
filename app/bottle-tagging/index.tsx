@@ -86,7 +86,7 @@ export default function BottleTaggingScreen() {
           untaggedCounts[id] = (untaggedCounts[id] || 0) + 1;
         }
       });
-
+      console.log(untaggedBottlesList.length)
       // 3. Fetch master wines and filter
       const masterData = await apiFetch("/wines");
       const masterWinesList: MasterWine[] = masterData.wines || masterData;
@@ -197,24 +197,29 @@ export default function BottleTaggingScreen() {
     if (verifiedIds.has(data)) return;
 
     // Check if the scanned bottle is in the list of untagged bottles
-    const bottleIdx = untaggedBottles.findIndex((b) => b.id === data);
-    if (bottleIdx === -1) {
+    const matchedBottle = untaggedBottles.find(
+      (b) => b.id === data || b.bottleId === data || b.readableId === data
+    );
+    if (!matchedBottle) {
       lastBulkScanTime.current = now;
-      setLastScanError(`QR Code ${data.slice(0, 8)}... is not an untagged bottle for this wine.`);
+      setLastScanError(`QR Code ${data} is not an untagged bottle for this wine.`);
       setTimeout(() => setLastScanError(null), 3000);
       return;
     }
+
+    const bottleKey = matchedBottle.bottleId || matchedBottle.readableId || matchedBottle.id;
+    if (verifiedIds.has(bottleKey) || verifiedIds.has(matchedBottle.id)) return;
 
     lastBulkScanTime.current = now;
     setIsProcessingAI(true);
 
     try {
-      await apiFetch(`/bottles/${data}`, {
+      await apiFetch(`/bottles/${bottleKey}`, {
         method: "PATCH",
         body: JSON.stringify({ isTagged: true }),
       });
 
-      const nextVerified = new Set(verifiedIds).add(data);
+      const nextVerified = new Set(verifiedIds).add(bottleKey);
       setVerifiedIds(nextVerified);
 
       if (nextVerified.size >= qtyToTag) {
@@ -497,7 +502,11 @@ export default function BottleTaggingScreen() {
 
           <ScrollView style={styles.bottleList}>
             {untaggedBottles.slice(0, qtyToTag).map((bottle, idx) => {
-              const isVerified = verifiedIds.has(bottle.id);
+              const bottleDisplayId =
+                bottle.bottleId || bottle.readableId || bottle.id;
+              const isVerified =
+                verifiedIds.has(bottleDisplayId) ||
+                verifiedIds.has(bottle.id);
               // If it's not verified but previous are verified, it's the "current" one
               const isCurrent = verifiedIds.size === idx;
 
@@ -512,11 +521,11 @@ export default function BottleTaggingScreen() {
                 >
                   <View style={styles.bottleRowLeft}>
                     <Text style={styles.bottleLabel}>
-                      {bottle?.id}
+                      {bottleDisplayId}
                     </Text>
-                    {isVerified && (
+                    {isVerified && (bottle.bottleId || bottle.readableId) && (
                       <Text style={styles.bottleIdScanned}>
-                        {bottle.id.slice(0, 8).toUpperCase()}
+                        Ref: {bottle.id.slice(0, 8).toUpperCase()}
                       </Text>
                     )}
                   </View>

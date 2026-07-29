@@ -6,9 +6,10 @@ import {
   FileDown,
   Package,
 } from "lucide-react-native";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
   FlatList,
   SafeAreaView,
   StyleSheet,
@@ -17,6 +18,60 @@ import {
   View,
 } from "react-native";
 import { OnboardingTask } from "../../types";
+
+function OnboardingListSkeleton() {
+  const pulseAnim = useRef(new Animated.Value(0.25)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 0.7,
+          duration: 750,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 0.25,
+          duration: 750,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, [pulseAnim]);
+
+  return (
+    <View style={{ flex: 1, paddingHorizontal: 16, paddingTop: 8, gap: 12 }}>
+      {[1, 2, 3, 4].map((i) => (
+        <View
+          key={i}
+          style={{
+            backgroundColor: "#1e293b",
+            borderRadius: 16,
+            padding: 16,
+            borderWidth: 1,
+            borderColor: "#334155",
+            gap: 12,
+          }}
+        >
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+              <Animated.View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: "#334155", opacity: pulseAnim }} />
+              <View style={{ gap: 6 }}>
+                <Animated.View style={{ width: 90, height: 14, borderRadius: 6, backgroundColor: "#334155", opacity: pulseAnim }} />
+                <Animated.View style={{ width: 130, height: 10, borderRadius: 6, backgroundColor: "#334155", opacity: pulseAnim }} />
+              </View>
+            </View>
+            <Animated.View style={{ width: 70, height: 22, borderRadius: 8, backgroundColor: "#334155", opacity: pulseAnim }} />
+          </View>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingTop: 4 }}>
+            <Animated.View style={{ width: 110, height: 12, borderRadius: 6, backgroundColor: "#334155", opacity: pulseAnim }} />
+            <Animated.View style={{ width: 80, height: 12, borderRadius: 6, backgroundColor: "#334155", opacity: pulseAnim }} />
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
 
 export default function OnboardingTasksScreen() {
   const [tasks, setTasks] = useState<OnboardingTask[]>([]);
@@ -191,10 +246,7 @@ export default function OnboardingTasksScreen() {
       </View>
 
       {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#4f46e5" />
-          <Text style={styles.loadingText}>Loading tasks...</Text>
-        </View>
+        <OnboardingListSkeleton />
       ) : (
         <FlatList
           data={tasks}

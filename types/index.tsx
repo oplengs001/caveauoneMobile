@@ -4,6 +4,7 @@ export interface AppUser {
   id: string;
   email: string;
   role: "admin" | "store" | "warehouse";
+  accountId?: string;
   locationId?: string;
   createdAt: Date;
   pushTokens?: string[];
@@ -25,6 +26,7 @@ export interface MasterWine {
 
 export interface InventoryBottle {
   id: string;
+  bottleId?: string;
   masterWineRef?: any;
   locationRef?: any;
   storeRef?: any;

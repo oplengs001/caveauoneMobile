@@ -893,12 +893,83 @@ export default function OnboardingDetailScreen() {
     );
   };
 
-  if (loading) {
-    return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#4f46e5" />
+function OnboardingDetailSkeleton() {
+  const pulseAnim = useRef(new Animated.Value(0.25)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 0.7,
+          duration: 750,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 0.25,
+          duration: 750,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, [pulseAnim]);
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <Stack.Screen options={{ headerShown: false }} />
+
+      {/* HEADER SKELETON */}
+      <View style={styles.header}>
+        <View style={styles.backButton}>
+          <ChevronLeft size={28} color="#334155" strokeWidth={2.5} />
+        </View>
+        <View style={{ gap: 6 }}>
+          <Animated.View style={{ width: 80, height: 12, borderRadius: 6, backgroundColor: "#334155", opacity: pulseAnim }} />
+          <Animated.View style={{ width: 130, height: 20, borderRadius: 6, backgroundColor: "#334155", opacity: pulseAnim }} />
+        </View>
       </View>
-    );
+
+      <View style={styles.content}>
+        {/* OVERVIEW STATS CARD SKELETON */}
+        <View style={styles.statsCard}>
+          <Animated.View style={{ width: 140, height: 14, borderRadius: 6, backgroundColor: "#334155", opacity: pulseAnim, marginBottom: 12 }} />
+          <View style={styles.progressBarBg}>
+            <Animated.View style={{ width: "40%", height: "100%", borderRadius: 4, backgroundColor: "#4338ca", opacity: pulseAnim }} />
+          </View>
+          <Animated.View style={{ width: 160, height: 12, borderRadius: 6, backgroundColor: "#334155", opacity: pulseAnim, marginTop: 10 }} />
+        </View>
+
+        {/* SECTION TITLE SKELETON */}
+        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <Animated.View style={{ width: 100, height: 16, borderRadius: 6, backgroundColor: "#334155", opacity: pulseAnim }} />
+        </View>
+
+        {/* ITEMS LIST SKELETON */}
+        <View style={{ flex: 1, gap: 12 }}>
+          {[1, 2, 3].map((i) => (
+            <View key={i} style={[styles.itemCard, { padding: 16, gap: 14 }]}>
+              <Animated.View style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: "#334155", opacity: pulseAnim }} />
+              <View style={{ flex: 1, gap: 8 }}>
+                <Animated.View style={{ width: 110, height: 12, borderRadius: 6, backgroundColor: "#334155", opacity: pulseAnim }} />
+                <Animated.View style={{ width: 180, height: 16, borderRadius: 6, backgroundColor: "#334155", opacity: pulseAnim }} />
+                <View style={{ flexDirection: "row", gap: 8, marginTop: 2 }}>
+                  <Animated.View style={{ width: 44, height: 18, borderRadius: 6, backgroundColor: "#334155", opacity: pulseAnim }} />
+                  <Animated.View style={{ width: 44, height: 18, borderRadius: 6, backgroundColor: "#334155", opacity: pulseAnim }} />
+                </View>
+              </View>
+              <Animated.View style={{ width: 40, height: 24, borderRadius: 8, backgroundColor: "#334155", opacity: pulseAnim }} />
+            </View>
+          ))}
+        </View>
+
+        {/* BUTTON SKELETON */}
+        <Animated.View style={{ width: "100%", height: 56, borderRadius: 16, backgroundColor: "#334155", opacity: pulseAnim, marginTop: 16 }} />
+      </View>
+    </SafeAreaView>
+  );
+}
+
+  if (loading) {
+    return <OnboardingDetailSkeleton />;
   }
 
   if (!task) return null;
