@@ -270,7 +270,7 @@ const WineCard = memo(function WineCard({
               style={[styles.bottleId, { color: theme.text }]}
               numberOfLines={1}
             >
-              {bottle.id}
+              {bottle.bottleId}
             </Text>
 
             {/* Location badge */}
