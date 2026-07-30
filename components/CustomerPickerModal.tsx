@@ -285,251 +285,277 @@ export default function CustomerPickerModal({
 
           {/* List or Add New */}
           {isAddingNew ? (
-            <View style={styles.addForm}>
-              <Text style={[styles.formLabel, { color: theme.textSecondary }]}>Name *</Text>
-              <TextInput
-                style={[styles.formInput, { backgroundColor: theme.card, color: theme.text, borderColor: theme.border }]}
-                placeholder="Juan dela Cruz"
-                placeholderTextColor={theme.textSecondary}
-                value={newName}
-                onChangeText={setNewName}
-                autoCapitalize="words"
-              />
-
-              <Text style={[styles.formLabel, { color: theme.textSecondary }]}>Email (Optional)</Text>
-              <TextInput
-                style={[styles.formInput, { backgroundColor: theme.card, color: theme.text, borderColor: theme.border }]}
-                placeholder="juan@example.com"
-                placeholderTextColor={theme.textSecondary}
-                value={newEmail}
-                onChangeText={setNewEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-              />
-
-              <Text style={[styles.formLabel, { color: theme.textSecondary }]}>Contact No. (Optional)</Text>
-              <TextInput
-                style={[styles.formInput, { backgroundColor: theme.card, color: theme.text, borderColor: theme.border }]}
-                placeholder="+63 912 345 6789"
-                placeholderTextColor={theme.textSecondary}
-                value={newContact}
-                onChangeText={setNewContact}
-                keyboardType="phone-pad"
-              />
-
-              {/* Favourite Producers (up to 10) */}
-              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 16, marginBottom: 8 }}>
-                <Text style={[styles.formLabel, { color: theme.textSecondary, marginTop: 0, marginBottom: 0 }]}>
-                  Favourite Producers ({favoriteProducers.length}/10)
-                </Text>
-              </View>
-              {favoriteProducers.length > 0 && (
-                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
-                  {favoriteProducers.map((prod, pIdx) => (
-                    <TouchableOpacity
-                      key={pIdx}
-                      style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        gap: 6,
-                        backgroundColor: theme.primary + "1A",
-                        borderColor: theme.primary + "40",
-                        borderWidth: 1,
-                        paddingHorizontal: 10,
-                        paddingVertical: 5,
-                        borderRadius: 14,
-                      }}
-                      onPress={() => setFavoriteProducers(favoriteProducers.filter((_, i) => i !== pIdx))}
-                    >
-                      <Text style={{ fontSize: 12, fontWeight: "700", color: theme.primary }}>{prod}</Text>
-                      <X size={14} color={theme.primary} />
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              )}
-              {favoriteProducers.length < 10 && (
-                <View style={{ position: "relative" }}>
+            <FlatList
+              data={[1]}
+              keyExtractor={() => "form"}
+              renderItem={() => (
+                <View style={styles.addForm}>
+                  <Text style={[styles.formLabel, { color: theme.textSecondary }]}>Customer Name *</Text>
                   <TextInput
                     style={[styles.formInput, { backgroundColor: theme.card, color: theme.text, borderColor: theme.border }]}
-                    placeholder="Type producer e.g. Domaine Leflaive..."
+                    placeholder="Juan dela Cruz"
                     placeholderTextColor={theme.textSecondary}
-                    value={producerInput}
-                    onChangeText={setProducerInput}
+                    value={newName}
+                    onChangeText={setNewName}
+                    autoCapitalize="words"
                   />
-                  {producerInput.trim().length > 0 && (
-                    <View style={{ backgroundColor: theme.card, borderColor: theme.border, borderWidth: 1, borderRadius: 12, marginTop: 4, padding: 4, zIndex: 10 }}>
-                      {availableProducers
-                        .filter((p) => p.toLowerCase().includes(producerInput.toLowerCase()) && !favoriteProducers.includes(p))
-                        .slice(0, 5)
-                        .map((p, idx) => (
-                          <TouchableOpacity
-                            key={idx}
-                            style={{ padding: 10, borderBottomWidth: idx < 4 ? 1 : 0, borderBottomColor: theme.border }}
-                            onPress={() => {
-                              setFavoriteProducers([...favoriteProducers, p]);
-                              setProducerInput("");
-                            }}
-                          >
-                            <Text style={{ fontSize: 13, fontWeight: "600", color: theme.text }}>{p}</Text>
-                          </TouchableOpacity>
-                        ))}
-                      {!favoriteProducers.includes(producerInput.trim()) && (
-                        <TouchableOpacity
-                          style={{ padding: 10, backgroundColor: theme.primary + "12", borderRadius: 8, marginTop: 4 }}
-                          onPress={() => {
-                            setFavoriteProducers([...favoriteProducers, producerInput.trim()]);
-                            setProducerInput("");
-                          }}
-                        >
-                          <Text style={{ fontSize: 13, fontWeight: "700", color: theme.primary }}>
-                            + Add "{producerInput.trim()}"
-                          </Text>
-                        </TouchableOpacity>
-                      )}
-                    </View>
-                  )}
-                </View>
-              )}
 
-              {/* Favourite Country / Region (up to 10) */}
-              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 16, marginBottom: 8 }}>
-                <Text style={[styles.formLabel, { color: theme.textSecondary, marginTop: 0, marginBottom: 0 }]}>
-                  Favourite Country / Region ({favoriteRegions.length}/10)
-                </Text>
-              </View>
-              {favoriteRegions.length > 0 && (
-                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
-                  {favoriteRegions.map((reg, rIdx) => (
-                    <TouchableOpacity
-                      key={rIdx}
-                      style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        gap: 6,
-                        backgroundColor: "#f59e0b1A",
-                        borderColor: "#f59e0b40",
-                        borderWidth: 1,
-                        paddingHorizontal: 10,
-                        paddingVertical: 5,
-                        borderRadius: 14,
-                      }}
-                      onPress={() => setFavoriteRegions(favoriteRegions.filter((_, i) => i !== rIdx))}
-                    >
-                      <Text style={{ fontSize: 12, fontWeight: "700", color: "#d97706" }}>{reg}</Text>
-                      <X size={14} color="#d97706" />
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              )}
-              {favoriteRegions.length < 10 && (
-                <View style={{ position: "relative" }}>
-                  <TextInput
-                    style={[styles.formInput, { backgroundColor: theme.card, color: theme.text, borderColor: theme.border }]}
-                    placeholder="Search region e.g. Bordeaux, Napa Valley..."
-                    placeholderTextColor={theme.textSecondary}
-                    value={regionInput}
-                    onChangeText={setRegionInput}
-                  />
-                  {regionInput.trim().length > 0 && (
-                    <View style={{ backgroundColor: theme.card, borderColor: theme.border, borderWidth: 1, borderRadius: 12, marginTop: 4, padding: 4, zIndex: 10 }}>
-                      {PREDEFINED_COUNTRIES_REGIONS
-                        .filter((r) => r.toLowerCase().includes(regionInput.toLowerCase()) && !favoriteRegions.includes(r))
-                        .slice(0, 5)
-                        .map((r, idx) => (
-                          <TouchableOpacity
-                            key={idx}
-                            style={{ padding: 10, borderBottomWidth: idx < 4 ? 1 : 0, borderBottomColor: theme.border }}
-                            onPress={() => {
-                              setFavoriteRegions([...favoriteRegions, r]);
-                              setRegionInput("");
-                            }}
-                          >
-                            <Text style={{ fontSize: 13, fontWeight: "600", color: theme.text }}>{r}</Text>
-                          </TouchableOpacity>
-                        ))}
-                      {!favoriteRegions.includes(regionInput.trim()) && (
-                        <TouchableOpacity
-                          style={{ padding: 10, backgroundColor: "#f59e0b12", borderRadius: 8, marginTop: 4 }}
-                          onPress={() => {
-                            setFavoriteRegions([...favoriteRegions, regionInput.trim()]);
-                            setRegionInput("");
-                          }}
-                        >
-                          <Text style={{ fontSize: 13, fontWeight: "700", color: "#d97706" }}>
-                            + Add "{regionInput.trim()}"
-                          </Text>
-                        </TouchableOpacity>
-                      )}
+                  {/* 2 Columns: Email & Contact */}
+                  <View style={{ flexDirection: "row", gap: 12, marginTop: 12 }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.formLabel, { color: theme.textSecondary, marginTop: 0 }]}>Email</Text>
+                      <TextInput
+                        style={[styles.formInput, { backgroundColor: theme.card, color: theme.text, borderColor: theme.border }]}
+                        placeholder="juan@example.com"
+                        placeholderTextColor={theme.textSecondary}
+                        value={newEmail}
+                        onChangeText={setNewEmail}
+                        keyboardType="email-address"
+                        autoCapitalize="none"
+                      />
                     </View>
-                  )}
-                </View>
-              )}
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.formLabel, { color: theme.textSecondary, marginTop: 0 }]}>Contact No.</Text>
+                      <TextInput
+                        style={[styles.formInput, { backgroundColor: theme.card, color: theme.text, borderColor: theme.border }]}
+                        placeholder="+63 912 345 6789"
+                        placeholderTextColor={theme.textSecondary}
+                        value={newContact}
+                        onChangeText={setNewContact}
+                        keyboardType="phone-pad"
+                      />
+                    </View>
+                  </View>
 
-              {/* Favorite Wine Style */}
-              <Text style={[styles.formLabel, { color: theme.textSecondary }]}>Favorite Wine Style (Optional)</Text>
-              <View style={{ position: "relative" }}>
-                <TextInput
-                  style={[styles.formInput, { backgroundColor: theme.card, color: theme.text, borderColor: theme.border }]}
-                  placeholder="Select or type style e.g. Full-Bodied Red..."
-                  placeholderTextColor={theme.textSecondary}
-                  value={favoriteWineStyle}
-                  onChangeText={setFavoriteWineStyle}
-                />
-              </View>
-              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
-                {PREDEFINED_WINE_STYLES.slice(0, 6).map((st, idx) => (
-                  <TouchableOpacity
-                    key={idx}
-                    style={{
-                      paddingHorizontal: 10,
-                      paddingVertical: 5,
-                      borderRadius: 12,
-                      borderWidth: 1,
-                      borderColor: favoriteWineStyle === st ? theme.primary : theme.border,
-                      backgroundColor: favoriteWineStyle === st ? theme.primary + "1A" : theme.card,
-                    }}
-                    onPress={() => setFavoriteWineStyle(favoriteWineStyle === st ? "" : st)}
-                  >
-                    <Text style={{ fontSize: 11, fontWeight: "700", color: favoriteWineStyle === st ? theme.primary : theme.textSecondary }}>
-                      {st}
+                  {/* Taste Preferences Header */}
+                  <View style={{ marginTop: 20, paddingTop: 16, borderTopWidth: 1, borderTopColor: theme.border }}>
+                    <Text style={{ fontSize: 13, fontWeight: "800", color: theme.primary, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 12 }}>
+                      Taste Preferences
                     </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
 
-              <Text style={[styles.formLabel, { color: theme.textSecondary }]}>Notes (Optional)</Text>
-              <TextInput
-                style={[
-                  styles.formInput,
-                  { backgroundColor: theme.card, color: theme.text, borderColor: theme.border, height: 80, paddingTop: 12, textAlignVertical: "top" }
-                ]}
-                placeholder="Any special requests or details..."
-                placeholderTextColor={theme.textSecondary}
-                value={newNotes}
-                onChangeText={setNewNotes}
-                multiline
-              />
+                    {/* Favourite Producers (up to 10) */}
+                    <View style={{ marginBottom: 16 }}>
+                      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                        <Text style={[styles.formLabel, { color: theme.textSecondary, marginTop: 0, marginBottom: 0 }]}>
+                          Favourite Producers ({favoriteProducers.length}/10)
+                        </Text>
+                      </View>
+                      {favoriteProducers.length > 0 && (
+                        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+                          {favoriteProducers.map((prod, pIdx) => (
+                            <TouchableOpacity
+                              key={pIdx}
+                              style={{
+                                flexDirection: "row",
+                                alignItems: "center",
+                                gap: 6,
+                                backgroundColor: theme.primary + "1A",
+                                borderColor: theme.primary + "40",
+                                borderWidth: 1,
+                                paddingHorizontal: 10,
+                                paddingVertical: 5,
+                                borderRadius: 14,
+                              }}
+                              onPress={() => setFavoriteProducers(favoriteProducers.filter((_, i) => i !== pIdx))}
+                            >
+                              <Text style={{ fontSize: 12, fontWeight: "700", color: theme.primary }}>{prod}</Text>
+                              <X size={14} color={theme.primary} />
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      )}
+                      {favoriteProducers.length < 10 && (
+                        <View style={{ position: "relative" }}>
+                          <TextInput
+                            style={[styles.formInput, { backgroundColor: theme.card, color: theme.text, borderColor: theme.border }]}
+                            placeholder="Type producer e.g. Domaine Leflaive..."
+                            placeholderTextColor={theme.textSecondary}
+                            value={producerInput}
+                            onChangeText={setProducerInput}
+                          />
+                          {producerInput.trim().length > 0 && (
+                            <View style={{ backgroundColor: theme.card, borderColor: theme.border, borderWidth: 1, borderRadius: 12, marginTop: 4, padding: 4, zIndex: 10 }}>
+                              {availableProducers
+                                .filter((p) => p.toLowerCase().includes(producerInput.toLowerCase()) && !favoriteProducers.includes(p))
+                                .slice(0, 5)
+                                .map((p, idx) => (
+                                  <TouchableOpacity
+                                    key={idx}
+                                    style={{ padding: 10, borderBottomWidth: idx < 4 ? 1 : 0, borderBottomColor: theme.border }}
+                                    onPress={() => {
+                                      setFavoriteProducers([...favoriteProducers, p]);
+                                      setProducerInput("");
+                                    }}
+                                  >
+                                    <Text style={{ fontSize: 13, fontWeight: "600", color: theme.text }}>{p}</Text>
+                                  </TouchableOpacity>
+                                ))}
+                              {!favoriteProducers.includes(producerInput.trim()) && (
+                                <TouchableOpacity
+                                  style={{ padding: 10, backgroundColor: theme.primary + "12", borderRadius: 8, marginTop: 4 }}
+                                  onPress={() => {
+                                    setFavoriteProducers([...favoriteProducers, producerInput.trim()]);
+                                    setProducerInput("");
+                                  }}
+                                >
+                                  <Text style={{ fontSize: 13, fontWeight: "700", color: theme.primary }}>
+                                    + Add "{producerInput.trim()}"
+                                  </Text>
+                                </TouchableOpacity>
+                              )}
+                            </View>
+                          )}
+                        </View>
+                      )}
+                    </View>
 
-              <View style={styles.formActions}>
-                <TouchableOpacity
-                  style={[styles.btnCancel, { backgroundColor: theme.card }]}
-                  onPress={() => setIsAddingNew(false)}
-                >
-                  <Text style={[styles.btnCancelText, { color: theme.textSecondary }]}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.btnSave, { backgroundColor: theme.primary }]}
-                  onPress={handleSaveNew}
-                  disabled={savingNew}
-                >
-                  {savingNew ? (
-                    <ActivityIndicator size="small" color="#FFF" />
-                  ) : (
-                    <Text style={styles.btnSaveText}>Save & Select</Text>
-                  )}
-                </TouchableOpacity>
-              </View>
-            </View>
+                    {/* Favourite Country / Region (up to 10) */}
+                    <View style={{ marginBottom: 16 }}>
+                      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                        <Text style={[styles.formLabel, { color: theme.textSecondary, marginTop: 0, marginBottom: 0 }]}>
+                          Favourite Country / Region ({favoriteRegions.length}/10)
+                        </Text>
+                      </View>
+                      {favoriteRegions.length > 0 && (
+                        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+                          {favoriteRegions.map((reg, rIdx) => (
+                            <TouchableOpacity
+                              key={rIdx}
+                              style={{
+                                flexDirection: "row",
+                                alignItems: "center",
+                                gap: 6,
+                                backgroundColor: "#f59e0b1A",
+                                borderColor: "#f59e0b40",
+                                borderWidth: 1,
+                                paddingHorizontal: 10,
+                                paddingVertical: 5,
+                                borderRadius: 14,
+                              }}
+                              onPress={() => setFavoriteRegions(favoriteRegions.filter((_, i) => i !== rIdx))}
+                            >
+                              <Text style={{ fontSize: 12, fontWeight: "700", color: "#d97706" }}>{reg}</Text>
+                              <X size={14} color="#d97706" />
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      )}
+                      {favoriteRegions.length < 10 && (
+                        <View style={{ position: "relative" }}>
+                          <TextInput
+                            style={[styles.formInput, { backgroundColor: theme.card, color: theme.text, borderColor: theme.border }]}
+                            placeholder="Search region e.g. Bordeaux, Napa Valley..."
+                            placeholderTextColor={theme.textSecondary}
+                            value={regionInput}
+                            onChangeText={setRegionInput}
+                          />
+                          {regionInput.trim().length > 0 && (
+                            <View style={{ backgroundColor: theme.card, borderColor: theme.border, borderWidth: 1, borderRadius: 12, marginTop: 4, padding: 4, zIndex: 10 }}>
+                              {PREDEFINED_COUNTRIES_REGIONS
+                                .filter((r) => r.toLowerCase().includes(regionInput.toLowerCase()) && !favoriteRegions.includes(r))
+                                .slice(0, 5)
+                                .map((r, idx) => (
+                                  <TouchableOpacity
+                                    key={idx}
+                                    style={{ padding: 10, borderBottomWidth: idx < 4 ? 1 : 0, borderBottomColor: theme.border }}
+                                    onPress={() => {
+                                      setFavoriteRegions([...favoriteRegions, r]);
+                                      setRegionInput("");
+                                    }}
+                                  >
+                                    <Text style={{ fontSize: 13, fontWeight: "600", color: theme.text }}>{r}</Text>
+                                  </TouchableOpacity>
+                                ))}
+                              {!favoriteRegions.includes(regionInput.trim()) && (
+                                <TouchableOpacity
+                                  style={{ padding: 10, backgroundColor: "#f59e0b12", borderRadius: 8, marginTop: 4 }}
+                                  onPress={() => {
+                                    setFavoriteRegions([...favoriteRegions, regionInput.trim()]);
+                                    setRegionInput("");
+                                  }}
+                                >
+                                  <Text style={{ fontSize: 13, fontWeight: "700", color: "#d97706" }}>
+                                    + Add "{regionInput.trim()}"
+                                  </Text>
+                                </TouchableOpacity>
+                              )}
+                            </View>
+                          )}
+                        </View>
+                      )}
+                    </View>
+
+                    {/* Favorite Wine Style */}
+                    <View style={{ marginBottom: 16 }}>
+                      <Text style={[styles.formLabel, { color: theme.textSecondary, marginTop: 0 }]}>Favorite Wine Style</Text>
+                      <TextInput
+                        style={[styles.formInput, { backgroundColor: theme.card, color: theme.text, borderColor: theme.border }]}
+                        placeholder="Select or type style e.g. Full-Bodied Red..."
+                        placeholderTextColor={theme.textSecondary}
+                        value={favoriteWineStyle}
+                        onChangeText={setFavoriteWineStyle}
+                      />
+                      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+                        {PREDEFINED_WINE_STYLES.slice(0, 6).map((st, idx) => (
+                          <TouchableOpacity
+                            key={idx}
+                            style={{
+                              paddingHorizontal: 10,
+                              paddingVertical: 5,
+                              borderRadius: 12,
+                              borderWidth: 1,
+                              borderColor: favoriteWineStyle === st ? theme.primary : theme.border,
+                              backgroundColor: favoriteWineStyle === st ? theme.primary + "1A" : theme.card,
+                            }}
+                            onPress={() => setFavoriteWineStyle(favoriteWineStyle === st ? "" : st)}
+                          >
+                            <Text style={{ fontSize: 11, fontWeight: "700", color: favoriteWineStyle === st ? theme.primary : theme.textSecondary }}>
+                              {st}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* Notes Section (Full Width below preferences) */}
+                  <View style={{ marginTop: 12, paddingTop: 16, borderTopWidth: 1, borderTopColor: theme.border }}>
+                    <Text style={[styles.formLabel, { color: theme.textSecondary, marginTop: 0 }]}>Notes (Optional)</Text>
+                    <TextInput
+                      style={[
+                        styles.formInput,
+                        { backgroundColor: theme.card, color: theme.text, borderColor: theme.border, height: 80, paddingTop: 12, textAlignVertical: "top" }
+                      ]}
+                      placeholder="Any special requests or details..."
+                      placeholderTextColor={theme.textSecondary}
+                      value={newNotes}
+                      onChangeText={setNewNotes}
+                      multiline
+                    />
+                  </View>
+
+                  <View style={styles.formActions}>
+                    <TouchableOpacity
+                      style={[styles.btnCancel, { backgroundColor: theme.card }]}
+                      onPress={() => setIsAddingNew(false)}
+                    >
+                      <Text style={[styles.btnCancelText, { color: theme.textSecondary }]}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.btnSave, { backgroundColor: theme.primary }]}
+                      onPress={handleSaveNew}
+                      disabled={savingNew}
+                    >
+                      {savingNew ? (
+                        <ActivityIndicator size="small" color="#FFF" />
+                      ) : (
+                        <Text style={styles.btnSaveText}>Save & Select</Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+            />
           ) : (
             <FlatList
               data={filteredCustomers}
