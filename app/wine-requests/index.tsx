@@ -196,23 +196,6 @@ export default function WineRequestsIndex() {
     }
   };
 
-  // Stats calculation
-  const stats = useMemo(() => {
-    let pending = 0;
-    let inProgress = 0;
-    let received = 0;
-    let totalBottles = 0;
-
-    requests.forEach((r) => {
-      const q = r.items.reduce((acc, i) => acc + (i.qty || 0), 0);
-      totalBottles += q;
-      if (r.status === "pending") pending++;
-      else if (r.status === "converted" || r.status === "outbound") inProgress++;
-      else if (r.status === "ingress_complete") received++;
-    });
-
-    return { pending, inProgress, received, totalBottles, total: requests.length };
-  }, [requests]);
 
   // Filter requests by search query
   const filteredRequests = useMemo(() => {
@@ -499,54 +482,6 @@ export default function WineRequestsIndex() {
         </TouchableOpacity>
       </View>
 
-      {/* KPI Metric Summary Strip */}
-      <View style={styles.kpiContainer}>
-        <TouchableOpacity
-          style={[
-            styles.kpiCard,
-            activeFilter === "pending" && styles.kpiCardActive,
-            { backgroundColor: "#fff" },
-          ]}
-          onPress={() => handleFilterChange("pending")}
-        >
-          <View style={[styles.kpiIconBox, { backgroundColor: "#fef3c7" }]}>
-            <Clock size={16} color="#d97706" />
-          </View>
-          <Text style={styles.kpiValue}>{stats.pending}</Text>
-          <Text style={styles.kpiLabel}>Pending</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.kpiCard,
-            (activeFilter === "converted" || activeFilter === "outbound") &&
-              styles.kpiCardActive,
-            { backgroundColor: "#fff" },
-          ]}
-          onPress={() => handleFilterChange("outbound")}
-        >
-          <View style={[styles.kpiIconBox, { backgroundColor: "#dbeafe" }]}>
-            <Truck size={16} color="#2563eb" />
-          </View>
-          <Text style={styles.kpiValue}>{stats.inProgress}</Text>
-          <Text style={styles.kpiLabel}>In Transit</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.kpiCard,
-            activeFilter === "ingress_complete" && styles.kpiCardActive,
-            { backgroundColor: "#fff" },
-          ]}
-          onPress={() => handleFilterChange("ingress_complete")}
-        >
-          <View style={[styles.kpiIconBox, { backgroundColor: "#d1fae5" }]}>
-            <CheckCircle2 size={16} color="#059669" />
-          </View>
-          <Text style={styles.kpiValue}>{stats.received}</Text>
-          <Text style={styles.kpiLabel}>Received</Text>
-        </TouchableOpacity>
-      </View>
 
       {/* Search Input Bar */}
       <View style={styles.searchSection}>
