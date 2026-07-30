@@ -58,7 +58,7 @@ interface TypeSalesBreakdown {
   revenue: number;
   volume: number;
   percentage: number;
-  stores: { storeName: string; count: number; revenue: number }[];
+  stores: { storeId: string; storeName: string; count: number; revenue: number }[];
 }
 
 interface CategorySalesBreakdown {
@@ -70,7 +70,7 @@ interface CategorySalesBreakdown {
   revenue: number;
   volume: number;
   percentage: number;
-  stores: { storeName: string; count: number; revenue: number }[];
+  stores: { storeId: string; storeName: string; count: number; revenue: number }[];
 }
 
 const theme = Colors.admin;
@@ -162,7 +162,7 @@ export default function AdminDashboard() {
           count: number;
           revenue: number;
           volume: number;
-          stores: Record<string, { storeName: string; count: number; revenue: number }>;
+          stores: Record<string, { storeId: string; storeName: string; count: number; revenue: number }>;
         }
       > = {
         bottle: { label: "Full Bottle", count: 0, revenue: 0, volume: 0, stores: {} },
@@ -179,7 +179,7 @@ export default function AdminDashboard() {
           count: number;
           revenue: number;
           volume: number;
-          stores: Record<string, { storeName: string; count: number; revenue: number }>;
+          stores: Record<string, { storeId: string; storeName: string; count: number; revenue: number }>;
         }
       > = {
         fast: { label: "Fast Moving", badgeColor: "#f59e0b", iconText: "⚡ FAST", count: 0, revenue: 0, volume: 0, stores: {} },
@@ -233,7 +233,7 @@ export default function AdminDashboard() {
         typeAgg[tKey].revenue += rev;
         typeAgg[tKey].volume += vol;
         if (!typeAgg[tKey].stores[sId]) {
-          typeAgg[tKey].stores[sId] = { storeName: sName, count: 0, revenue: 0 };
+          typeAgg[tKey].stores[sId] = { storeId: sId, storeName: sName, count: 0, revenue: 0 };
         }
         typeAgg[tKey].stores[sId].count += 1;
         typeAgg[tKey].stores[sId].revenue += rev;
@@ -252,7 +252,7 @@ export default function AdminDashboard() {
         categoryAgg[cKey].revenue += rev;
         categoryAgg[cKey].volume += vol;
         if (!categoryAgg[cKey].stores[sId]) {
-          categoryAgg[cKey].stores[sId] = { storeName: sName, count: 0, revenue: 0 };
+          categoryAgg[cKey].stores[sId] = { storeId: sId, storeName: sName, count: 0, revenue: 0 };
         }
         categoryAgg[cKey].stores[sId].count += 1;
         categoryAgg[cKey].stores[sId].revenue += rev;
@@ -597,12 +597,20 @@ export default function AdminDashboard() {
                         style={styles.breakdownCard}
                       >
                         <View style={styles.breakdownHeader}>
-                          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}>
+                          <TouchableOpacity
+                            style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}
+                            onPress={() =>
+                              router.push({
+                                pathname: "/sales",
+                                params: { storeId: item.storeId, storeName: item.storeName, period: salesPeriod },
+                              })
+                            }
+                          >
                             <Building2 size={16} color={theme.primary} />
                             <Text style={styles.breakdownName} numberOfLines={1}>
                               {item.storeName}
                             </Text>
-                          </View>
+                          </TouchableOpacity>
                           <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                             <Text style={styles.breakdownRevenue}>{formatCurrency(item.revenue)}</Text>
                             {isExpanded ? (
@@ -655,6 +663,18 @@ export default function AdminDashboard() {
                                 </View>
                               ))}
                             </View>
+
+                            <TouchableOpacity
+                              style={styles.viewStoreSalesBtn}
+                              onPress={() =>
+                                router.push({
+                                  pathname: "/sales",
+                                  params: { storeId: item.storeId, storeName: item.storeName, period: salesPeriod },
+                                })
+                              }
+                            >
+                              <Text style={styles.viewStoreSalesText}>View Full Store Sales Report →</Text>
+                            </TouchableOpacity>
                           </View>
                         )}
                       </TouchableOpacity>
@@ -720,12 +740,21 @@ export default function AdminDashboard() {
                             <Text style={styles.expandedBoxTitle}>Sales per Store:</Text>
                             <View style={{ gap: 6, marginTop: 4 }}>
                               {item.stores.map((st, idx) => (
-                                <View key={idx} style={styles.expandedRow}>
+                                <TouchableOpacity
+                                  key={idx}
+                                  style={styles.expandedRow}
+                                  onPress={() =>
+                                    router.push({
+                                      pathname: "/sales",
+                                      params: { storeId: st.storeId, storeName: st.storeName, period: salesPeriod },
+                                    })
+                                  }
+                                >
                                   <Text style={styles.expandedLabel}>{st.storeName}</Text>
                                   <Text style={styles.expandedVal}>
-                                    {st.count} sold ({formatCurrency(st.revenue)})
+                                    {st.count} sold ({formatCurrency(st.revenue)}) →
                                   </Text>
-                                </View>
+                                </TouchableOpacity>
                               ))}
                             </View>
                           </View>
@@ -795,12 +824,21 @@ export default function AdminDashboard() {
                               <Text style={styles.expandedLabel}>No sales recorded</Text>
                             ) : (
                               item.stores.map((st, idx) => (
-                                <View key={idx} style={styles.expandedRow}>
+                                <TouchableOpacity
+                                  key={idx}
+                                  style={styles.expandedRow}
+                                  onPress={() =>
+                                    router.push({
+                                      pathname: "/sales",
+                                      params: { storeId: st.storeId, storeName: st.storeName, period: salesPeriod },
+                                    })
+                                  }
+                                >
                                   <Text style={styles.expandedLabel}>{st.storeName}</Text>
                                   <Text style={styles.expandedVal}>
-                                    {st.count} sold ({formatCurrency(st.revenue)})
+                                    {st.count} sold ({formatCurrency(st.revenue)}) →
                                   </Text>
-                                </View>
+                                </TouchableOpacity>
                               ))
                             )}
                           </View>
@@ -1407,6 +1445,22 @@ const styles = StyleSheet.create({
     color: theme.text,
   },
   expandedVal: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: theme.primary,
+  },
+  viewStoreSalesBtn: {
+    marginTop: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: theme.primary + "12",
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: theme.primary + "30",
+  },
+  viewStoreSalesText: {
     fontSize: 12,
     fontWeight: "700",
     color: theme.primary,

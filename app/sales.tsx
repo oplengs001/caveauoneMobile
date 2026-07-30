@@ -66,10 +66,17 @@ const formatCurrency = (amount: number) => {
 export default function SalesScreen() {
   const router = useRouter();
   const { profile } = useAuth();
-  const theme = profile?.role === "store" ? Colors.store : Colors.warehouse;
+  const theme = profile?.role === "admin" ? Colors.admin : profile?.role === "store" ? Colors.store : Colors.warehouse;
 
-  // Catch the period parameter passed from the HomeScreen
-  const { period: passedPeriod } = useLocalSearchParams();
+  // Catch the period and store parameters
+  const { period: passedPeriod, storeId: passedStoreId, storeName: passedStoreName } = useLocalSearchParams<{
+    period?: string;
+    storeId?: string;
+    storeName?: string;
+  }>();
+
+  const activeStoreId = (passedStoreId as string) || profile?.locationId || null;
+  const activeStoreName = (passedStoreName as string) || null;
 
   const [sales, setSales] = useState<Sale[]>([]);
   const [loading, setLoading] = useState(true);
@@ -92,10 +99,6 @@ export default function SalesScreen() {
   const [customEnd, setCustomEnd] = useState("");
 
   const fetchSales = async () => {
-    if (!profile?.locationId) {
-      setLoading(false);
-      return;
-    }
     if (period === "custom" && !customStart) return;
 
     setLoading(true);
@@ -122,7 +125,8 @@ export default function SalesScreen() {
         if (endDate) endDate.setHours(23, 59, 59, 999);
       }
 
-      const params = new URLSearchParams({ storeId: profile.locationId });
+      const params = new URLSearchParams();
+      if (activeStoreId) params.set("storeId", activeStoreId);
       if (startDate) params.set("from", startDate.toISOString());
       if (endDate) params.set("to", endDate.toISOString());
 
@@ -393,8 +397,8 @@ export default function SalesScreen() {
         >
           <ChevronLeft size={24} color={theme.primary} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: theme.text }]}>
-          Sales Report
+        <Text style={[styles.headerTitle, { color: theme.text }]} numberOfLines={1}>
+          {activeStoreName ? `${activeStoreName} Sales` : "Sales Report"}
         </Text>
         <TouchableOpacity
           style={styles.filterIcon}
