@@ -59,8 +59,9 @@ import VatBreakdownCard, { formatCurrency } from "../../components/VatBreakdownC
 
 export default function TaggingScreen() {
   const { profile } = useAuth();
-  const theme = profile?.role === "store" ? Colors.store : profile?.role === "admin" ? Colors.admin : Colors.warehouse;
-  const isStore = profile?.role === "store" || profile?.role === "admin";
+  const isStoreUser = profile?.role === "store" || profile?.role === "store_manager" || profile?.role === "store_staff";
+  const theme = isStoreUser ? Colors.store : profile?.role === "admin" ? Colors.admin : Colors.warehouse;
+  const isStore = isStoreUser || profile?.role === "admin";
 
   const {
     bottleId: initialBottleId,
@@ -553,7 +554,7 @@ export default function TaggingScreen() {
 
       // Auto-request restock if PAR level reached (store users only, not admin)
       const masterWineId = wine?.id || bottle.masterWineId;
-      if (profile?.role === "store" && profile?.locationId && masterWineId && wine) {
+      if (isStoreUser && profile?.locationId && masterWineId && wine) {
         const storeId = profile.locationId;
         try {
           const settingsData = await apiFetch(`/stock-settings?storeId=${storeId}&masterWineId=${masterWineId}`);

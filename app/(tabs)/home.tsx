@@ -4,7 +4,7 @@ import { useAuth } from "@/context/AuthContext";
 import { apiFetch } from "@/lib/api";
 import { clearToken } from "@/lib/auth";
 import { countBottlesForStoreDashboard, getSalesByPeriod, getStores } from "@/lib/queries";
-import { Delivery, PulloutRequest, WineRequest } from "@/types";
+import { Delivery, PulloutRequest, Store, WineRequest } from "@/types";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
 import {
@@ -81,7 +81,8 @@ export default function HomeScreen() {
 
   const fetchMetrics = useCallback(async () => {
     const storeId = profile?.locationId;
-    if (profile?.role !== "store" || !storeId) {
+    const isStoreUser = profile?.role === "store" || profile?.role === "store_manager" || profile?.role === "store_staff";
+    if (!isStoreUser || profile?.role === "store_staff" || !storeId) {
       setLoadingMetrics(false);
       return;
     }
@@ -171,7 +172,8 @@ export default function HomeScreen() {
   const OUTBOUND_TTL_MS = 2 * 60 * 1000;
 
   const fetchOutboundRequests = useCallback(async () => {
-    if (profile?.role !== "store" || !profile.locationId) {
+    const isStoreUser = profile?.role === "store" || profile?.role === "store_manager" || profile?.role === "store_staff";
+    if (!isStoreUser || profile?.role === "store_staff" || !profile?.locationId) {
       setLoadingRequests(false);
       return;
     }
@@ -201,17 +203,20 @@ export default function HomeScreen() {
         getStores(),
       ]);
 
-      const locMap: Record<string, string> = {};
-      storesData.forEach((d) => (locMap[d.id] = d.name));
+      const requests: WineRequest[] = reqData.wineRequests || reqData;
+      const deliveries: Delivery[] = delData.deliveries || delData;
+      const pullouts: PulloutRequest[] = pulloutData.pulloutRequests || pulloutData;
+      const stores: Store[] = storesData || [];
 
-      const requests = (reqData.wineRequests || reqData) as WineRequest[];
-      const deliveries = (delData.deliveries || delData) as Delivery[];
-      const pullouts = (pulloutData.pulloutRequests || pulloutData) as PulloutRequest[];
+      const locMap: Record<string, string> = {};
+      stores.forEach((s) => {
+        locMap[s.id] = s.name;
+      });
 
       outboundCache.current = {
         data: { requests, deliveries, pullouts, locMap },
         storeId: profile.locationId,
-        fetchedAt: Date.now()
+        fetchedAt: Date.now(),
       };
 
       setLocations(locMap);
@@ -227,7 +232,8 @@ export default function HomeScreen() {
 
   const fetchSalesMetrics = useCallback(async () => {
     const storeId = profile?.locationId;
-    if (profile?.role !== "store" || !storeId) {
+    const isStoreUser = profile?.role === "store" || profile?.role === "store_manager" || profile?.role === "store_staff";
+    if (!isStoreUser || !storeId) {
       setLoadingSales(false);
       return;
     }
@@ -265,12 +271,13 @@ export default function HomeScreen() {
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      if (profile?.role === "store") {
-        await Promise.all([
-          fetchMetrics(),
-          fetchOutboundRequests(),
-          fetchSalesMetrics(),
-        ]);
+      const isStoreUser = profile?.role === "store" || profile?.role === "store_manager" || profile?.role === "store_staff";
+      if (isStoreUser) {
+        const promises: Promise<any>[] = [fetchSalesMetrics()];
+        if (profile?.role !== "store_staff") {
+          promises.push(fetchMetrics(), fetchOutboundRequests());
+        }
+        await Promise.all(promises);
       }
     } catch (e) {
       console.error("Failed to refresh:", e);
@@ -341,8 +348,9 @@ export default function HomeScreen() {
   }
 
   const role = profile?.role || "warehouse";
-  const theme = role === "store" ? Colors.store : Colors.warehouse;
-  const isStore = role === "store";
+  const isStore = role === "store" || role === "store_manager" || role === "store_staff";
+  const isStoreStaff = role === "store_staff";
+  const theme = isStore ? Colors.store : Colors.warehouse;
 
   if (!initialDataLoaded) {
     return (
@@ -361,12 +369,14 @@ export default function HomeScreen() {
   }
 
   const hasAlerts =
-    dashboardMetrics.stockout.wines > 0 ||
-    dashboardMetrics.parAlert.wines > 0 ||
-    dashboardMetrics.underSafety.wines > 0;
+    !isStoreStaff &&
+    (dashboardMetrics.stockout.wines > 0 ||
+      dashboardMetrics.parAlert.wines > 0 ||
+      dashboardMetrics.underSafety.wines > 0);
   const hasDeliveries =
-    outboundRequests.length > 0 || incomingDeliveries.length > 0;
-  const hasPulloutTasks = pulloutTasks.length > 0;
+    !isStoreStaff &&
+    (outboundRequests.length > 0 || incomingDeliveries.length > 0);
+  const hasPulloutTasks = !isStoreStaff && pulloutTasks.length > 0;
 
   return (
     <SafeAreaView
@@ -432,7 +442,9 @@ export default function HomeScreen() {
           </View>
           <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
             {isStore
-              ? "Boutique Sommelier Terminal"
+              ? isStoreStaff
+                ? "Boutique Sales Terminal (Staff)"
+                : "Boutique Sommelier Terminal"
               : "Warehouse Management System"}
           </Text>
         </View>
@@ -873,7 +885,7 @@ export default function HomeScreen() {
             </TouchableOpacity>
           )}
 
-          {isStore && (
+          {isStore && !isStoreStaff && (
             <TouchableOpacity
               style={[
                 styles.actionButton,
@@ -899,7 +911,7 @@ export default function HomeScreen() {
             </TouchableOpacity>
           )}
 
-          {isStore && (
+          {isStore && !isStoreStaff && (
             <TouchableOpacity
               style={[
                 styles.actionButton,
@@ -981,23 +993,25 @@ export default function HomeScreen() {
             </TouchableOpacity>
           )}
 
-          <TouchableOpacity
-            style={[
-              styles.actionButton,
-              { backgroundColor: isStore ? theme.accent : theme.primary },
-            ]}
-            onPress={() => router.push("/inventory")}
-          >
-            <View style={styles.buttonContent}>
-              <Search size={42} color="#ffffff" strokeWidth={1.5} />
-              <View style={styles.buttonTextContainer}>
-                <Text style={styles.buttonTitle}>Bottle Management</Text>
-                <Text style={styles.buttonDesc}>
-                  Search by SKU or Wine Name
-                </Text>
+          {(!isStore || !isStoreStaff) && (
+            <TouchableOpacity
+              style={[
+                styles.actionButton,
+                { backgroundColor: isStore ? theme.accent : theme.primary },
+              ]}
+              onPress={() => router.push("/inventory")}
+            >
+              <View style={styles.buttonContent}>
+                <Search size={42} color="#ffffff" strokeWidth={1.5} />
+                <View style={styles.buttonTextContainer}>
+                  <Text style={styles.buttonTitle}>Bottle Management</Text>
+                  <Text style={styles.buttonDesc}>
+                    Search by SKU or Wine Name
+                  </Text>
+                </View>
               </View>
-            </View>
-          </TouchableOpacity>
+            </TouchableOpacity>
+          )}
 
           {isStore && (
             <TouchableOpacity

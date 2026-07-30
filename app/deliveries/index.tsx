@@ -112,7 +112,8 @@ export default function DeliveriesIndex() {
     }
   };
 
-  const theme = profile?.role === "store" ? Colors.store : Colors.warehouse;
+  const isStore = profile?.role === "store" || profile?.role === "store_manager" || profile?.role === "store_staff";
+  const theme = isStore ? Colors.store : Colors.warehouse;
 
   return (
     <SafeAreaView

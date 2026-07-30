@@ -348,8 +348,8 @@ const WineCard = memo(function WineCard({
 
 export default function InventoryScreen() {
   const { profile } = useAuth();
-  const theme = profile?.role === "store" ? Colors.store : Colors.warehouse;
-  const isStore = profile?.role === "store";
+  const isStore = profile?.role === "store" || profile?.role === "store_manager" || profile?.role === "store_staff";
+  const theme = isStore ? Colors.store : Colors.warehouse;
 
   const [bottles, setBottles] = useState<BottleView[]>([]);
   const [loading, setLoading] = useState(true);

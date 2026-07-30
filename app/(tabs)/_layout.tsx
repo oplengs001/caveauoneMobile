@@ -8,7 +8,8 @@ import { useAuth } from "@/context/AuthContext";
 
 export default function StackLayout() {
   const { profile } = useAuth();
-  const role = profile?.role === 'store' ? 'store' : 'warehouse';
+  const isStore = profile?.role === 'store' || profile?.role === 'store_manager' || profile?.role === 'store_staff';
+  const role = isStore ? 'store' : 'warehouse';
   const theme = Colors[role];
 
   return (

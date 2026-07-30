@@ -45,7 +45,8 @@ export default function SellScreen() {
   const router = useRouter();
   const { wineId } = useLocalSearchParams();
   const { profile } = useAuth();
-  const theme = profile?.role === "store" ? Colors.store : profile?.role === "admin" ? Colors.admin : Colors.warehouse;
+  const isStore = profile?.role === "store" || profile?.role === "store_manager" || profile?.role === "store_staff";
+  const theme = isStore ? Colors.store : profile?.role === "admin" ? Colors.admin : Colors.warehouse;
 
   // Permissions
   const [permission, requestPermission] = useCameraPermissions();
@@ -360,7 +361,7 @@ export default function SellScreen() {
       }
 
       // PAR Alert logic
-      if (profile?.role === "store" && profile?.locationId && selectedWine) {
+      if (isStore && profile?.locationId && selectedWine) {
         const storeId = profile.locationId;
         try {
           const settingsData = await apiFetch(`/stock-settings?storeId=${storeId}&masterWineId=${selectedWine.id}`);
