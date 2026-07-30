@@ -145,11 +145,21 @@ export default function CustomerPickerModal({
 
   const fetchMasterProducers = async () => {
     try {
-      const wines = await apiFetch("/master-wines");
-      const list: any[] = Array.isArray(wines) ? wines : (wines.masterWines || []);
-      const uniqueProducers = Array.from(
-        new Set(list.map((w: any) => w.producer).filter((p: any) => p && typeof p === "string" && p.trim().length > 0))
-      ) as string[];
+      const data = await apiFetch("/producers").catch(() => apiFetch("/wines"));
+      let uniqueProducers: string[] = [];
+      if (Array.isArray(data)) {
+        if (data.length > 0 && typeof data[0] === "string") {
+          uniqueProducers = data;
+        } else {
+          uniqueProducers = Array.from(
+            new Set(data.map((w: any) => w.producer).filter((p: any) => p && typeof p === "string" && p.trim().length > 0))
+          ) as string[];
+        }
+      } else if (data?.masterWines) {
+        uniqueProducers = Array.from(
+          new Set(data.masterWines.map((w: any) => w.producer).filter((p: any) => p && typeof p === "string" && p.trim().length > 0))
+        ) as string[];
+      }
       setAvailableProducers(uniqueProducers.sort());
     } catch (e) {
       console.error("Failed to fetch master wine producers", e);
