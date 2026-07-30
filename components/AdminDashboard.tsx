@@ -576,6 +576,71 @@ export default function AdminDashboard() {
               ))}
             </View>
 
+            {/* ── Multi-Segmented Proportional Distribution Bar ────────────── */}
+            {(() => {
+              const STORE_COLORS = ["#4f46e5", "#059669", "#d97706", "#ec4899", "#06b6d4", "#8b5cf6", "#64748b"];
+              let currentList: { label: string; percentage: number; color: string }[] = [];
+              if (breakdownMode === "store") {
+                currentList = storeSales.map((s, idx) => ({
+                  label: s.storeName,
+                  percentage: s.percentage,
+                  color: STORE_COLORS[idx % STORE_COLORS.length],
+                }));
+              } else if (breakdownMode === "category") {
+                currentList = categorySales.map((c) => ({
+                  label: c.label,
+                  percentage: c.percentage,
+                  color: c.badgeColor,
+                }));
+              } else {
+                currentList = typeSales.map((t) => ({
+                  label: t.label,
+                  percentage: t.percentage,
+                  color: t.type === "bottle" ? "#4f46e5" : t.type === "glass" ? "#059669" : "#d97706",
+                }));
+              }
+
+              const hasData = currentList.some((i) => i.percentage > 0);
+              if (!hasData) return null;
+
+              return (
+                <View style={styles.distStripContainer}>
+                  <View style={styles.distStripBar}>
+                    {currentList.map((item, idx) => {
+                      if (item.percentage <= 0) return null;
+                      return (
+                        <View
+                          key={idx}
+                          style={[
+                            styles.distSegment,
+                            {
+                              width: `${Math.max(item.percentage, 4)}%`,
+                              backgroundColor: item.color,
+                            },
+                          ]}
+                        />
+                      );
+                    })}
+                  </View>
+
+                  {/* Distribution Legend */}
+                  <View style={styles.distLegendRow}>
+                    {currentList.map((item, idx) => {
+                      if (item.percentage <= 0) return null;
+                      return (
+                        <View key={idx} style={styles.distLegendItem}>
+                          <View style={[styles.distLegendDot, { backgroundColor: item.color }]} />
+                          <Text style={styles.distLegendText} numberOfLines={1}>
+                            {item.label} <Text style={{ fontWeight: "800", color: theme.text }}>({item.percentage}%)</Text>
+                          </Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                </View>
+              );
+            })()}
+
             {/* Drilldown Content */}
             {loadingSales && !isFirstLoad && !refreshing ? (
               <ActivityIndicator color={theme.primary} style={{ marginVertical: 20 }} />
@@ -586,15 +651,18 @@ export default function AdminDashboard() {
                   <Text style={styles.emptyBreakdownText}>No store sales recorded for this period</Text>
                 </View>
               ) : (
-                <View style={{ gap: 10, marginTop: 12 }}>
-                  {storeSales.map((item) => {
+                <View style={{ gap: 10, marginTop: 4 }}>
+                  {storeSales.map((item, idx) => {
                     const isExpanded = expandedCardId === item.storeId;
+                    const STORE_COLORS = ["#4f46e5", "#059669", "#d97706", "#ec4899", "#06b6d4", "#8b5cf6", "#64748b"];
+                    const storeColor = STORE_COLORS[idx % STORE_COLORS.length];
+
                     return (
                       <TouchableOpacity
                         key={item.storeId}
                         activeOpacity={0.8}
                         onPress={() => setExpandedCardId(isExpanded ? null : item.storeId)}
-                        style={styles.breakdownCard}
+                        style={[styles.breakdownCard, { borderLeftWidth: 4, borderLeftColor: storeColor }]}
                       >
                         <View style={styles.breakdownHeader}>
                           <TouchableOpacity
@@ -606,7 +674,7 @@ export default function AdminDashboard() {
                               })
                             }
                           >
-                            <Building2 size={16} color={theme.primary} />
+                            <Building2 size={16} color={storeColor} />
                             <Text style={styles.breakdownName} numberOfLines={1}>
                               {item.storeName}
                             </Text>
@@ -625,16 +693,17 @@ export default function AdminDashboard() {
                           <Text style={styles.breakdownSubText}>
                             {item.volume} bottles sold ({item.count} {item.count === 1 ? "sale" : "sales"})
                           </Text>
-                          <Text style={styles.breakdownPercentage}>{item.percentage}% share</Text>
-                        </View>
-
-                        <View style={styles.progressBarBg}>
-                          <View
-                            style={[
-                              styles.progressBarFill,
-                              { width: `${Math.min(100, Math.max(0, item.percentage))}%` },
-                            ]}
-                          />
+                          <View style={styles.sharePillContainer}>
+                            {idx === 0 && item.percentage > 0 && (
+                              <View style={[styles.rankBadge, { backgroundColor: storeColor + "1A", borderColor: storeColor + "40" }]}>
+                                <Text style={[styles.rankBadgeText, { color: storeColor }]}>#1 LEADER</Text>
+                              </View>
+                            )}
+                            <View style={[styles.ringPill, { borderColor: storeColor + "40", backgroundColor: storeColor + "0D" }]}>
+                              <View style={[styles.ringDot, { backgroundColor: storeColor }]} />
+                              <Text style={[styles.ringPillText, { color: storeColor }]}>{item.percentage}% share</Text>
+                            </View>
+                          </View>
                         </View>
 
                         {/* Expanded Store Details */}
@@ -642,8 +711,8 @@ export default function AdminDashboard() {
                           <View style={styles.expandedBox}>
                             <Text style={styles.expandedBoxTitle}>Portion Breakdown:</Text>
                             <View style={{ gap: 6, marginTop: 4 }}>
-                              {item.types.map((tp, idx) => (
-                                <View key={idx} style={styles.expandedRow}>
+                              {item.types.map((tp, tpIdx) => (
+                                <View key={tpIdx} style={styles.expandedRow}>
                                   <Text style={styles.expandedLabel}>{tp.label}</Text>
                                   <Text style={styles.expandedVal}>
                                     {tp.count} sold ({formatCurrency(tp.revenue)})
@@ -654,8 +723,8 @@ export default function AdminDashboard() {
 
                             <Text style={[styles.expandedBoxTitle, { marginTop: 10 }]}>Category Breakdown:</Text>
                             <View style={{ gap: 6, marginTop: 4 }}>
-                              {item.categories.map((cat, idx) => (
-                                <View key={idx} style={styles.expandedRow}>
+                              {item.categories.map((cat, catIdx) => (
+                                <View key={catIdx} style={styles.expandedRow}>
                                   <Text style={styles.expandedLabel}>{cat.label}</Text>
                                   <Text style={styles.expandedVal}>
                                     {cat.count} sold ({formatCurrency(cat.revenue)})
@@ -690,14 +759,14 @@ export default function AdminDashboard() {
                 </View>
               ) : (
                 <View style={styles.typeGrid}>
-                  {categorySales.map((item) => {
+                  {categorySales.map((item, idx) => {
                     const isExpanded = expandedCardId === item.categoryKey;
                     return (
                       <TouchableOpacity
                         key={item.categoryKey}
                         activeOpacity={0.8}
                         onPress={() => setExpandedCardId(isExpanded ? null : item.categoryKey)}
-                        style={styles.typeCard}
+                        style={[styles.typeCard, { borderLeftWidth: 4, borderLeftColor: item.badgeColor }]}
                       >
                         <View style={styles.typeHeader}>
                           <View style={[styles.typeBadge, { backgroundColor: item.badgeColor + "18" }]}>
@@ -715,23 +784,24 @@ export default function AdminDashboard() {
                           </View>
                         </View>
 
-                        <View style={{ marginTop: 8 }}>
-                          <Text style={styles.typeTitle}>{item.label}</Text>
-                          <Text style={styles.typeDetail}>
-                            {item.volume} bottles sold ({item.count} {item.count === 1 ? "sale" : "sales"}) • {item.percentage}% share
-                          </Text>
-                        </View>
-
-                        <View style={styles.typeProgressBarBg}>
-                          <View
-                            style={[
-                              styles.typeProgressBarFill,
-                              {
-                                width: `${Math.min(100, Math.max(0, item.percentage))}%`,
-                                backgroundColor: item.badgeColor,
-                              },
-                            ]}
-                          />
+                        <View style={{ marginTop: 8, flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end" }}>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.typeTitle}>{item.label}</Text>
+                            <Text style={styles.typeDetail}>
+                              {item.volume} bottles sold ({item.count} {item.count === 1 ? "sale" : "sales"})
+                            </Text>
+                          </View>
+                          <View style={styles.sharePillContainer}>
+                            {idx === 0 && item.percentage > 0 && (
+                              <View style={[styles.rankBadge, { backgroundColor: item.badgeColor + "1A", borderColor: item.badgeColor + "40" }]}>
+                                <Text style={[styles.rankBadgeText, { color: item.badgeColor }]}>#1</Text>
+                              </View>
+                            )}
+                            <View style={[styles.ringPill, { borderColor: item.badgeColor + "40", backgroundColor: item.badgeColor + "0D" }]}>
+                              <View style={[styles.ringDot, { backgroundColor: item.badgeColor }]} />
+                              <Text style={[styles.ringPillText, { color: item.badgeColor }]}>{item.percentage}% share</Text>
+                            </View>
+                          </View>
                         </View>
 
                         {/* Expanded Category Store Details */}
@@ -739,9 +809,9 @@ export default function AdminDashboard() {
                           <View style={styles.expandedBox}>
                             <Text style={styles.expandedBoxTitle}>Sales per Store:</Text>
                             <View style={{ gap: 6, marginTop: 4 }}>
-                              {item.stores.map((st, idx) => (
+                              {item.stores.map((st, sIdx) => (
                                 <TouchableOpacity
-                                  key={idx}
+                                  key={sIdx}
                                   style={styles.expandedRow}
                                   onPress={() =>
                                     router.push({
@@ -767,7 +837,7 @@ export default function AdminDashboard() {
             ) : (
               /* PORTION DRILLDOWN */
               <View style={styles.typeGrid}>
-                {typeSales.map((item) => {
+                {typeSales.map((item, idx) => {
                   const isBottle = item.type === "bottle";
                   const isGlass = item.type === "glass";
                   const bgBadgeColor = isBottle ? "#4f46e5" : isGlass ? "#059669" : "#d97706";
@@ -778,7 +848,7 @@ export default function AdminDashboard() {
                       key={item.type}
                       activeOpacity={0.8}
                       onPress={() => setExpandedCardId(isExpanded ? null : item.type)}
-                      style={styles.typeCard}
+                      style={[styles.typeCard, { borderLeftWidth: 4, borderLeftColor: bgBadgeColor }]}
                     >
                       <View style={styles.typeHeader}>
                         <View style={[styles.typeBadge, { backgroundColor: bgBadgeColor + "18" }]}>
@@ -796,23 +866,24 @@ export default function AdminDashboard() {
                         </View>
                       </View>
 
-                      <View style={{ marginTop: 8 }}>
-                        <Text style={styles.typeTitle}>{item.label}</Text>
-                        <Text style={styles.typeDetail}>
-                          {item.count} sold ({item.volume} btl equiv) • {item.percentage}% share
-                        </Text>
-                      </View>
-
-                      <View style={styles.typeProgressBarBg}>
-                        <View
-                          style={[
-                            styles.typeProgressBarFill,
-                            {
-                              width: `${Math.min(100, Math.max(0, item.percentage))}%`,
-                              backgroundColor: bgBadgeColor,
-                            },
-                          ]}
-                        />
+                      <View style={{ marginTop: 8, flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end" }}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.typeTitle}>{item.label}</Text>
+                          <Text style={styles.typeDetail}>
+                            {item.count} sold ({item.volume} btl equiv)
+                          </Text>
+                        </View>
+                        <View style={styles.sharePillContainer}>
+                          {idx === 0 && item.percentage > 0 && (
+                            <View style={[styles.rankBadge, { backgroundColor: bgBadgeColor + "1A", borderColor: bgBadgeColor + "40" }]}>
+                              <Text style={[styles.rankBadgeText, { color: bgBadgeColor }]}>#1 TOP</Text>
+                            </View>
+                          )}
+                          <View style={[styles.ringPill, { borderColor: bgBadgeColor + "40", backgroundColor: bgBadgeColor + "0D" }]}>
+                            <View style={[styles.ringDot, { backgroundColor: bgBadgeColor }]} />
+                            <Text style={[styles.ringPillText, { color: bgBadgeColor }]}>{item.percentage}% share</Text>
+                          </View>
+                        </View>
                       </View>
 
                       {/* Expanded Portion Store Details */}
@@ -823,9 +894,9 @@ export default function AdminDashboard() {
                             {item.stores.length === 0 ? (
                               <Text style={styles.expandedLabel}>No sales recorded</Text>
                             ) : (
-                              item.stores.map((st, idx) => (
+                              item.stores.map((st, sIdx) => (
                                 <TouchableOpacity
-                                  key={idx}
+                                  key={sIdx}
                                   style={styles.expandedRow}
                                   onPress={() =>
                                     router.push({
@@ -1464,5 +1535,80 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
     color: theme.primary,
+  },
+  distStripContainer: {
+    backgroundColor: theme.card,
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 10,
+    marginTop: 4,
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  distStripBar: {
+    height: 10,
+    borderRadius: 5,
+    flexDirection: "row",
+    overflow: "hidden",
+    backgroundColor: "#e2e8f0",
+    gap: 2,
+  },
+  distSegment: {
+    height: "100%",
+  },
+  distLegendRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginTop: 10,
+  },
+  distLegendItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  distLegendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  distLegendText: {
+    fontSize: 11,
+    color: theme.textSecondary,
+    fontWeight: "500",
+  },
+  sharePillContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  rankBadge: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  rankBadgeText: {
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 0.5,
+  },
+  ringPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+    borderRadius: 12,
+    borderWidth: 1.5,
+  },
+  ringDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  ringPillText: {
+    fontSize: 11,
+    fontWeight: "800",
   },
 });
