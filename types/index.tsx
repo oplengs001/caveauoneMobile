@@ -43,10 +43,12 @@ export interface InventoryBottle {
     | "received"
     | "tagged"
     | "shelved"
+    | "open"
     | "consumed"
     | "damaged"
     | "lost"
     | "outbound";
+  glassesRemaining?: number;
   receiptId?: string;
   createdAt: Date;
   updatedAt: Date;

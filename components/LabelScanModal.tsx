@@ -1,20 +1,20 @@
-import React, { useState, useRef, useEffect } from "react";
+import { Colors } from "@/constants/theme";
+import { apiFetch } from "@/lib/api";
+import { similarityScore } from "@/lib/utils/wineMatching";
+import { InventoryBottle, MasterWine } from "@/types";
+import { CameraView, useCameraPermissions } from "expo-camera";
+import { AlertCircle, Camera, RefreshCw, X } from "lucide-react-native";
+import React, { useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
+  Image,
   Modal,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
-  ActivityIndicator,
-  Image,
 } from "react-native";
-import { CameraView, useCameraPermissions } from "expo-camera";
-import { X, Camera, AlertCircle, RefreshCw } from "lucide-react-native";
-import { Colors } from "@/constants/theme";
 import BottlePickerModal, { BottleWithLocation } from "./BottlePickerModal";
-import { similarityScore } from "@/lib/utils/wineMatching";
-import { apiFetch } from "@/lib/api";
-import { MasterWine, InventoryBottle } from "@/types";
 
 const NEXT_JS_API_URL = process.env.EXPO_PUBLIC_API_URL || "https://caveauone.vercel.app";
 

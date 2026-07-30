@@ -821,7 +821,7 @@ export default function HomeScreen() {
               >
                 <Wine size={24} color="#ffffff" strokeWidth={2.5} />
                 <Text style={[styles.metricCount, { color: "#ffffff" }]}>
-                  {salesDashboardMetrics.soldCount}
+                  {salesDashboardMetrics.soldCount % 1 === 0 ? salesDashboardMetrics.soldCount : salesDashboardMetrics.soldCount.toFixed(2)}
                 </Text>
                 <Text style={styles.metricLabel}>Bottles Sold</Text>
                 <Text style={styles.metricSubLabel}>

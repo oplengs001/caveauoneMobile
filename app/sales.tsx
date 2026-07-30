@@ -138,11 +138,23 @@ export default function SalesScreen() {
       const totalGross = salesData.reduce((sum, s) => sum + ((s as any).totalAmount || s.price || 0), 0);
       const totalCost = salesData.reduce((sum, s) => sum + (s.masterWinePrice || 0), 0);
 
+      let totalVolume = 0;
+      salesData.forEach((s: any) => {
+        if (s.saleType === "glass") {
+          totalVolume += 1 / 6;
+        } else if (s.saleType === "karaf") {
+          totalVolume += 2 / 6;
+        } else {
+          totalVolume += Number(s.quantity || 1);
+        }
+      });
+      const roundedBottles = Math.round(totalVolume * 100) / 100;
+
       setAggregates({
         totalBaseSales: totalBase,
         totalGrossSales: totalGross,
         totalCost: totalCost,
-        totalBottles: salesData.length,
+        totalBottles: roundedBottles,
       });
 
       setSales(salesData);

@@ -46,6 +46,8 @@ const theme = Colors.store;
 interface WineEntry {
   masterWine: MasterWine;
   stockCount: number;
+  fullBottlesCount: number;
+  openGlassesCount: number;
   setting: StoreWineSetting | null;
   status: StockStatus;
   requestedQty: number;
@@ -70,10 +72,10 @@ function computeStatus(
     status = "overstock";
   } else if (stockCount <= setting.parLevel) {
     status = "par_alert";
-    requestedQty = setting.safetyStock - stockCount;
+    requestedQty = Math.ceil(setting.safetyStock - stockCount);
   } else if (stockCount < setting.safetyStock) {
     status = "under_safety";
-    requestedQty = setting.safetyStock - stockCount;
+    requestedQty = Math.ceil(setting.safetyStock - stockCount);
   }
 
   if (hasPendingRequest) {
@@ -229,6 +231,8 @@ export default function StoreMasterListScreen() {
 
       const wineIdsSet = new Set<string>();
       const stockCountMap = new Map<string, number>();
+      const fullBottlesMap = new Map<string, number>();
+      const openGlassesMap = new Map<string, number>();
       const settingsMap = new Map<string, StoreWineSetting>();
       const masterWinesMap = new Map<string, MasterWine>();
 
@@ -243,6 +247,12 @@ export default function StoreMasterListScreen() {
           wineIdsSet.add(refId);
           if (data.status === "received" || data.status === "shelved") {
             stockCountMap.set(refId, (stockCountMap.get(refId) || 0) + 1);
+            fullBottlesMap.set(refId, (fullBottlesMap.get(refId) || 0) + 1);
+          } else if (data.status === "open") {
+            const glasses = data.glassesRemaining ?? 6;
+            const fraction = glasses / 6;
+            stockCountMap.set(refId, (stockCountMap.get(refId) || 0) + fraction);
+            openGlassesMap.set(refId, (openGlassesMap.get(refId) || 0) + glasses);
           }
         }
       });
@@ -280,7 +290,10 @@ export default function StoreMasterListScreen() {
           vintage: "",
           price: 0,
         };
-        const stockCount = stockCountMap.get(wineId) || 0;
+        const rawStock = stockCountMap.get(wineId) || 0;
+        const stockCount = Math.round(rawStock * 100) / 100;
+        const fullBottlesCount = fullBottlesMap.get(wineId) || 0;
+        const openGlassesCount = openGlassesMap.get(wineId) || 0;
         const setting = settingsMap.get(wineId) ?? null;
         const activeRequest = pendingWineRequestMap.get(wineId);
 
@@ -293,6 +306,8 @@ export default function StoreMasterListScreen() {
         return {
           masterWine,
           stockCount,
+          fullBottlesCount,
+          openGlassesCount,
           setting,
           status,
           requestedQty,
@@ -614,8 +629,17 @@ export default function StoreMasterListScreen() {
             <View style={styles.barStatsRow}>
               <View style={styles.stockHeaderRow}>
                 <Package size={16} color={theme.textSecondary} />
-                <Text style={styles.stockPrimaryValue}>{item.stockCount}</Text>
+                <Text style={styles.stockPrimaryValue}>
+                  {item.stockCount % 1 === 0 ? item.stockCount : item.stockCount.toFixed(2)}
+                </Text>
                 <Text style={styles.stockPrimaryLabel}>IN STOCK</Text>
+                {item.openGlassesCount > 0 && (
+                  <View style={{ backgroundColor: "#3b82f615", borderColor: "#3b82f640", borderWidth: 1, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, marginLeft: 6 }}>
+                    <Text style={{ fontSize: 10, fontWeight: "700", color: "#2563eb" }}>
+                      🍷 {item.openGlassesCount}/6 glasses open
+                    </Text>
+                  </View>
+                )}
               </View>
 
               {item.requestedQty > 0 && (
@@ -658,8 +682,17 @@ export default function StoreMasterListScreen() {
         ) : (
           <View style={styles.unconfiguredStockRow}>
             <Package size={14} color={theme.textSecondary} />
-            <Text style={styles.stockPrimaryValue}>{item.stockCount}</Text>
+            <Text style={styles.stockPrimaryValue}>
+              {item.stockCount % 1 === 0 ? item.stockCount : item.stockCount.toFixed(2)}
+            </Text>
             <Text style={styles.stockPrimaryLabel}>IN STOCK (UNSET)</Text>
+            {item.openGlassesCount > 0 && (
+              <View style={{ backgroundColor: "#3b82f615", borderColor: "#3b82f640", borderWidth: 1, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, marginLeft: 6 }}>
+                <Text style={{ fontSize: 10, fontWeight: "700", color: "#2563eb" }}>
+                  🍷 {item.openGlassesCount}/6 glasses open
+                </Text>
+              </View>
+            )}
           </View>
         )}
 
@@ -1052,9 +1085,13 @@ export default function StoreMasterListScreen() {
             <View style={styles.stockRow}>
               <View style={styles.stockPill}>
                 <Text style={styles.stockCount}>
-                  {selected?.stockCount ?? 0}
+                  {selected?.stockCount !== undefined ? (selected.stockCount % 1 === 0 ? selected.stockCount : selected.stockCount.toFixed(2)) : 0}
                 </Text>
-                <Text style={styles.stockLabel}>bottles in store</Text>
+                <Text style={styles.stockLabel}>
+                  {selected?.openGlassesCount && selected.openGlassesCount > 0
+                    ? `bottles (${selected.fullBottlesCount} full + ${selected.openGlassesCount}/6 glasses)`
+                    : "bottles in store"}
+                </Text>
               </View>
               {selected && (
                 <View
@@ -1182,11 +1219,13 @@ export default function StoreMasterListScreen() {
                   <Text style={styles.formulaLabel}>REQUEST FORMULA</Text>
                   <Text style={styles.formulaText}>
                     Safety Stock ({sheetSafety}) − Current (
-                    {selected?.stockCount ?? 0}) ={" "}
+                    {selected?.stockCount !== undefined ? (selected.stockCount % 1 === 0 ? selected.stockCount : selected.stockCount.toFixed(2)) : 0}) ={" "}
                     <Text style={{ color: theme.primary, fontWeight: "900" }}>
-                      {Math.max(
-                        0,
-                        parseInt(sheetSafety, 10) - (selected?.stockCount ?? 0),
+                      {Math.ceil(
+                        Math.max(
+                          0,
+                          parseInt(sheetSafety, 10) - (selected?.stockCount ?? 0),
+                        )
                       )}{" "}
                       bottles
                     </Text>

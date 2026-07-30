@@ -54,7 +54,30 @@ const WineCard = memo(function WineCard({
   theme: any;
 }) {
   const { masterWineData, data: bottles } = item;
-  const stockCount = bottles.length;
+
+  const { stockCount, openGlassesCount, fullBottlesCount } = useMemo(() => {
+    let rawTotal = 0;
+    let openGlasses = 0;
+    let fullBottles = 0;
+
+    (bottles || []).forEach((b) => {
+      if (b.status === "open") {
+        const glasses = b.glassesRemaining ?? 6;
+        openGlasses += glasses;
+        rawTotal += glasses / 6;
+      } else if (b.status === "received" || b.status === "shelved") {
+        fullBottles += 1;
+        rawTotal += 1;
+      }
+    });
+
+    return {
+      stockCount: Math.round(rawTotal * 100) / 100,
+      openGlassesCount: openGlasses,
+      fullBottlesCount: fullBottles,
+    };
+  }, [bottles]);
+
   const [expanded, setExpanded] = useState(false);
   const rotateAnim = useRef(new Animated.Value(0)).current;
   const heightAnim = useRef(new Animated.Value(0)).current;
@@ -127,7 +150,7 @@ const WineCard = memo(function WineCard({
             ]}
           >
             <Text style={[styles.stockCount, { color: theme.primary }]}>
-              {stockCount}
+              {stockCount % 1 === 0 ? stockCount : stockCount.toFixed(2)}
             </Text>
             <Text style={[styles.stockLabel, { color: theme.primary + "90" }]}>
               bottles
@@ -216,6 +239,13 @@ const WineCard = memo(function WineCard({
                     </Text>
                   </View>
                 ))}
+                {openGlassesCount > 0 && (
+                  <View style={[styles.locationPill, { backgroundColor: "#3b82f615", borderColor: "#3b82f640", borderWidth: 1 }]}>
+                    <Text style={[styles.locationNameText, { color: "#2563eb" }]}>
+                      🍷 {openGlassesCount}/6 glasses open
+                    </Text>
+                  </View>
+                )}
               </View>
             )}
           </View>
@@ -272,6 +302,20 @@ const WineCard = memo(function WineCard({
             >
               {bottle.bottleId}
             </Text>
+
+            {/* Status / Open Glass Badge */}
+            {bottle.status === "open" && (
+              <View
+                style={[
+                  styles.bottleLocationBadge,
+                  { backgroundColor: "#3b82f615" },
+                ]}
+              >
+                <Text style={{ fontSize: 11, fontWeight: "700", color: "#2563eb" }}>
+                  🍷 {bottle.glassesRemaining ?? 6}/6 left
+                </Text>
+              </View>
+            )}
 
             {/* Location badge */}
             {bottle.locationData?.name && (
@@ -400,7 +444,7 @@ export default function InventoryScreen() {
 
       try {
         const params = new URLSearchParams({
-          status: "received,shelved,damaged,lost",
+          status: "received,shelved,open,damaged,lost",
         });
 
         if (isStore && profile?.locationId) {
