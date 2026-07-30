@@ -56,6 +56,17 @@ interface TypeSalesBreakdown {
   percentage: number;
 }
 
+interface CategorySalesBreakdown {
+  categoryKey: string;
+  label: string;
+  badgeColor: string;
+  iconText: string;
+  count: number;
+  revenue: number;
+  volume: number;
+  percentage: number;
+}
+
 const theme = Colors.admin;
 
 function formatCurrency(value: number) {
@@ -73,6 +84,7 @@ export default function AdminDashboard() {
   const [salesPeriod, setSalesPeriod] = useState<"today" | "week" | "all">("today");
   const [salesMetrics, setSalesMetrics] = useState({ totalRevenue: 0, totalItems: 0 });
   const [storeSales, setStoreSales] = useState<StoreSalesBreakdown[]>([]);
+  const [categorySales, setCategorySales] = useState<CategorySalesBreakdown[]>([]);
   const [typeSales, setTypeSales] = useState<TypeSalesBreakdown[]>([]);
   const [loadingSales, setLoadingSales] = useState(true);
 
@@ -128,6 +140,15 @@ export default function AdminDashboard() {
         glass: { label: "Glass (1/6)", count: 0, revenue: 0, volume: 0 },
         karaf: { label: "Karaf (2/6)", count: 0, revenue: 0, volume: 0 },
       };
+      const categoryAgg: Record<
+        string,
+        { label: string; badgeColor: string; iconText: string; count: number; revenue: number; volume: number }
+      > = {
+        fast: { label: "Fast Moving", badgeColor: "#f59e0b", iconText: "⚡ FAST", count: 0, revenue: 0, volume: 0 },
+        fine: { label: "Fine Wine", badgeColor: "#ec4899", iconText: "⭐ FINE", count: 0, revenue: 0, volume: 0 },
+        reserve: { label: "Reserve Collection", badgeColor: "#6366f1", iconText: "🔒 RESERVE", count: 0, revenue: 0, volume: 0 },
+        other: { label: "Standard Catalog", badgeColor: "#64748b", iconText: "🍷 STANDARD", count: 0, revenue: 0, volume: 0 },
+      };
 
       salesList.forEach((item: any) => {
         const rev = Number(item.totalAmount || item.price || 0);
@@ -159,6 +180,13 @@ export default function AdminDashboard() {
         typeAgg[tKey].count += 1;
         typeAgg[tKey].revenue += rev;
         typeAgg[tKey].volume += vol;
+
+        // Wine Category grouping
+        const catRaw = (item.masterWine?.wineCategory || item.wineCategory || "other").toLowerCase();
+        const cKey = catRaw === "fast" ? "fast" : catRaw === "fine" ? "fine" : catRaw === "reserve" ? "reserve" : "other";
+        categoryAgg[cKey].count += 1;
+        categoryAgg[cKey].revenue += rev;
+        categoryAgg[cKey].volume += vol;
       });
 
       const roundedTotalVolume = Math.round(totalVolume * 100) / 100;
@@ -172,6 +200,20 @@ export default function AdminDashboard() {
           count: val.count,
           percentage: totalRevenue > 0 ? Math.round((val.revenue / totalRevenue) * 100) : 0,
         }))
+        .sort((a, b) => b.revenue - a.revenue);
+
+      const categoryList: CategorySalesBreakdown[] = Object.entries(categoryAgg)
+        .map(([cKey, val]) => ({
+          categoryKey: cKey,
+          label: val.label,
+          badgeColor: val.badgeColor,
+          iconText: val.iconText,
+          count: val.count,
+          revenue: val.revenue,
+          volume: Math.round(val.volume * 100) / 100,
+          percentage: totalRevenue > 0 ? Math.round((val.revenue / totalRevenue) * 100) : 0,
+        }))
+        .filter((item) => item.count > 0 || item.revenue > 0)
         .sort((a, b) => b.revenue - a.revenue);
 
       const typeList: TypeSalesBreakdown[] = [
@@ -206,6 +248,7 @@ export default function AdminDashboard() {
         totalItems: roundedTotalVolume,
       });
       setStoreSales(storeList);
+      setCategorySales(categoryList);
       setTypeSales(typeList);
     } catch (e) {
       console.error("Admin: failed to fetch sales metrics", e);
@@ -483,9 +526,55 @@ export default function AdminDashboard() {
             )}
           </View>
 
-          {/* Breakdown 2: Sales by Type */}
+          {/* Breakdown 2: Sales by Wine Category */}
           <View style={{ marginTop: 24 }}>
-            <Text style={styles.subSectionTitle}>Sales Breakdown by Type</Text>
+            <Text style={styles.subSectionTitle}>Sales Breakdown by Wine Category</Text>
+            {loadingSales && !isFirstLoad && !refreshing ? (
+              <ActivityIndicator color={theme.primary} style={{ marginVertical: 16 }} />
+            ) : categorySales.length === 0 ? (
+              <View style={styles.emptyBreakdownCard}>
+                <Text style={styles.emptyBreakdownText}>No category sales recorded for this period</Text>
+              </View>
+            ) : (
+              <View style={styles.typeGrid}>
+                {categorySales.map((item) => (
+                  <View key={item.categoryKey} style={styles.typeCard}>
+                    <View style={styles.typeHeader}>
+                      <View style={[styles.typeBadge, { backgroundColor: item.badgeColor + "18" }]}>
+                        <Text style={[styles.typeBadgeText, { color: item.badgeColor }]}>
+                          {item.iconText}
+                        </Text>
+                      </View>
+                      <Text style={styles.typeRevenue}>{formatCurrency(item.revenue)}</Text>
+                    </View>
+
+                    <View style={{ marginTop: 8 }}>
+                      <Text style={styles.typeTitle}>{item.label}</Text>
+                      <Text style={styles.typeDetail}>
+                        {item.volume} bottles sold ({item.count} {item.count === 1 ? "sale" : "sales"})
+                      </Text>
+                    </View>
+
+                    <View style={styles.typeProgressBarBg}>
+                      <View
+                        style={[
+                          styles.typeProgressBarFill,
+                          {
+                            width: `${Math.min(100, Math.max(0, item.percentage))}%`,
+                            backgroundColor: item.badgeColor,
+                          },
+                        ]}
+                      />
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+
+          {/* Breakdown 3: Sales by Type */}
+          <View style={{ marginTop: 24 }}>
+            <Text style={styles.subSectionTitle}>Sales Breakdown by Portion / Type</Text>
             {loadingSales && !isFirstLoad && !refreshing ? (
               <ActivityIndicator color={theme.primary} style={{ marginVertical: 16 }} />
             ) : (
