@@ -669,48 +669,35 @@ export default function SellScreen() {
             ))}
           </View>
           <View style={{ flex: 1 }} />
-          <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: theme.primary }]} onPress={() => setStep("verify")}>
-            <Text style={styles.primaryBtnText}>Proceed to Verify</Text>
-          </TouchableOpacity>
+          <View style={{ gap: 10 }}>
+            <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: theme.primary }]} onPress={() => setStep("verify")}>
+              <Text style={styles.primaryBtnText}>Proceed to Verify (Scan QR / AI)</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.primaryBtn,
+                { backgroundColor: theme.card, borderColor: theme.border, borderWidth: 1 },
+              ]}
+              onPress={() => {
+                if (bottlesList.length > 0) {
+                  handleBottleSelected(bottlesList[0].bottleId);
+                } else {
+                  Alert.alert("Out of Stock", "No available bottles found.");
+                }
+              }}
+            >
+              <Text style={[styles.primaryBtnText, { color: theme.text }]}>Skip Verification & Sell Bottle</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       )}
     </View>
   );
 
   const renderVerify = () => {
-    if (!permission) return null;
-    if (!permission.granted) {
-      return (
-        <View style={[styles.content, { alignItems: "center", justifyContent: "center" }]}>
-          <View style={[styles.wineIconContainer, { width: 80, height: 80, borderRadius: 40, backgroundColor: theme.primary + "1A", marginBottom: 24 }]}>
-            <Camera size={40} color={theme.primary} />
-          </View>
-          <Text style={[styles.headerText, { color: theme.text, textAlign: "center", fontSize: 24 }]}>Camera Access Needed</Text>
-          <Text style={[styles.subText, { color: theme.textSecondary, textAlign: "center", marginBottom: 32 }]}>
-            We need camera access to scan QR codes and verify wine labels.
-          </Text>
-          <TouchableOpacity
-            style={[styles.primaryBtn, { backgroundColor: theme.primary }]}
-            onPress={async () => {
-              if (permission && !permission.canAskAgain) {
-                Alert.alert(
-                  "Permission Denied",
-                  "Please enable camera permissions in your device settings to continue.",
-                  [
-                    { text: "Cancel", style: "cancel" },
-                    { text: "Open Settings", onPress: () => Linking.openSettings() }
-                  ]
-                );
-              } else {
-                await requestPermission();
-              }
-            }}
-          >
-            <Text style={styles.primaryBtnText}>Grant Permission</Text>
-          </TouchableOpacity>
-        </View>
-      );
-    }
+    const hasCameraPermission = Boolean(permission && permission.granted);
+
     return (
       <View style={styles.content}>
         <Text style={[styles.headerText, { color: theme.text, marginBottom: 24 }]}>Verify Bottle</Text>
@@ -720,28 +707,76 @@ export default function SellScreen() {
         </Text>
 
         {isCameraActive ? (
-          <View style={styles.qrCameraContainer}>
-            <CameraView
-              style={{ flex: 1 }}
-              facing="back"
-              onBarcodeScanned={handleQRScanned}
-            />
-            <TouchableOpacity
-              style={styles.closeCameraBtn}
-              onPress={() => setIsCameraActive(false)}
-            >
-              <X size={24} color="#fff" />
-            </TouchableOpacity>
-            <View style={styles.qrOverlay}>
-              <View style={styles.qrTarget} />
-              <Text style={styles.qrHint}>Scan QR Code on Bottle</Text>
+          !hasCameraPermission ? (
+            <View style={{ alignItems: "center", justifyContent: "center", paddingVertical: 20 }}>
+              <View style={[styles.wineIconContainer, { width: 64, height: 64, borderRadius: 32, backgroundColor: theme.primary + "1A", marginBottom: 16 }]}>
+                <Camera size={32} color={theme.primary} />
+              </View>
+              <Text style={[styles.headerText, { color: theme.text, textAlign: "center", fontSize: 20 }]}>Camera Access Needed</Text>
+              <Text style={[styles.subText, { color: theme.textSecondary, textAlign: "center", marginBottom: 20 }]}>
+                We need camera access to scan QR codes.
+              </Text>
+              <TouchableOpacity
+                style={[styles.primaryBtn, { backgroundColor: theme.primary }]}
+                onPress={async () => {
+                  if (permission && !permission.canAskAgain) {
+                    Alert.alert(
+                      "Permission Denied",
+                      "Please enable camera permissions in your device settings to continue.",
+                      [
+                        { text: "Cancel", style: "cancel" },
+                        { text: "Open Settings", onPress: () => Linking.openSettings() }
+                      ]
+                    );
+                  } else {
+                    await requestPermission();
+                  }
+                }}
+              >
+                <Text style={styles.primaryBtnText}>Grant Camera Permission</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{ marginTop: 12, padding: 10 }}
+                onPress={() => setIsCameraActive(false)}
+              >
+                <Text style={{ color: theme.textSecondary, fontSize: 13, fontWeight: "600" }}>Cancel Scan</Text>
+              </TouchableOpacity>
             </View>
-          </View>
+          ) : (
+            <View style={styles.qrCameraContainer}>
+              <CameraView
+                style={{ flex: 1 }}
+                facing="back"
+                onBarcodeScanned={handleQRScanned}
+              />
+              <TouchableOpacity
+                style={styles.closeCameraBtn}
+                onPress={() => setIsCameraActive(false)}
+              >
+                <X size={24} color="#fff" />
+              </TouchableOpacity>
+              <View style={styles.qrOverlay}>
+                <View style={styles.qrTarget} />
+                <Text style={styles.qrHint}>Scan QR Code on Bottle</Text>
+              </View>
+            </View>
+          )
         ) : (
           <View style={styles.verifyOptions}>
             <TouchableOpacity
               style={[styles.verifyOptionBtn, { backgroundColor: theme.card, borderColor: theme.border }]}
-              onPress={() => setIsCameraActive(true)}
+              onPress={async () => {
+                if (!hasCameraPermission) {
+                  const res = await requestPermission();
+                  if (res?.granted) {
+                    setIsCameraActive(true);
+                  } else {
+                    setIsCameraActive(true);
+                  }
+                } else {
+                  setIsCameraActive(true);
+                }
+              }}
             >
               <View style={[styles.verifyIconBox, { backgroundColor: theme.primary + "20" }]}>
                 <Scan size={24} color={theme.primary} />
@@ -768,11 +803,10 @@ export default function SellScreen() {
             <TouchableOpacity
               style={[styles.verifyOptionBtn, { backgroundColor: theme.card, borderColor: theme.border }]}
               onPress={() => {
-                const uniqueLocs = new Set(bottlesList.map(b => b.locationName));
-                if (uniqueLocs.size <= 1 && bottlesList.length > 0) {
+                if (bottlesList.length > 0) {
                   handleBottleSelected(bottlesList[0].bottleId);
-                } else if (uniqueLocs.size > 1) {
-                  setIsPickerModalOpen(true);
+                } else {
+                  Alert.alert("No Bottle", "No bottle available to select.");
                 }
               }}
             >
@@ -780,8 +814,8 @@ export default function SellScreen() {
                 <CheckCircle2 size={24} color={theme.primary} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.verifyOptionTitle, { color: theme.text }]}>No QR Code?</Text>
-                <Text style={[styles.verifyOptionDesc, { color: theme.textSecondary }]}>Bypass scan and auto-select an available bottle.</Text>
+                <Text style={[styles.verifyOptionTitle, { color: theme.text }]}>Quick Select / Skip Scan</Text>
+                <Text style={[styles.verifyOptionDesc, { color: theme.textSecondary }]}>Auto-select available bottle and proceed to price & sale.</Text>
               </View>
             </TouchableOpacity>
           </View>
