@@ -143,7 +143,44 @@ export default function WineRequestsIndex() {
   };
 
   // Status Style Helper
-  const getStatusStyle = (status: string) => {
+  const getStatusStyle = (status: string, resolutionType?: string | null) => {
+    if (resolutionType === "swap") {
+      return {
+        color: "#9333ea",
+        bg: "#f3e8ff",
+        icon: Package,
+        label: "🔄 SWAP / REPLACED",
+        step: 2,
+      };
+    }
+    if (resolutionType === "discontinued") {
+      return {
+        color: "#d97706",
+        bg: "#fef3c7",
+        icon: Ban,
+        label: "🚫 DISCONTINUED / DELAYED",
+        step: 0,
+      };
+    }
+    if (resolutionType === "stay_pending") {
+      return {
+        color: "#2563eb",
+        bg: "#dbeafe",
+        icon: Clock,
+        label: "⏳ STAY PENDING (WAITING)",
+        step: 1,
+      };
+    }
+    if (resolutionType === "stockout") {
+      return {
+        color: "#dc2626",
+        bg: "#fee2e2",
+        icon: Ban,
+        label: "📦 STOCKOUT",
+        step: 0,
+      };
+    }
+
     switch (status) {
       case "pending":
         return {
@@ -196,7 +233,6 @@ export default function WineRequestsIndex() {
     }
   };
 
-
   // Filter requests by search query
   const filteredRequests = useMemo(() => {
     if (!searchQuery.trim()) return requests;
@@ -214,7 +250,7 @@ export default function WineRequestsIndex() {
   }, [requests, searchQuery]);
 
   const renderItem = ({ item }: { item: WineRequest }) => {
-    const status = getStatusStyle(item.status);
+    const status = getStatusStyle(item.status, item.resolutionType);
     const StatusIcon = status.icon;
     const targetStoreName =
       item.targetStoreId === "warehouse"
@@ -339,6 +375,14 @@ export default function WineRequestsIndex() {
               </Text>
             </Text>
           </View>
+
+          {/* Resolution Note Banner */}
+          {!!item.rejectionReason && (
+            <View style={styles.noteBanner}>
+              <Text style={styles.noteBannerTitle}>Resolution Note:</Text>
+              <Text style={styles.noteBannerText}>{item.rejectionReason}</Text>
+            </View>
+          )}
 
           {/* Items List Preview */}
           <View style={styles.itemsContainer}>
@@ -957,5 +1001,24 @@ const styles = StyleSheet.create({
   emptyBtnText: {
     fontWeight: "800",
     fontSize: 13,
+  },
+  noteBanner: {
+    backgroundColor: "#fffbebf5",
+    borderColor: "#fde68a",
+    borderWidth: 1,
+    padding: 10,
+    borderRadius: 12,
+    marginBottom: 10,
+  },
+  noteBannerTitle: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#b45309",
+    marginBottom: 2,
+  },
+  noteBannerText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#78350f",
   },
 });

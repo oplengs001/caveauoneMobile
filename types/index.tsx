@@ -134,6 +134,7 @@ export interface WineRequest {
   createdAt: any;
   updatedAt: any;
   rejectionReason?: string;
+  resolutionType?: "swap" | "discontinued" | "stay_pending" | "stockout" | null;
 }
 
 export interface DeliveryItem {
