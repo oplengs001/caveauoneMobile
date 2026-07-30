@@ -127,7 +127,8 @@ export interface WineRequest {
     | "converted"
     | "rejected"
     | "ingress_complete"
-    | "receiving";
+    | "receiving"
+    | "outbound";
   items: WineRequestItem[];
   totalAmount: number;
   createdAt: any;
