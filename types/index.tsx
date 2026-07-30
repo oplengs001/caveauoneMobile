@@ -3,7 +3,7 @@ import { DocumentReference } from "firebase/firestore";
 export interface AppUser {
   id: string;
   email: string;
-  role: "admin" | "store" | "store_manager" | "store_staff" | "warehouse";
+  role: "admin" | "finance" | "store" | "store_manager" | "store_staff" | "warehouse";
   accountId?: string;
   locationId?: string;
   createdAt: Date;
