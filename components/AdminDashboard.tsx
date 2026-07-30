@@ -11,6 +11,8 @@ import {
   AlertTriangle,
   Banknote,
   Building2,
+  ChevronDown,
+  ChevronUp,
   ClipboardList,
   LogOut,
   Search,
@@ -45,6 +47,8 @@ interface StoreSalesBreakdown {
   volume: number;
   count: number;
   percentage: number;
+  types: { label: string; count: number; revenue: number }[];
+  categories: { label: string; count: number; revenue: number }[];
 }
 
 interface TypeSalesBreakdown {
@@ -54,6 +58,7 @@ interface TypeSalesBreakdown {
   revenue: number;
   volume: number;
   percentage: number;
+  stores: { storeName: string; count: number; revenue: number }[];
 }
 
 interface CategorySalesBreakdown {
@@ -65,6 +70,7 @@ interface CategorySalesBreakdown {
   revenue: number;
   volume: number;
   percentage: number;
+  stores: { storeName: string; count: number; revenue: number }[];
 }
 
 const theme = Colors.admin;
@@ -82,6 +88,9 @@ export default function AdminDashboard() {
   const { notification } = usePushNotifications();
 
   const [salesPeriod, setSalesPeriod] = useState<"today" | "week" | "all">("today");
+  const [breakdownMode, setBreakdownMode] = useState<"store" | "category" | "type">("store");
+  const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
+
   const [salesMetrics, setSalesMetrics] = useState({ totalRevenue: 0, totalItems: 0 });
   const [storeSales, setStoreSales] = useState<StoreSalesBreakdown[]>([]);
   const [categorySales, setCategorySales] = useState<CategorySalesBreakdown[]>([]);
@@ -134,20 +143,49 @@ export default function AdminDashboard() {
         storeNameMap[s.id] = s.name;
       });
 
-      const storeAgg: Record<string, { storeName: string; revenue: number; volume: number; count: number }> = {};
-      const typeAgg: Record<string, { label: string; count: number; revenue: number; volume: number }> = {
-        bottle: { label: "Full Bottle", count: 0, revenue: 0, volume: 0 },
-        glass: { label: "Glass (1/6)", count: 0, revenue: 0, volume: 0 },
-        karaf: { label: "Karaf (2/6)", count: 0, revenue: 0, volume: 0 },
+      const storeAgg: Record<
+        string,
+        {
+          storeName: string;
+          revenue: number;
+          volume: number;
+          count: number;
+          typeCounts: Record<string, { count: number; revenue: number }>;
+          catCounts: Record<string, { count: number; revenue: number }>;
+        }
+      > = {};
+
+      const typeAgg: Record<
+        string,
+        {
+          label: string;
+          count: number;
+          revenue: number;
+          volume: number;
+          stores: Record<string, { storeName: string; count: number; revenue: number }>;
+        }
+      > = {
+        bottle: { label: "Full Bottle", count: 0, revenue: 0, volume: 0, stores: {} },
+        glass: { label: "Glass (1/6)", count: 0, revenue: 0, volume: 0, stores: {} },
+        karaf: { label: "Karaf (2/6)", count: 0, revenue: 0, volume: 0, stores: {} },
       };
+
       const categoryAgg: Record<
         string,
-        { label: string; badgeColor: string; iconText: string; count: number; revenue: number; volume: number }
+        {
+          label: string;
+          badgeColor: string;
+          iconText: string;
+          count: number;
+          revenue: number;
+          volume: number;
+          stores: Record<string, { storeName: string; count: number; revenue: number }>;
+        }
       > = {
-        fast: { label: "Fast Moving", badgeColor: "#f59e0b", iconText: "⚡ FAST", count: 0, revenue: 0, volume: 0 },
-        fine: { label: "Fine Wine", badgeColor: "#ec4899", iconText: "⭐ FINE", count: 0, revenue: 0, volume: 0 },
-        reserve: { label: "Reserve Collection", badgeColor: "#6366f1", iconText: "🔒 RESERVE", count: 0, revenue: 0, volume: 0 },
-        other: { label: "Standard Catalog", badgeColor: "#64748b", iconText: "🍷 STANDARD", count: 0, revenue: 0, volume: 0 },
+        fast: { label: "Fast Moving", badgeColor: "#f59e0b", iconText: "⚡ FAST", count: 0, revenue: 0, volume: 0, stores: {} },
+        fine: { label: "Fine Wine", badgeColor: "#ec4899", iconText: "⭐ FINE", count: 0, revenue: 0, volume: 0, stores: {} },
+        reserve: { label: "Reserve Collection", badgeColor: "#6366f1", iconText: "🔒 RESERVE", count: 0, revenue: 0, volume: 0, stores: {} },
+        other: { label: "Standard Catalog", badgeColor: "#64748b", iconText: "🍷 STANDARD", count: 0, revenue: 0, volume: 0, stores: {} },
       };
 
       salesList.forEach((item: any) => {
@@ -165,28 +203,59 @@ export default function AdminDashboard() {
         }
         totalVolume += vol;
 
-        // Store grouping
         const sId = item.storeId || item.store?.id || "unknown";
         const sName = item.store?.name || storeNameMap[sId] || "Boutique Store";
+
+        // Store grouping
         if (!storeAgg[sId]) {
-          storeAgg[sId] = { storeName: sName, revenue: 0, volume: 0, count: 0 };
+          storeAgg[sId] = {
+            storeName: sName,
+            revenue: 0,
+            volume: 0,
+            count: 0,
+            typeCounts: {},
+            catCounts: {},
+          };
         }
         storeAgg[sId].revenue += rev;
         storeAgg[sId].volume += vol;
         storeAgg[sId].count += 1;
 
-        // Type grouping
         const tKey = st === "glass" ? "glass" : st === "karaf" ? "karaf" : "bottle";
+        if (!storeAgg[sId].typeCounts[tKey]) {
+          storeAgg[sId].typeCounts[tKey] = { count: 0, revenue: 0 };
+        }
+        storeAgg[sId].typeCounts[tKey].count += 1;
+        storeAgg[sId].typeCounts[tKey].revenue += rev;
+
+        // Type grouping
         typeAgg[tKey].count += 1;
         typeAgg[tKey].revenue += rev;
         typeAgg[tKey].volume += vol;
+        if (!typeAgg[tKey].stores[sId]) {
+          typeAgg[tKey].stores[sId] = { storeName: sName, count: 0, revenue: 0 };
+        }
+        typeAgg[tKey].stores[sId].count += 1;
+        typeAgg[tKey].stores[sId].revenue += rev;
 
         // Wine Category grouping
         const catRaw = (item.masterWine?.wineCategory || item.wineCategory || "other").toLowerCase();
         const cKey = catRaw === "fast" ? "fast" : catRaw === "fine" ? "fine" : catRaw === "reserve" ? "reserve" : "other";
+
+        if (!storeAgg[sId].catCounts[cKey]) {
+          storeAgg[sId].catCounts[cKey] = { count: 0, revenue: 0 };
+        }
+        storeAgg[sId].catCounts[cKey].count += 1;
+        storeAgg[sId].catCounts[cKey].revenue += rev;
+
         categoryAgg[cKey].count += 1;
         categoryAgg[cKey].revenue += rev;
         categoryAgg[cKey].volume += vol;
+        if (!categoryAgg[cKey].stores[sId]) {
+          categoryAgg[cKey].stores[sId] = { storeName: sName, count: 0, revenue: 0 };
+        }
+        categoryAgg[cKey].stores[sId].count += 1;
+        categoryAgg[cKey].stores[sId].revenue += rev;
       });
 
       const roundedTotalVolume = Math.round(totalVolume * 100) / 100;
@@ -199,6 +268,16 @@ export default function AdminDashboard() {
           volume: Math.round(val.volume * 100) / 100,
           count: val.count,
           percentage: totalRevenue > 0 ? Math.round((val.revenue / totalRevenue) * 100) : 0,
+          types: Object.entries(val.typeCounts).map(([tk, tv]) => ({
+            label: tk === "glass" ? "Glass (1/6)" : tk === "karaf" ? "Karaf (2/6)" : "Full Bottle",
+            count: tv.count,
+            revenue: tv.revenue,
+          })),
+          categories: Object.entries(val.catCounts).map(([ck, cv]) => ({
+            label: categoryAgg[ck]?.label || "Standard Catalog",
+            count: cv.count,
+            revenue: cv.revenue,
+          })),
         }))
         .sort((a, b) => b.revenue - a.revenue);
 
@@ -212,36 +291,20 @@ export default function AdminDashboard() {
           revenue: val.revenue,
           volume: Math.round(val.volume * 100) / 100,
           percentage: totalRevenue > 0 ? Math.round((val.revenue / totalRevenue) * 100) : 0,
+          stores: Object.values(val.stores).sort((a, b) => b.revenue - a.revenue),
         }))
         .filter((item) => item.count > 0 || item.revenue > 0)
         .sort((a, b) => b.revenue - a.revenue);
 
-      const typeList: TypeSalesBreakdown[] = [
-        {
-          type: "bottle",
-          label: "Full Bottle",
-          count: typeAgg.bottle.count,
-          revenue: typeAgg.bottle.revenue,
-          volume: Math.round(typeAgg.bottle.volume * 100) / 100,
-          percentage: totalRevenue > 0 ? Math.round((typeAgg.bottle.revenue / totalRevenue) * 100) : 0,
-        },
-        {
-          type: "glass",
-          label: "Glass (1/6)",
-          count: typeAgg.glass.count,
-          revenue: typeAgg.glass.revenue,
-          volume: Math.round(typeAgg.glass.volume * 100) / 100,
-          percentage: totalRevenue > 0 ? Math.round((typeAgg.glass.revenue / totalRevenue) * 100) : 0,
-        },
-        {
-          type: "karaf",
-          label: "Karaf (2/6)",
-          count: typeAgg.karaf.count,
-          revenue: typeAgg.karaf.revenue,
-          volume: Math.round(typeAgg.karaf.volume * 100) / 100,
-          percentage: totalRevenue > 0 ? Math.round((typeAgg.karaf.revenue / totalRevenue) * 100) : 0,
-        },
-      ];
+      const typeList: TypeSalesBreakdown[] = Object.entries(typeAgg).map(([key, val]) => ({
+        type: key as any,
+        label: val.label,
+        count: val.count,
+        revenue: val.revenue,
+        volume: Math.round(val.volume * 100) / 100,
+        percentage: totalRevenue > 0 ? Math.round((val.revenue / totalRevenue) * 100) : 0,
+        stores: Object.values(val.stores).sort((a, b) => b.revenue - a.revenue),
+      }));
 
       setSalesMetrics({
         totalRevenue: Number(data.totalRevenue ?? totalRevenue),
@@ -482,123 +545,232 @@ export default function AdminDashboard() {
             </View>
           </View>
 
-          {/* Breakdown 1: Sales by Store */}
+          {/* ── Drilldown Mode Tabs & Content ────────────────────────────────── */}
           <View style={{ marginTop: 20 }}>
-            <Text style={styles.subSectionTitle}>Sales Breakdown by Store</Text>
+            <View style={styles.drilldownTabRow}>
+              {[
+                { id: "store", label: "By Store", icon: "🏢" },
+                { id: "category", label: "By Category", icon: "🏷️" },
+                { id: "type", label: "By Portion", icon: "🍷" },
+              ].map((t) => (
+                <TouchableOpacity
+                  key={t.id}
+                  onPress={() => {
+                    setBreakdownMode(t.id as any);
+                    setExpandedCardId(null);
+                  }}
+                  style={[
+                    styles.drilldownTabBtn,
+                    breakdownMode === t.id && styles.drilldownTabBtnActive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.drilldownTabText,
+                      breakdownMode === t.id && styles.drilldownTabTextActive,
+                    ]}
+                  >
+                    {t.icon} {t.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Drilldown Content */}
             {loadingSales && !isFirstLoad && !refreshing ? (
-              <ActivityIndicator color={theme.primary} style={{ marginVertical: 16 }} />
-            ) : storeSales.length === 0 ? (
-              <View style={styles.emptyBreakdownCard}>
-                <Text style={styles.emptyBreakdownText}>No store sales recorded for this period</Text>
-              </View>
+              <ActivityIndicator color={theme.primary} style={{ marginVertical: 20 }} />
+            ) : breakdownMode === "store" ? (
+              /* STORE DRILLDOWN */
+              storeSales.length === 0 ? (
+                <View style={styles.emptyBreakdownCard}>
+                  <Text style={styles.emptyBreakdownText}>No store sales recorded for this period</Text>
+                </View>
+              ) : (
+                <View style={{ gap: 10, marginTop: 12 }}>
+                  {storeSales.map((item) => {
+                    const isExpanded = expandedCardId === item.storeId;
+                    return (
+                      <TouchableOpacity
+                        key={item.storeId}
+                        activeOpacity={0.8}
+                        onPress={() => setExpandedCardId(isExpanded ? null : item.storeId)}
+                        style={styles.breakdownCard}
+                      >
+                        <View style={styles.breakdownHeader}>
+                          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}>
+                            <Building2 size={16} color={theme.primary} />
+                            <Text style={styles.breakdownName} numberOfLines={1}>
+                              {item.storeName}
+                            </Text>
+                          </View>
+                          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                            <Text style={styles.breakdownRevenue}>{formatCurrency(item.revenue)}</Text>
+                            {isExpanded ? (
+                              <ChevronUp size={16} color={theme.textSecondary} />
+                            ) : (
+                              <ChevronDown size={16} color={theme.textSecondary} />
+                            )}
+                          </View>
+                        </View>
+
+                        <View style={styles.breakdownSubRow}>
+                          <Text style={styles.breakdownSubText}>
+                            {item.volume} bottles sold ({item.count} {item.count === 1 ? "sale" : "sales"})
+                          </Text>
+                          <Text style={styles.breakdownPercentage}>{item.percentage}% share</Text>
+                        </View>
+
+                        <View style={styles.progressBarBg}>
+                          <View
+                            style={[
+                              styles.progressBarFill,
+                              { width: `${Math.min(100, Math.max(0, item.percentage))}%` },
+                            ]}
+                          />
+                        </View>
+
+                        {/* Expanded Store Details */}
+                        {isExpanded && (
+                          <View style={styles.expandedBox}>
+                            <Text style={styles.expandedBoxTitle}>Portion Breakdown:</Text>
+                            <View style={{ gap: 6, marginTop: 4 }}>
+                              {item.types.map((tp, idx) => (
+                                <View key={idx} style={styles.expandedRow}>
+                                  <Text style={styles.expandedLabel}>{tp.label}</Text>
+                                  <Text style={styles.expandedVal}>
+                                    {tp.count} sold ({formatCurrency(tp.revenue)})
+                                  </Text>
+                                </View>
+                              ))}
+                            </View>
+
+                            <Text style={[styles.expandedBoxTitle, { marginTop: 10 }]}>Category Breakdown:</Text>
+                            <View style={{ gap: 6, marginTop: 4 }}>
+                              {item.categories.map((cat, idx) => (
+                                <View key={idx} style={styles.expandedRow}>
+                                  <Text style={styles.expandedLabel}>{cat.label}</Text>
+                                  <Text style={styles.expandedVal}>
+                                    {cat.count} sold ({formatCurrency(cat.revenue)})
+                                  </Text>
+                                </View>
+                              ))}
+                            </View>
+                          </View>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )
+            ) : breakdownMode === "category" ? (
+              /* CATEGORY DRILLDOWN */
+              categorySales.length === 0 ? (
+                <View style={styles.emptyBreakdownCard}>
+                  <Text style={styles.emptyBreakdownText}>No category sales recorded for this period</Text>
+                </View>
+              ) : (
+                <View style={styles.typeGrid}>
+                  {categorySales.map((item) => {
+                    const isExpanded = expandedCardId === item.categoryKey;
+                    return (
+                      <TouchableOpacity
+                        key={item.categoryKey}
+                        activeOpacity={0.8}
+                        onPress={() => setExpandedCardId(isExpanded ? null : item.categoryKey)}
+                        style={styles.typeCard}
+                      >
+                        <View style={styles.typeHeader}>
+                          <View style={[styles.typeBadge, { backgroundColor: item.badgeColor + "18" }]}>
+                            <Text style={[styles.typeBadgeText, { color: item.badgeColor }]}>
+                              {item.iconText}
+                            </Text>
+                          </View>
+                          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                            <Text style={styles.typeRevenue}>{formatCurrency(item.revenue)}</Text>
+                            {isExpanded ? (
+                              <ChevronUp size={16} color={theme.textSecondary} />
+                            ) : (
+                              <ChevronDown size={16} color={theme.textSecondary} />
+                            )}
+                          </View>
+                        </View>
+
+                        <View style={{ marginTop: 8 }}>
+                          <Text style={styles.typeTitle}>{item.label}</Text>
+                          <Text style={styles.typeDetail}>
+                            {item.volume} bottles sold ({item.count} {item.count === 1 ? "sale" : "sales"}) • {item.percentage}% share
+                          </Text>
+                        </View>
+
+                        <View style={styles.typeProgressBarBg}>
+                          <View
+                            style={[
+                              styles.typeProgressBarFill,
+                              {
+                                width: `${Math.min(100, Math.max(0, item.percentage))}%`,
+                                backgroundColor: item.badgeColor,
+                              },
+                            ]}
+                          />
+                        </View>
+
+                        {/* Expanded Category Store Details */}
+                        {isExpanded && (
+                          <View style={styles.expandedBox}>
+                            <Text style={styles.expandedBoxTitle}>Sales per Store:</Text>
+                            <View style={{ gap: 6, marginTop: 4 }}>
+                              {item.stores.map((st, idx) => (
+                                <View key={idx} style={styles.expandedRow}>
+                                  <Text style={styles.expandedLabel}>{st.storeName}</Text>
+                                  <Text style={styles.expandedVal}>
+                                    {st.count} sold ({formatCurrency(st.revenue)})
+                                  </Text>
+                                </View>
+                              ))}
+                            </View>
+                          </View>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )
             ) : (
-              <View style={{ gap: 10, marginTop: 10 }}>
-                {storeSales.map((item) => (
-                  <View key={item.storeId} style={styles.breakdownCard}>
-                    <View style={styles.breakdownHeader}>
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}>
-                        <Building2 size={16} color={theme.primary} />
-                        <Text style={styles.breakdownName} numberOfLines={1}>
-                          {item.storeName}
-                        </Text>
-                      </View>
-                      <Text style={styles.breakdownRevenue}>{formatCurrency(item.revenue)}</Text>
-                    </View>
-
-                    <View style={styles.breakdownSubRow}>
-                      <Text style={styles.breakdownSubText}>
-                        {item.volume} bottles sold ({item.count} {item.count === 1 ? "sale" : "sales"})
-                      </Text>
-                      <Text style={styles.breakdownPercentage}>{item.percentage}% share</Text>
-                    </View>
-
-                    <View style={styles.progressBarBg}>
-                      <View
-                        style={[
-                          styles.progressBarFill,
-                          { width: `${Math.min(100, Math.max(0, item.percentage))}%` },
-                        ]}
-                      />
-                    </View>
-                  </View>
-                ))}
-              </View>
-            )}
-          </View>
-
-          {/* Breakdown 2: Sales by Wine Category */}
-          <View style={{ marginTop: 24 }}>
-            <Text style={styles.subSectionTitle}>Sales Breakdown by Wine Category</Text>
-            {loadingSales && !isFirstLoad && !refreshing ? (
-              <ActivityIndicator color={theme.primary} style={{ marginVertical: 16 }} />
-            ) : categorySales.length === 0 ? (
-              <View style={styles.emptyBreakdownCard}>
-                <Text style={styles.emptyBreakdownText}>No category sales recorded for this period</Text>
-              </View>
-            ) : (
-              <View style={styles.typeGrid}>
-                {categorySales.map((item) => (
-                  <View key={item.categoryKey} style={styles.typeCard}>
-                    <View style={styles.typeHeader}>
-                      <View style={[styles.typeBadge, { backgroundColor: item.badgeColor + "18" }]}>
-                        <Text style={[styles.typeBadgeText, { color: item.badgeColor }]}>
-                          {item.iconText}
-                        </Text>
-                      </View>
-                      <Text style={styles.typeRevenue}>{formatCurrency(item.revenue)}</Text>
-                    </View>
-
-                    <View style={{ marginTop: 8 }}>
-                      <Text style={styles.typeTitle}>{item.label}</Text>
-                      <Text style={styles.typeDetail}>
-                        {item.volume} bottles sold ({item.count} {item.count === 1 ? "sale" : "sales"})
-                      </Text>
-                    </View>
-
-                    <View style={styles.typeProgressBarBg}>
-                      <View
-                        style={[
-                          styles.typeProgressBarFill,
-                          {
-                            width: `${Math.min(100, Math.max(0, item.percentage))}%`,
-                            backgroundColor: item.badgeColor,
-                          },
-                        ]}
-                      />
-                    </View>
-                  </View>
-                ))}
-              </View>
-            )}
-          </View>
-
-          {/* Breakdown 3: Sales by Type */}
-          <View style={{ marginTop: 24 }}>
-            <Text style={styles.subSectionTitle}>Sales Breakdown by Portion / Type</Text>
-            {loadingSales && !isFirstLoad && !refreshing ? (
-              <ActivityIndicator color={theme.primary} style={{ marginVertical: 16 }} />
-            ) : (
+              /* PORTION DRILLDOWN */
               <View style={styles.typeGrid}>
                 {typeSales.map((item) => {
                   const isBottle = item.type === "bottle";
                   const isGlass = item.type === "glass";
                   const bgBadgeColor = isBottle ? "#4f46e5" : isGlass ? "#059669" : "#d97706";
+                  const isExpanded = expandedCardId === item.type;
 
                   return (
-                    <View key={item.type} style={styles.typeCard}>
+                    <TouchableOpacity
+                      key={item.type}
+                      activeOpacity={0.8}
+                      onPress={() => setExpandedCardId(isExpanded ? null : item.type)}
+                      style={styles.typeCard}
+                    >
                       <View style={styles.typeHeader}>
                         <View style={[styles.typeBadge, { backgroundColor: bgBadgeColor + "18" }]}>
                           <Text style={[styles.typeBadgeText, { color: bgBadgeColor }]}>
                             {isBottle ? "🍾 BOTTLE" : isGlass ? "🍷 GLASS" : "🍶 KARAF"}
                           </Text>
                         </View>
-                        <Text style={styles.typeRevenue}>{formatCurrency(item.revenue)}</Text>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                          <Text style={styles.typeRevenue}>{formatCurrency(item.revenue)}</Text>
+                          {isExpanded ? (
+                            <ChevronUp size={16} color={theme.textSecondary} />
+                          ) : (
+                            <ChevronDown size={16} color={theme.textSecondary} />
+                          )}
+                        </View>
                       </View>
 
                       <View style={{ marginTop: 8 }}>
                         <Text style={styles.typeTitle}>{item.label}</Text>
                         <Text style={styles.typeDetail}>
-                          {item.count} sold ({item.volume} btl equiv)
+                          {item.count} sold ({item.volume} btl equiv) • {item.percentage}% share
                         </Text>
                       </View>
 
@@ -613,7 +785,28 @@ export default function AdminDashboard() {
                           ]}
                         />
                       </View>
-                    </View>
+
+                      {/* Expanded Portion Store Details */}
+                      {isExpanded && (
+                        <View style={styles.expandedBox}>
+                          <Text style={styles.expandedBoxTitle}>Sales per Store:</Text>
+                          <View style={{ gap: 6, marginTop: 4 }}>
+                            {item.stores.length === 0 ? (
+                              <Text style={styles.expandedLabel}>No sales recorded</Text>
+                            ) : (
+                              item.stores.map((st, idx) => (
+                                <View key={idx} style={styles.expandedRow}>
+                                  <Text style={styles.expandedLabel}>{st.storeName}</Text>
+                                  <Text style={styles.expandedVal}>
+                                    {st.count} sold ({formatCurrency(st.revenue)})
+                                  </Text>
+                                </View>
+                              ))
+                            )}
+                          </View>
+                        </View>
+                      )}
+                    </TouchableOpacity>
                   );
                 })}
               </View>
@@ -1158,5 +1351,64 @@ const styles = StyleSheet.create({
   typeProgressBarFill: {
     height: "100%",
     borderRadius: 2.5,
+  },
+  drilldownTabRow: {
+    flexDirection: "row",
+    backgroundColor: "#f1f5f9",
+    borderRadius: 14,
+    padding: 3,
+    marginBottom: 8,
+  },
+  drilldownTabBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 12,
+  },
+  drilldownTabBtnActive: {
+    backgroundColor: "#ffffff",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  drilldownTabText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#64748b",
+  },
+  drilldownTabTextActive: {
+    fontWeight: "800",
+    color: theme.primary,
+  },
+  expandedBox: {
+    marginTop: 12,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: theme.border,
+  },
+  expandedBoxTitle: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: theme.textSecondary,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  expandedRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  expandedLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: theme.text,
+  },
+  expandedVal: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: theme.primary,
   },
 });
