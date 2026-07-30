@@ -185,12 +185,12 @@ export default function SellScreen() {
       locs.forEach((l) => (locationMap[l.id] = l.name));
 
       const bottlePickerList: BottleWithLocation[] = bottles.map((b: any) => ({
-        bottleId: b.id,
+        bottleId: b.id || b.bottleId || b.readableId || `btl-${Math.random()}`,
         locationName: b.locationId ? (locationMap[b.locationId] || "Assigned") : "Unassigned",
         locationId: b.locationId || "unassigned",
         status: b.status,
         glassesRemaining: b.glassesRemaining,
-        readableId: b.bottleId || b.readableId,
+        readableId: b.bottleId || b.readableId || b.id || "N/A",
       }));
 
       setBottlesList(bottlePickerList);
@@ -249,8 +249,11 @@ export default function SellScreen() {
     setStep("sell");
   };
 
-  const handleBottleSelected = (bottleId: string) => {
-    setSelectedBottleId(bottleId);
+  const handleBottleSelected = (bottleId?: string) => {
+    const validId = bottleId || (bottlesList.length > 0 ? bottlesList[0].bottleId : null);
+    if (validId) {
+      setSelectedBottleId(validId);
+    }
     setStep("sell");
   };
 
@@ -679,13 +682,7 @@ export default function SellScreen() {
                 styles.primaryBtn,
                 { backgroundColor: theme.card, borderColor: theme.border, borderWidth: 1 },
               ]}
-              onPress={() => {
-                if (bottlesList.length > 0) {
-                  handleBottleSelected(bottlesList[0].bottleId);
-                } else {
-                  Alert.alert("Out of Stock", "No available bottles found.");
-                }
-              }}
+              onPress={() => handleBottleSelected()}
             >
               <Text style={[styles.primaryBtnText, { color: theme.text }]}>Skip Verification & Sell Bottle</Text>
             </TouchableOpacity>
