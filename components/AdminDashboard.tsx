@@ -38,6 +38,24 @@ interface StoreAlerts {
   underSafety: number;
 }
 
+interface StoreSalesBreakdown {
+  storeId: string;
+  storeName: string;
+  revenue: number;
+  volume: number;
+  count: number;
+  percentage: number;
+}
+
+interface TypeSalesBreakdown {
+  type: "bottle" | "glass" | "karaf";
+  label: string;
+  count: number;
+  revenue: number;
+  volume: number;
+  percentage: number;
+}
+
 const theme = Colors.admin;
 
 function formatCurrency(value: number) {
@@ -54,6 +72,8 @@ export default function AdminDashboard() {
 
   const [salesPeriod, setSalesPeriod] = useState<"today" | "week" | "all">("today");
   const [salesMetrics, setSalesMetrics] = useState({ totalRevenue: 0, totalItems: 0 });
+  const [storeSales, setStoreSales] = useState<StoreSalesBreakdown[]>([]);
+  const [typeSales, setTypeSales] = useState<TypeSalesBreakdown[]>([]);
   const [loadingSales, setLoadingSales] = useState(true);
 
   const [storeAlerts, setStoreAlerts] = useState<StoreAlerts[]>([]);
@@ -82,8 +102,111 @@ export default function AdminDashboard() {
       } else {
         startDate = new Date(0);
       }
-      const result = await getSalesByPeriodAllStores(startDate, new Date());
-      setSalesMetrics(result);
+
+      const params = new URLSearchParams({
+        from: startDate.toISOString(),
+        to: new Date().toISOString(),
+      });
+
+      const [data, allStores] = await Promise.all([
+        apiFetch(`/sales?${params}`),
+        getStores(),
+      ]);
+
+      const salesList: any[] = Array.isArray(data) ? data : Array.isArray(data.sales) ? data.sales : [];
+      let totalRevenue = 0;
+      let totalVolume = 0;
+
+      const storeNameMap: Record<string, string> = {};
+      allStores.forEach((s) => {
+        storeNameMap[s.id] = s.name;
+      });
+
+      const storeAgg: Record<string, { storeName: string; revenue: number; volume: number; count: number }> = {};
+      const typeAgg: Record<string, { label: string; count: number; revenue: number; volume: number }> = {
+        bottle: { label: "Full Bottle", count: 0, revenue: 0, volume: 0 },
+        glass: { label: "Glass (1/6)", count: 0, revenue: 0, volume: 0 },
+        karaf: { label: "Karaf (2/6)", count: 0, revenue: 0, volume: 0 },
+      };
+
+      salesList.forEach((item: any) => {
+        const rev = Number(item.totalAmount || item.price || 0);
+        totalRevenue += rev;
+
+        const st = (item.saleType || "bottle").toLowerCase();
+        let vol = 1;
+        if (st === "glass") {
+          vol = 1 / 6;
+        } else if (st === "karaf") {
+          vol = 2 / 6;
+        } else {
+          vol = Number(item.quantity || 1);
+        }
+        totalVolume += vol;
+
+        // Store grouping
+        const sId = item.storeId || item.store?.id || "unknown";
+        const sName = item.store?.name || storeNameMap[sId] || "Boutique Store";
+        if (!storeAgg[sId]) {
+          storeAgg[sId] = { storeName: sName, revenue: 0, volume: 0, count: 0 };
+        }
+        storeAgg[sId].revenue += rev;
+        storeAgg[sId].volume += vol;
+        storeAgg[sId].count += 1;
+
+        // Type grouping
+        const tKey = st === "glass" ? "glass" : st === "karaf" ? "karaf" : "bottle";
+        typeAgg[tKey].count += 1;
+        typeAgg[tKey].revenue += rev;
+        typeAgg[tKey].volume += vol;
+      });
+
+      const roundedTotalVolume = Math.round(totalVolume * 100) / 100;
+
+      const storeList: StoreSalesBreakdown[] = Object.entries(storeAgg)
+        .map(([sId, val]) => ({
+          storeId: sId,
+          storeName: val.storeName,
+          revenue: val.revenue,
+          volume: Math.round(val.volume * 100) / 100,
+          count: val.count,
+          percentage: totalRevenue > 0 ? Math.round((val.revenue / totalRevenue) * 100) : 0,
+        }))
+        .sort((a, b) => b.revenue - a.revenue);
+
+      const typeList: TypeSalesBreakdown[] = [
+        {
+          type: "bottle",
+          label: "Full Bottle",
+          count: typeAgg.bottle.count,
+          revenue: typeAgg.bottle.revenue,
+          volume: Math.round(typeAgg.bottle.volume * 100) / 100,
+          percentage: totalRevenue > 0 ? Math.round((typeAgg.bottle.revenue / totalRevenue) * 100) : 0,
+        },
+        {
+          type: "glass",
+          label: "Glass (1/6)",
+          count: typeAgg.glass.count,
+          revenue: typeAgg.glass.revenue,
+          volume: Math.round(typeAgg.glass.volume * 100) / 100,
+          percentage: totalRevenue > 0 ? Math.round((typeAgg.glass.revenue / totalRevenue) * 100) : 0,
+        },
+        {
+          type: "karaf",
+          label: "Karaf (2/6)",
+          count: typeAgg.karaf.count,
+          revenue: typeAgg.karaf.revenue,
+          volume: Math.round(typeAgg.karaf.volume * 100) / 100,
+          percentage: totalRevenue > 0 ? Math.round((typeAgg.karaf.revenue / totalRevenue) * 100) : 0,
+        },
+      ];
+
+      setSalesMetrics({
+        totalRevenue: Number(data.totalRevenue ?? totalRevenue),
+        totalItems: roundedTotalVolume,
+      });
+      setStoreSales(storeList);
+      setTypeSales(typeList);
     } catch (e) {
       console.error("Admin: failed to fetch sales metrics", e);
     } finally {
@@ -314,6 +437,98 @@ export default function AdminDashboard() {
               )}
               <Text style={styles.metricLabel}>Bottles Sold</Text>
             </View>
+          </View>
+
+          {/* Breakdown 1: Sales by Store */}
+          <View style={{ marginTop: 20 }}>
+            <Text style={styles.subSectionTitle}>Sales Breakdown by Store</Text>
+            {loadingSales && !isFirstLoad && !refreshing ? (
+              <ActivityIndicator color={theme.primary} style={{ marginVertical: 16 }} />
+            ) : storeSales.length === 0 ? (
+              <View style={styles.emptyBreakdownCard}>
+                <Text style={styles.emptyBreakdownText}>No store sales recorded for this period</Text>
+              </View>
+            ) : (
+              <View style={{ gap: 10, marginTop: 10 }}>
+                {storeSales.map((item) => (
+                  <View key={item.storeId} style={styles.breakdownCard}>
+                    <View style={styles.breakdownHeader}>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}>
+                        <Building2 size={16} color={theme.primary} />
+                        <Text style={styles.breakdownName} numberOfLines={1}>
+                          {item.storeName}
+                        </Text>
+                      </View>
+                      <Text style={styles.breakdownRevenue}>{formatCurrency(item.revenue)}</Text>
+                    </View>
+
+                    <View style={styles.breakdownSubRow}>
+                      <Text style={styles.breakdownSubText}>
+                        {item.volume} bottles sold ({item.count} {item.count === 1 ? "sale" : "sales"})
+                      </Text>
+                      <Text style={styles.breakdownPercentage}>{item.percentage}% share</Text>
+                    </View>
+
+                    <View style={styles.progressBarBg}>
+                      <View
+                        style={[
+                          styles.progressBarFill,
+                          { width: `${Math.min(100, Math.max(0, item.percentage))}%` },
+                        ]}
+                      />
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+
+          {/* Breakdown 2: Sales by Type */}
+          <View style={{ marginTop: 24 }}>
+            <Text style={styles.subSectionTitle}>Sales Breakdown by Type</Text>
+            {loadingSales && !isFirstLoad && !refreshing ? (
+              <ActivityIndicator color={theme.primary} style={{ marginVertical: 16 }} />
+            ) : (
+              <View style={styles.typeGrid}>
+                {typeSales.map((item) => {
+                  const isBottle = item.type === "bottle";
+                  const isGlass = item.type === "glass";
+                  const bgBadgeColor = isBottle ? "#4f46e5" : isGlass ? "#059669" : "#d97706";
+
+                  return (
+                    <View key={item.type} style={styles.typeCard}>
+                      <View style={styles.typeHeader}>
+                        <View style={[styles.typeBadge, { backgroundColor: bgBadgeColor + "18" }]}>
+                          <Text style={[styles.typeBadgeText, { color: bgBadgeColor }]}>
+                            {isBottle ? "🍾 BOTTLE" : isGlass ? "🍷 GLASS" : "🍶 KARAF"}
+                          </Text>
+                        </View>
+                        <Text style={styles.typeRevenue}>{formatCurrency(item.revenue)}</Text>
+                      </View>
+
+                      <View style={{ marginTop: 8 }}>
+                        <Text style={styles.typeTitle}>{item.label}</Text>
+                        <Text style={styles.typeDetail}>
+                          {item.count} sold ({item.volume} btl equiv)
+                        </Text>
+                      </View>
+
+                      <View style={styles.typeProgressBarBg}>
+                        <View
+                          style={[
+                            styles.typeProgressBarFill,
+                            {
+                              width: `${Math.min(100, Math.max(0, item.percentage))}%`,
+                              backgroundColor: bgBadgeColor,
+                            },
+                          ]}
+                        />
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
           </View>
         </View>
 
@@ -733,5 +948,126 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     letterSpacing: 1,
     textTransform: "uppercase",
+  },
+  subSectionTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: theme.text,
+    letterSpacing: 0.2,
+  },
+  breakdownCard: {
+    backgroundColor: theme.card,
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: theme.border,
+    gap: 8,
+  },
+  breakdownHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  breakdownName: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: theme.text,
+  },
+  breakdownRevenue: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: theme.primary,
+  },
+  breakdownSubRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  breakdownSubText: {
+    fontSize: 12,
+    color: theme.textSecondary,
+    fontWeight: "500",
+  },
+  breakdownPercentage: {
+    fontSize: 12,
+    color: theme.primary,
+    fontWeight: "700",
+  },
+  progressBarBg: {
+    height: 6,
+    backgroundColor: "#e2e8f0",
+    borderRadius: 3,
+    overflow: "hidden",
+  },
+  progressBarFill: {
+    height: "100%",
+    backgroundColor: theme.primary,
+    borderRadius: 3,
+  },
+  emptyBreakdownCard: {
+    backgroundColor: theme.card,
+    borderRadius: 16,
+    padding: 16,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: theme.border,
+    marginTop: 8,
+  },
+  emptyBreakdownText: {
+    fontSize: 13,
+    color: theme.textSecondary,
+    fontStyle: "italic",
+  },
+  typeGrid: {
+    gap: 10,
+    marginTop: 10,
+  },
+  typeCard: {
+    backgroundColor: theme.card,
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  typeHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  typeBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  typeBadgeText: {
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+  },
+  typeRevenue: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: theme.text,
+  },
+  typeTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: theme.text,
+  },
+  typeDetail: {
+    fontSize: 12,
+    color: theme.textSecondary,
+    marginTop: 2,
+  },
+  typeProgressBarBg: {
+    height: 5,
+    backgroundColor: "#e2e8f0",
+    borderRadius: 2.5,
+    overflow: "hidden",
+    marginTop: 10,
+  },
+  typeProgressBarFill: {
+    height: "100%",
+    borderRadius: 2.5,
   },
 });
