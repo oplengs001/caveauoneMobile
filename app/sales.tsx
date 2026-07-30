@@ -32,6 +32,7 @@ interface Sale {
   vintage?: string;
   format?: string;
   bottleId: string;
+  readableId?: string;
   price: number; // Selling price (Base)
   totalAmount?: number;
   masterWinePrice?: number; // Added to calculate profit (Cost)
@@ -145,8 +146,10 @@ export default function SalesScreen() {
         const rawDate = s.soldAt || s.createdAt || s.created_at || s.date;
         const d = rawDate ? new Date(rawDate) : new Date();
         const validDate = isNaN(d.getTime()) ? new Date() : d;
+        const rId = s.readableId || (s.bottleId && s.bottleId.startsWith("WB-") ? s.bottleId : null) || s.bottle?.readableId || s.bottleId;
         return {
           ...s,
+          readableId: rId,
           soldAt: {
             toDate: () => validDate,
           },
@@ -356,7 +359,7 @@ export default function SalesScreen() {
 
           <View style={styles.metaRow}>
             <Text style={[styles.bottleIdText, { color: theme.textSecondary }]}>
-              ID: {item.bottleId}
+              ID: {item.readableId || item.bottleId}
             </Text>
             {cost > 0 && (
               <View

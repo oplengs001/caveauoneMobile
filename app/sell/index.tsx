@@ -299,11 +299,15 @@ export default function SellScreen() {
         glassesDeducted = 2;
       }
 
+      const selectedBottleObj = bottlesList.find((b: any) => b.id === targetBottleId || b.bottleId === targetBottleId);
+      const readableId = selectedBottleObj?.readableId || selectedBottleObj?.bottleId || (targetBottleId?.startsWith("WB-") ? targetBottleId : null);
+
       // Create a sales record
       await apiFetch("/sales", {
         method: "POST",
         body: JSON.stringify({
           bottleId: targetBottleId,
+          readableId: readableId,
           masterWineId: selectedWine?.id || null,
           wineName: selectedWine?.name,
           vintage: selectedWine?.vintage,
