@@ -52,6 +52,7 @@ export default function WineRequestDetail() {
   const [pulloutRequest, setPulloutRequest] = useState<PulloutRequest | null>(null);
   const [batchBottles, setBatchBottles] = useState<{
     bottleId: string;
+    readableId?: string;
     masterWineId: string;
     wineName: string;
     vintage?: string;
@@ -93,30 +94,18 @@ export default function WineRequestDetail() {
             item.pulledBottleIds.forEach((bid: string) => {
               bottles.push({
                 bottleId: bid,
+                readableId: bid,
                 masterWineId: item.masterWineId,
                 wineName: item.wineName,
                 vintage: item.vintage,
                 format: item.format,
-                producer: item.producer
+                producer: item.producer,
               });
             });
           }
         });
-        setBatchBottles(bottles);
 
-        // Verify which bottles are already received
-        const bIds = bottles.map(b => b.bottleId);
-        const verified = new Set<string>();
-        if (bIds.length > 0) {
-          const fetchedBottlesData = await apiFetch(`/bottles?ids=${bIds.join(",")}`);
-          const fetchedBottles: InventoryBottle[] = fetchedBottlesData.bottles || fetchedBottlesData;
-          fetchedBottles.forEach(b => {
-            if (b.status === "received" || b.status === "shelved") {
-              verified.add(b.id);
-            }
-          });
-        }
-        setVerifiedBottleIds(verified);
+        setBatchBottles(bottles);
       }
     } catch (err) {
       console.error("Failed to fetch request:", err);
@@ -665,7 +654,7 @@ export default function WineRequestDetail() {
             <ArrowLeft size={24} color={theme.primary} />
           </TouchableOpacity>
           <View style={{ flex: 1 }}>
-            <Text style={[styles.title, { color: theme.primary }]}>Batch Recsseive</Text>
+            <Text style={[styles.title, { color: theme.primary }]}>Batch Receive</Text>
             <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
               REQ: {request?.id.slice(0, 8).toUpperCase()}
             </Text>
@@ -740,7 +729,7 @@ export default function WineRequestDetail() {
                       {[bottle.producer, bottle.vintage, bottle.format].filter(Boolean).join(" · ")}
                     </Text>
                     <Text style={{ color: theme.textSecondary, fontSize: 11, fontWeight: "700", fontFamily: "monospace", marginTop: 4 }}>
-                      {bottle.bottleId.slice(-12)}
+                      {bottle.readableId || bottle.bottleId}
                     </Text>
                   </View>
                   <View style={{ alignItems: "flex-end", gap: 6 }}>
@@ -779,6 +768,15 @@ export default function WineRequestDetail() {
           </ScrollView>
 
           <View style={{ padding: 24, backgroundColor: theme.background }}>
+            {isAllBatchHandled && (
+              <View style={[styles.successIndicator, { marginBottom: 12 }]}>
+                <CheckCircle2 size={20} color="#059669" />
+                <Text style={styles.successIndicatorText}>
+                  All items successfully received
+                </Text>
+              </View>
+            )}
+
             {isAllBatchHandled && verifiedBottleIds.size > 0 && (
               <TouchableOpacity
                 style={[styles.scanButton, { marginBottom: 12, backgroundColor: "#10b981", shadowColor: "#10b981" }]}
@@ -819,7 +817,9 @@ export default function WineRequestDetail() {
               </TouchableOpacity>
             )}
             <TouchableOpacity style={[styles.scanButton, { backgroundColor: theme.card, borderWidth: 1, borderColor: theme.border, shadowOpacity: 0 }]} onPress={() => setIsBatchMode(false)}>
-              <Text style={[styles.scanButtonText, { color: theme.text }]}>Cancel Batch</Text>
+              <Text style={[styles.scanButtonText, { color: theme.text }]}>
+                {isAllBatchHandled ? "Done" : "Cancel Batch"}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>

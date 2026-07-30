@@ -12,8 +12,8 @@ import {
   ChevronLeft,
   MapPin,
   PackageSearch,
-  Search,
-  QrCode
+  QrCode,
+  Search
 } from "lucide-react-native";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -159,9 +159,10 @@ export default function PulloutDetailScreen() {
       // 4. Update Request items
       const updatedItems = [...request.items];
       updatedItems[itemIndex].pulledQty += 1;
+      const displayBottleId = bottleData.bottleId || bottleData.readableId || bottleData.id;
       updatedItems[itemIndex].pulledBottleIds = [
         ...(updatedItems[itemIndex].pulledBottleIds || []),
-        bottleData.id,
+        displayBottleId,
       ];
 
       const allFulfilled = updatedItems.every(
@@ -275,7 +276,7 @@ export default function PulloutDetailScreen() {
         return;
       }
 
-      const pulledBottleIds = availableBottles.map((b: any) => b.id);
+      const pulledBottleIds = availableBottles.map((b: any) => b.bottleId || b.readableId || b.id);
 
       // 2. Update Bottles in parallel
       await Promise.all(availableBottles.map((b: any) =>
@@ -371,7 +372,7 @@ export default function PulloutDetailScreen() {
 
               for (const { item, index } of unfulfilledItems) {
                 const remaining = Math.max(0, item.requestedQty - item.pulledQty - (item.skippedQty || 0));
-                
+
                 const params = new URLSearchParams({
                   masterWineId: item.masterWineId,
                   status: "received,shelved",
@@ -387,7 +388,7 @@ export default function PulloutDetailScreen() {
                   break;
                 }
 
-                const pulledIds = availableBottles.map((b: any) => b.id);
+                const pulledIds = availableBottles.map((b: any) => b.bottleId || b.readableId || b.id);
                 pulledBottleIdsTotal.push(...pulledIds);
 
                 // Update bottles in parallel
@@ -474,9 +475,9 @@ export default function PulloutDetailScreen() {
         },
         remaining > 1
           ? {
-              text: `Pull All Remaining (${remaining})`,
-              onPress: () => processManualPull(index, remaining),
-            }
+            text: `Pull All Remaining (${remaining})`,
+            onPress: () => processManualPull(index, remaining),
+          }
           : null,
       ].filter(Boolean) as any,
     );
@@ -638,23 +639,33 @@ export default function PulloutDetailScreen() {
       const locationMap = new Map<string, Location>();
       locationsList.forEach((l) => locationMap.set(l.id, l));
 
-      const results = bottlesList.map((b: any) => {
-        const mwId = b.masterWineId || b.masterWineRef?.id;
-        const locId = b.locationId || b.locationRef?.id;
-        const mw = mwId ? wineMap.get(mwId) : undefined;
-        const loc = locId ? locationMap.get(locId) : undefined;
+      const termLower = term.toLowerCase();
 
-        return {
-          id: b.id,
-          ...b,
-          wineName: mw?.name || "Unknown Wine",
-          vintage: mw?.vintage || "NV",
-          producer: mw?.producer || "",
-          format: mw?.format || "75cl",
-          locationName: loc?.name || "No Location",
-          readableId: b.readableId,
-        };
-      });
+      const results = bottlesList
+        .map((b: any) => {
+          const mwId = b.masterWineId || b.masterWineRef?.id;
+          const locId = b.locationId || b.locationRef?.id;
+          const mw = mwId ? wineMap.get(mwId) : undefined;
+          const loc = locId ? locationMap.get(locId) : undefined;
+
+          const bottleSku = b.sku || mw?.sku || "";
+
+          return {
+            id: b.id,
+            ...b,
+            sku: bottleSku,
+            wineName: mw?.name || b.wineName || "Unknown Wine",
+            vintage: mw?.vintage || b.vintage || "NV",
+            producer: mw?.producer || b.producer || "",
+            format: mw?.format || b.format || "75cl",
+            locationName: loc?.name || "No Location",
+            readableId: b.readableId,
+          };
+        })
+        .filter((b) => {
+          const bottleSku = (b.sku || "").toLowerCase();
+          return bottleSku === termLower || bottleSku.includes(termLower);
+        });
 
       setSearchResults(results);
     } catch (error) {
@@ -848,7 +859,7 @@ export default function PulloutDetailScreen() {
                                       { color: theme.textSecondary },
                                     ]}
                                   >
-                                    Bottle ID: {res.readableId || res.id}
+                                    Bottle ID: {res.bottleId || res.id}
                                   </Text>
                                 </View>
                                 <View

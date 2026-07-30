@@ -63,6 +63,11 @@ export default function SellScreen() {
   
   const [isFetchingLocations, setIsFetchingLocations] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [parAlertInfo, setParAlertInfo] = useState<{
+    wineName: string;
+    requestedQty: number;
+    stockCount: number;
+  } | null>(null);
 
   // Verification UI
   const [isCameraActive, setIsCameraActive] = useState(false);
@@ -320,6 +325,12 @@ export default function SellScreen() {
                         ],
                         totalAmount: (selectedWine.price || 0) * requestedQty,
                       }),
+                    });
+
+                    setParAlertInfo({
+                      wineName: selectedWine.name,
+                      requestedQty,
+                      stockCount,
                     });
                   }
                 }
@@ -713,6 +724,19 @@ export default function SellScreen() {
     </ScrollView>
   );
 
+  const handleSellAnother = () => {
+    setSelectedWine(null);
+    setSelectedBottleId(null);
+    setBottlesList([]);
+    setSearchQuery("");
+    setSalePrice("");
+    setPriceError(null);
+    setSelectedCustomer(null);
+    setParAlertInfo(null);
+    fetchMasterWines();
+    setStep("search");
+  };
+
   const renderSuccess = () => {
     const isIncluded = storeVatMode === "included";
     const numericBase = parseFloat(salePrice) || 0;
@@ -723,9 +747,39 @@ export default function SellScreen() {
       <View style={[styles.content, { alignItems: "center", justifyContent: "center" }]}>
         <CheckCircle2 size={80} color={theme.primary} />
         <Text style={[styles.headerText, { color: theme.text, marginTop: 24 }]}>Bottle Sold!</Text>
-        <Text style={[styles.subText, { color: theme.textSecondary, textAlign: "center", marginBottom: 32 }]}>
+        <Text style={[styles.subText, { color: theme.textSecondary, textAlign: "center", marginBottom: 24 }]}>
           The bottle has been marked as sold and removed from active inventory.
         </Text>
+
+        {parAlertInfo && (
+          <View style={{
+            flexDirection: "row",
+            alignItems: "center",
+            backgroundColor: "#fff7ed",
+            borderColor: "#ea580c",
+            borderWidth: 1.5,
+            borderRadius: 16,
+            padding: 14,
+            marginBottom: 20,
+            width: "100%",
+            gap: 12,
+          }}>
+            <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: "rgba(234, 88, 12, 0.15)", alignItems: "center", justifyContent: "center" }}>
+              <AlertCircle size={20} color="#ea580c" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 12, fontWeight: "900", color: "#c2410c", textTransform: "uppercase", letterSpacing: 0.5 }}>
+                PAR Alert — Restock Requested
+              </Text>
+              <Text style={{ fontSize: 11, fontWeight: "600", color: "#9a3412", marginTop: 2 }}>
+                Stock hit PAR level ({parAlertInfo.stockCount} btl left). Auto-requested {parAlertInfo.requestedQty} bottle(s) of {parAlertInfo.wineName} from warehouse.
+              </Text>
+            </View>
+            <TouchableOpacity onPress={() => setParAlertInfo(null)} style={{ padding: 4 }}>
+              <X size={18} color="#ea580c" />
+            </TouchableOpacity>
+          </View>
+        )}
         
         <View style={[styles.successCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
           <Text style={[styles.wineName, { color: theme.text, textAlign: "center" }]}>{selectedWine?.name}</Text>
@@ -751,12 +805,21 @@ export default function SellScreen() {
           </View>
         </View>
 
-        <TouchableOpacity 
-          style={[styles.primaryBtn, { backgroundColor: theme.primary, width: "100%", marginTop: 32 }]} 
-          onPress={() => router.replace("/(tabs)/home")}
-        >
-          <Text style={styles.primaryBtnText}>Back to Dashboard</Text>
-        </TouchableOpacity>
+        <View style={{ width: "100%", gap: 12, marginTop: 32 }}>
+          <TouchableOpacity 
+            style={[styles.primaryBtn, { backgroundColor: theme.primary, width: "100%" }]} 
+            onPress={handleSellAnother}
+          >
+            <Text style={styles.primaryBtnText}>Sell Another Bottle</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={[styles.primaryBtn, { backgroundColor: theme.card, borderWidth: 1, borderColor: theme.border, width: "100%" }]} 
+            onPress={() => router.replace("/(tabs)/home")}
+          >
+            <Text style={[styles.primaryBtnText, { color: theme.text }]}>Back to Dashboard</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   };
