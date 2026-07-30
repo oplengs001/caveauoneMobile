@@ -33,7 +33,12 @@ interface Sale {
   format?: string;
   bottleId: string;
   price: number; // Selling price (Base)
+  totalAmount?: number;
   masterWinePrice?: number; // Added to calculate profit (Cost)
+  saleType?: string;
+  masterWine?: {
+    price?: number;
+  };
   soldAt: {
     toDate: () => Date;
   };
@@ -148,17 +153,22 @@ export default function SalesScreen() {
         };
       });
 
-      const totalBase = salesData.reduce((sum, s) => sum + (s.price || 0), 0);
-      const totalGross = salesData.reduce((sum, s) => sum + ((s as any).totalAmount || s.price || 0), 0);
-      const totalCost = salesData.reduce((sum, s) => sum + (s.masterWinePrice || 0), 0);
-
+      const totalBase = salesData.reduce((sum, s: any) => sum + Number(s.price || 0), 0);
+      const totalGross = salesData.reduce((sum, s: any) => sum + Number(s.totalAmount || s.price || 0), 0);
+      
+      let totalCost = 0;
       let totalVolume = 0;
       salesData.forEach((s: any) => {
-        if (s.saleType === "glass") {
+        const rawCost = Number(s.masterWinePrice || s.masterWine?.price || 0);
+        const st = (s.saleType || "bottle").toLowerCase();
+        if (st === "glass") {
+          totalCost += rawCost / 6;
           totalVolume += 1 / 6;
-        } else if (s.saleType === "karaf") {
+        } else if (st === "karaf") {
+          totalCost += (rawCost * 2) / 6;
           totalVolume += 2 / 6;
         } else {
+          totalCost += rawCost;
           totalVolume += Number(s.quantity || 1);
         }
       });
@@ -319,11 +329,14 @@ export default function SalesScreen() {
   );
 
   const renderItem = ({ item }: { item: Sale }) => {
-    const itemVat = item.price * 0.12;
-    const itemTotal = item.price + itemVat;
-
-    const cost = item.masterWinePrice || 0;
-    const itemProfit = item.price - cost;
+    const price = Number(item.price || 0);
+    const itemTotal = Number(item.totalAmount || price * 1.12);
+    
+    const rawCost = Number(item.masterWinePrice || item.masterWine?.price || 0);
+    const saleType = (item.saleType || "bottle").toLowerCase();
+    const cost = saleType === "glass" ? rawCost / 6 : saleType === "karaf" ? (rawCost * 2) / 6 : rawCost;
+    
+    const itemProfit = price - cost;
     const isProfitable = itemProfit >= 0;
 
     return (
