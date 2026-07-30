@@ -5,7 +5,6 @@ import { formatDate } from "@/lib/utils/format";
 import { WineRequest } from "@/types";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
 import {
-  ArrowRight,
   Ban,
   Calendar,
   Check,
@@ -14,13 +13,12 @@ import {
   ChevronLeft,
   ChevronUp,
   Clock,
-  Filter,
   Layers,
   Package,
   Plus,
   Search,
   Truck,
-  X,
+  X
 } from "lucide-react-native";
 import React, { useCallback, useMemo, useState } from "react";
 import {
@@ -149,7 +147,7 @@ export default function WineRequestsIndex() {
         color: "#9333ea",
         bg: "#f3e8ff",
         icon: Package,
-        label: "🔄 SWAP / REPLACED",
+        label: "🔄 SWAP / PULLING OUT",
         step: 2,
       };
     }
@@ -158,7 +156,7 @@ export default function WineRequestsIndex() {
         color: "#d97706",
         bg: "#fef3c7",
         icon: Ban,
-        label: "🚫 DISCONTINUED / DELAYED",
+        label: "🚫 DISCONTINUED",
         step: 0,
       };
     }
@@ -167,7 +165,7 @@ export default function WineRequestsIndex() {
         color: "#2563eb",
         bg: "#dbeafe",
         icon: Clock,
-        label: "⏳ STAY PENDING (WAITING)",
+        label: "⏳ DELAYED",
         step: 1,
       };
     }
@@ -454,38 +452,6 @@ export default function WineRequestsIndex() {
               >
                 <Ban size={12} color="#ef4444" strokeWidth={2.5} />
                 <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-            )}
-
-            {(item.status === "outbound" || item.status === "converted") && (
-              <TouchableOpacity
-                style={[styles.actionBtn, { backgroundColor: "#2563eb" }]}
-                onPress={() =>
-                  router.push({
-                    pathname: "/wine-requests/[id]",
-                    params: { id: item.id },
-                  })
-                }
-              >
-                <CheckCircle2 size={13} color="#fff" strokeWidth={2.5} />
-                <Text style={styles.actionBtnText}>Check & Receive</Text>
-              </TouchableOpacity>
-            )}
-
-            {item.status !== "outbound" && item.status !== "converted" && (
-              <TouchableOpacity
-                style={styles.viewDetails}
-                onPress={() =>
-                  router.push({
-                    pathname: "/wine-requests/[id]",
-                    params: { id: item.id },
-                  })
-                }
-              >
-                <Text style={[styles.detailsLabel, { color: theme.primary }]}>
-                  View Details
-                </Text>
-                <ArrowRight size={14} color={theme.primary} strokeWidth={2.5} />
               </TouchableOpacity>
             )}
           </View>
