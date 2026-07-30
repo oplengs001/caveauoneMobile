@@ -43,15 +43,19 @@ interface Sale {
 type PeriodType = "all" | "today" | "week" | "month" | "lastMonth" | "custom";
 
 const formatDate = (date: Date | undefined) => {
-  if (!date) return "";
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "numeric",
-    hour12: true,
-  }).format(date);
+  if (!date || isNaN(date.getTime())) return "N/A";
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "numeric",
+      hour12: true,
+    }).format(date);
+  } catch (e) {
+    return "N/A";
+  }
 };
 
 const formatCurrency = (amount: number) => {
@@ -131,12 +135,18 @@ export default function SalesScreen() {
       if (endDate) params.set("to", endDate.toISOString());
 
       const data = await apiFetch(`/sales?${params}`);
-      const salesData: Sale[] = (data.sales || data).map((s: any) => ({
-        ...s,
-        soldAt: {
-          toDate: () => new Date(s.soldAt),
-        },
-      }));
+      const rawList = Array.isArray(data) ? data : Array.isArray(data.sales) ? data.sales : [];
+      const salesData: Sale[] = rawList.map((s: any) => {
+        const rawDate = s.soldAt || s.createdAt || s.created_at || s.date;
+        const d = rawDate ? new Date(rawDate) : new Date();
+        const validDate = isNaN(d.getTime()) ? new Date() : d;
+        return {
+          ...s,
+          soldAt: {
+            toDate: () => validDate,
+          },
+        };
+      });
 
       const totalBase = salesData.reduce((sum, s) => sum + (s.price || 0), 0);
       const totalGross = salesData.reduce((sum, s) => sum + ((s as any).totalAmount || s.price || 0), 0);

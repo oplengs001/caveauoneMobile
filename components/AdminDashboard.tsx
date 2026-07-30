@@ -658,10 +658,8 @@ export default function AdminDashboard() {
                     const storeColor = STORE_COLORS[idx % STORE_COLORS.length];
 
                     return (
-                      <TouchableOpacity
+                      <View
                         key={item.storeId}
-                        activeOpacity={0.8}
-                        onPress={() => setExpandedCardId(isExpanded ? null : item.storeId)}
                         style={[styles.breakdownCard, { borderLeftWidth: 4, borderLeftColor: storeColor }]}
                       >
                         <View style={styles.breakdownHeader}>
@@ -679,17 +677,23 @@ export default function AdminDashboard() {
                               {item.storeName}
                             </Text>
                           </TouchableOpacity>
-                          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                          <TouchableOpacity
+                            style={{ flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 2 }}
+                            onPress={() => setExpandedCardId(isExpanded ? null : item.storeId)}
+                          >
                             <Text style={styles.breakdownRevenue}>{formatCurrency(item.revenue)}</Text>
                             {isExpanded ? (
                               <ChevronUp size={16} color={theme.textSecondary} />
                             ) : (
                               <ChevronDown size={16} color={theme.textSecondary} />
                             )}
-                          </View>
+                          </TouchableOpacity>
                         </View>
 
-                        <View style={styles.breakdownSubRow}>
+                        <TouchableOpacity
+                          style={styles.breakdownSubRow}
+                          onPress={() => setExpandedCardId(isExpanded ? null : item.storeId)}
+                        >
                           <Text style={styles.breakdownSubText}>
                             {item.volume} bottles sold ({item.count} {item.count === 1 ? "sale" : "sales"})
                           </Text>
@@ -704,7 +708,7 @@ export default function AdminDashboard() {
                               <Text style={[styles.ringPillText, { color: storeColor }]}>{item.percentage}% share</Text>
                             </View>
                           </View>
-                        </View>
+                        </TouchableOpacity>
 
                         {/* Expanded Store Details */}
                         {isExpanded && (
@@ -746,7 +750,7 @@ export default function AdminDashboard() {
                             </TouchableOpacity>
                           </View>
                         )}
-                      </TouchableOpacity>
+                      </View>
                     );
                   })}
                 </View>
@@ -762,13 +766,14 @@ export default function AdminDashboard() {
                   {categorySales.map((item, idx) => {
                     const isExpanded = expandedCardId === item.categoryKey;
                     return (
-                      <TouchableOpacity
+                      <View
                         key={item.categoryKey}
-                        activeOpacity={0.8}
-                        onPress={() => setExpandedCardId(isExpanded ? null : item.categoryKey)}
                         style={[styles.typeCard, { borderLeftWidth: 4, borderLeftColor: item.badgeColor }]}
                       >
-                        <View style={styles.typeHeader}>
+                        <TouchableOpacity
+                          style={styles.typeHeader}
+                          onPress={() => setExpandedCardId(isExpanded ? null : item.categoryKey)}
+                        >
                           <View style={[styles.typeBadge, { backgroundColor: item.badgeColor + "18" }]}>
                             <Text style={[styles.typeBadgeText, { color: item.badgeColor }]}>
                               {item.iconText}
@@ -782,9 +787,12 @@ export default function AdminDashboard() {
                               <ChevronDown size={16} color={theme.textSecondary} />
                             )}
                           </View>
-                        </View>
+                        </TouchableOpacity>
 
-                        <View style={{ marginTop: 8, flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end" }}>
+                        <TouchableOpacity
+                          style={{ marginTop: 8, flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end" }}
+                          onPress={() => setExpandedCardId(isExpanded ? null : item.categoryKey)}
+                        >
                           <View style={{ flex: 1 }}>
                             <Text style={styles.typeTitle}>{item.label}</Text>
                             <Text style={styles.typeDetail}>
@@ -802,7 +810,7 @@ export default function AdminDashboard() {
                               <Text style={[styles.ringPillText, { color: item.badgeColor }]}>{item.percentage}% share</Text>
                             </View>
                           </View>
-                        </View>
+                        </TouchableOpacity>
 
                         {/* Expanded Category Store Details */}
                         {isExpanded && (
@@ -829,7 +837,7 @@ export default function AdminDashboard() {
                             </View>
                           </View>
                         )}
-                      </TouchableOpacity>
+                      </View>
                     );
                   })}
                 </View>
@@ -844,13 +852,14 @@ export default function AdminDashboard() {
                   const isExpanded = expandedCardId === item.type;
 
                   return (
-                    <TouchableOpacity
+                    <View
                       key={item.type}
-                      activeOpacity={0.8}
-                      onPress={() => setExpandedCardId(isExpanded ? null : item.type)}
                       style={[styles.typeCard, { borderLeftWidth: 4, borderLeftColor: bgBadgeColor }]}
                     >
-                      <View style={styles.typeHeader}>
+                      <TouchableOpacity
+                        style={styles.typeHeader}
+                        onPress={() => setExpandedCardId(isExpanded ? null : item.type)}
+                      >
                         <View style={[styles.typeBadge, { backgroundColor: bgBadgeColor + "18" }]}>
                           <Text style={[styles.typeBadgeText, { color: bgBadgeColor }]}>
                             {isBottle ? "🍾 BOTTLE" : isGlass ? "🍷 GLASS" : "🍶 KARAF"}
@@ -864,9 +873,12 @@ export default function AdminDashboard() {
                             <ChevronDown size={16} color={theme.textSecondary} />
                           )}
                         </View>
-                      </View>
+                      </TouchableOpacity>
 
-                      <View style={{ marginTop: 8, flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end" }}>
+                      <TouchableOpacity
+                        style={{ marginTop: 8, flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end" }}
+                        onPress={() => setExpandedCardId(isExpanded ? null : item.type)}
+                      >
                         <View style={{ flex: 1 }}>
                           <Text style={styles.typeTitle}>{item.label}</Text>
                           <Text style={styles.typeDetail}>
@@ -884,7 +896,7 @@ export default function AdminDashboard() {
                             <Text style={[styles.ringPillText, { color: bgBadgeColor }]}>{item.percentage}% share</Text>
                           </View>
                         </View>
-                      </View>
+                      </TouchableOpacity>
 
                       {/* Expanded Portion Store Details */}
                       {isExpanded && (
@@ -915,7 +927,7 @@ export default function AdminDashboard() {
                           </View>
                         </View>
                       )}
-                    </TouchableOpacity>
+                    </View>
                   );
                 })}
               </View>
