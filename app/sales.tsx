@@ -12,7 +12,7 @@ import {
   Sliders,
   TrendingUp,
 } from "lucide-react-native";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -158,7 +158,7 @@ export default function SalesScreen() {
 
       const totalBase = salesData.reduce((sum, s: any) => sum + Number(s.price || 0), 0);
       const totalGross = salesData.reduce((sum, s: any) => sum + Number(s.totalAmount || s.price || 0), 0);
-      
+
       let totalCost = 0;
       let totalVolume = 0;
       salesData.forEach((s: any) => {
@@ -334,11 +334,11 @@ export default function SalesScreen() {
   const renderItem = ({ item }: { item: Sale }) => {
     const price = Number(item.price || 0);
     const itemTotal = Number(item.totalAmount || price * 1.12);
-    
+
     const rawCost = Number(item.masterWinePrice || item.masterWine?.price || 0);
     const saleType = (item.saleType || "bottle").toLowerCase();
     const cost = saleType === "glass" ? rawCost / 6 : saleType === "karaf" ? (rawCost * 2) / 6 : rawCost;
-    
+
     const itemProfit = price - cost;
     const isProfitable = itemProfit >= 0;
 

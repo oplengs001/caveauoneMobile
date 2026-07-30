@@ -250,6 +250,9 @@ export interface Customer {
   email?: string;
   contactNo?: string;
   notes?: string;
+  favoriteProducers?: string[];
+  favoriteRegions?: string[];
+  favoriteWineStyle?: string;
   storeId: string;
   createdAt: any;
   updatedAt: any;
