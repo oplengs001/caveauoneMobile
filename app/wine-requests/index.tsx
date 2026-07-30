@@ -1,6 +1,7 @@
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { apiFetch } from "@/lib/api";
+import { formatDate } from "@/lib/utils/format";
 import { WineRequest } from "@/types";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
 import {
@@ -206,7 +207,7 @@ export default function WineRequestsIndex() {
             <View style={styles.dateRow}>
               <Calendar size={14} color={theme.textSecondary} />
               <Text style={[styles.dateText, { color: theme.textSecondary }]}>
-                {item.createdAt.toLocaleDateString("en-US", {
+                {formatDate(item.createdAt, {
                   month: "short",
                   day: "numeric",
                   year: "numeric",

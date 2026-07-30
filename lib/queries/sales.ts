@@ -8,16 +8,32 @@ export async function getSalesByPeriod(storeId: string, periodStart: Date, perio
     aggregate: "true",
   });
   const data = await apiFetch(`/sales?${params}`);
-  if (data.sales && Array.isArray(data.sales)) {
-    const totalRevenue = data.sales.reduce((sum: number, item: any) => sum + (item.totalAmount || item.price || 0), 0);
+
+  if (Array.isArray(data)) {
+    const totalRevenue = data.reduce(
+      (sum: number, item: any) => sum + Number(item.totalAmount || item.price || 0),
+      0
+    );
     return {
       totalRevenue,
-      totalItems: data.sales.length,
+      totalItems: data.length,
     };
   }
+
+  if (data.sales && Array.isArray(data.sales)) {
+    const totalRevenue = Number(data.totalRevenue) || data.sales.reduce(
+      (sum: number, item: any) => sum + Number(item.totalAmount || item.price || 0),
+      0
+    );
+    return {
+      totalRevenue,
+      totalItems: Number(data.totalItems) || data.sales.length,
+    };
+  }
+
   return {
-    totalRevenue: data.totalRevenue ?? data.totalAmount ?? 0,
-    totalItems: data.totalItems ?? data.count ?? 0,
+    totalRevenue: Number(data.totalRevenue ?? data.totalAmount ?? 0),
+    totalItems: Number(data.totalItems ?? data.count ?? 0),
   };
 }
 
@@ -28,15 +44,31 @@ export async function getSalesByPeriodAllStores(periodStart: Date, periodEnd: Da
     aggregate: "true",
   });
   const data = await apiFetch(`/sales?${params}`);
+
+  if (Array.isArray(data)) {
+    const totalRevenue = data.reduce(
+      (sum: number, item: any) => sum + Number(item.totalAmount || item.price || 0),
+      0
+    );
+    return {
+      totalRevenue,
+      totalItems: data.length,
+    };
+  }
+
   if (data.sales && Array.isArray(data.sales)) {
-    const totalRevenue = data.sales.reduce((sum: number, item: any) => sum + (item.totalAmount || item.price || 0), 0);
+    const totalRevenue = Number(data.totalRevenue) || data.sales.reduce(
+      (sum: number, item: any) => sum + Number(item.totalAmount || item.price || 0),
+      0
+    );
     return {
       totalRevenue,
       totalItems: data.sales.length,
     };
   }
+
   return {
-    totalRevenue: data.totalRevenue ?? data.totalAmount ?? 0,
-    totalItems: data.totalItems ?? data.count ?? 0,
+    totalRevenue: Number(data.totalRevenue ?? data.totalAmount ?? 0),
+    totalItems: Number(data.totalItems ?? data.count ?? 0),
   };
 }

@@ -195,7 +195,7 @@ export default function HomeScreen() {
     try {
       setLoadingRequests(true);
       const [reqData, delData, pulloutData, storesData] = await Promise.all([
-        apiFetch(`/wine-requests?storeId=${profile.locationId}&status=receiving`),
+        apiFetch(`/wine-requests?storeId=${profile.locationId}&status=outbound,receiving`),
         apiFetch(`/deliveries?storeId=${profile.locationId}&status=dispatched,receiving`),
         apiFetch(`/pullout-requests?sourceStoreId=${profile.locationId}&status=pending,in_progress`),
         getStores(),

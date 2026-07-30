@@ -2,6 +2,7 @@ import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { apiFetch } from "@/lib/api";
 import { logActivity } from "@/lib/utils/activityLogger";
+import { formatDate } from "@/lib/utils/format";
 import { InventoryBottle, PulloutRequest, WineRequest } from "@/types";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { CameraView, useCameraPermissions } from "expo-camera";
@@ -245,36 +246,55 @@ export default function WineRequestDetail() {
 
       const scannedBottleId = data;
 
-      Alert.alert(
-        "✓ Received",
-        `${item.wineName} has been received.\n\nWould you like to tag a storage location for this bottle?`,
-        [
-          {
-            text: "Tag Location",
-            onPress: () => {
-              router.replace({
-                pathname: "/tagging",
-                params: {
-                  bottleId: scannedBottleId,
-                  mode: "tagging",
-                  source: "wine-request",
-                  fromRequestId: id,
-                },
-              });
+      if (allReceived) {
+        Alert.alert(
+          "✓ All Items Received",
+          `${item.wineName} has been received.\n\nAll bottles in this request have been received! Would you like to tag a storage location?`,
+          [
+            {
+              text: "Tag Location",
+              onPress: () => {
+                router.replace({
+                  pathname: "/tagging",
+                  params: {
+                    bottleId: scannedBottleId,
+                    mode: "tagging",
+                    source: "wine-request",
+                    fromRequestId: id,
+                  },
+                });
+              },
             },
-          },
-          {
-            text: "Scan Next",
-            onPress: () => {
-              setScanning(true);
+            {
+              text: "Scan Next",
+              onPress: () => {
+                setScanning(true);
+              },
             },
-          },
-          {
-            text: "Done",
-            style: "cancel",
-          },
-        ],
-      );
+            {
+              text: "Done",
+              style: "cancel",
+            },
+          ],
+        );
+      } else {
+        Alert.alert(
+          "✓ Received",
+          `${item.wineName} has been received.`,
+          [
+            {
+              text: "Scan Next",
+              onPress: () => {
+                setScanning(true);
+              },
+            },
+            {
+              text: "Done",
+              style: "cancel",
+            },
+          ],
+        );
+      }
 
       fetchRequest();
     } catch (error) {
@@ -467,7 +487,7 @@ export default function WineRequestDetail() {
               });
 
               setRequest(prev => prev ? { ...prev, items: newItems, status: newStatus as any } : prev);
-              
+
               const nextVerified = new Set(verifiedBottleIds);
               pendingBottles.forEach(b => nextVerified.add(b.bottleId));
               setVerifiedBottleIds(nextVerified);
@@ -488,7 +508,7 @@ export default function WineRequestDetail() {
 
   const handleBatchNoQR = async (bottleId: string) => {
     if (!request || isProcessing.current) return;
-    
+
     if (verifiedBottleIds.has(bottleId) || skippedBottleIds.has(bottleId)) return;
 
     const expectedBottle = batchBottles.find(b => b.bottleId === bottleId);
@@ -499,8 +519,8 @@ export default function WineRequestDetail() {
       "Mark this bottle as received even though there is no QR label?",
       [
         { text: "Cancel", style: "cancel" },
-        { 
-          text: "Receive", 
+        {
+          text: "Receive",
           onPress: async () => {
             isProcessing.current = true;
             try {
@@ -536,7 +556,7 @@ export default function WineRequestDetail() {
                 const newItems = [...request.items];
                 const currentIngressed = newItems[itemIndex].ingressedQty || 0;
                 newItems[itemIndex].ingressedQty = currentIngressed + 1;
-                
+
                 const isAllReceived = newItems.every(i => (i.ingressedQty || 0) + (i.skippedQty || 0) >= i.qty);
                 const newStatus = isAllReceived ? "ingress_complete" : request.status;
 
@@ -547,13 +567,13 @@ export default function WineRequestDetail() {
                     status: newStatus,
                   }),
                 });
-                
+
                 setRequest(prev => prev ? { ...prev, items: newItems, status: newStatus as any } : prev);
               }
-              
+
               setVerifiedBottleIds(prev => new Set(prev).add(bottleId));
               await AsyncStorage.removeItem(`dashboard_metrics_${request.storeId}`);
-              
+
             } catch (err) {
               console.error(err);
               Alert.alert("Error", "Failed to receive bottle manually.");
@@ -645,7 +665,7 @@ export default function WineRequestDetail() {
             <ArrowLeft size={24} color={theme.primary} />
           </TouchableOpacity>
           <View style={{ flex: 1 }}>
-            <Text style={[styles.title, { color: theme.primary }]}>Batch Receive</Text>
+            <Text style={[styles.title, { color: theme.primary }]}>Batch Recsseive</Text>
             <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
               REQ: {request?.id.slice(0, 8).toUpperCase()}
             </Text>
@@ -759,7 +779,7 @@ export default function WineRequestDetail() {
           </ScrollView>
 
           <View style={{ padding: 24, backgroundColor: theme.background }}>
-            {verifiedBottleIds.size > 0 && (
+            {isAllBatchHandled && verifiedBottleIds.size > 0 && (
               <TouchableOpacity
                 style={[styles.scanButton, { marginBottom: 12, backgroundColor: "#10b981", shadowColor: "#10b981" }]}
                 onPress={() => {
@@ -919,7 +939,7 @@ export default function WineRequestDetail() {
             <Text
               style={[styles.statusDate, { color: statusConfig.color + "AA" }]}
             >
-              {request.createdAt.toLocaleDateString("en-US", {
+              {formatDate(request.createdAt, {
                 weekday: "long",
                 month: "long",
                 day: "numeric",

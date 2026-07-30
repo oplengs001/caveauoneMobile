@@ -93,12 +93,15 @@ export default function CreateWineRequest() {
         });
 
         bottlesData.forEach((b: any) => {
+          const bWineId = b.masterWineId || b.masterWineRef?.id || b.masterWine?.id;
+          const bStoreId = b.storeId || b.storeRef?.id || b.store?.id;
+
           if (
-            b.masterWineRef?.id === wine.id &&
-            b.storeRef?.id &&
-            b.storeRef.id !== profile?.locationId
+            bWineId === wine.id &&
+            bStoreId &&
+            bStoreId !== profile?.locationId
           ) {
-            stockByLoc[b.storeRef.id] = (stockByLoc[b.storeRef.id] || 0) + 1;
+            stockByLoc[bStoreId] = (stockByLoc[bStoreId] || 0) + 1;
             totalStock++;
           }
         });

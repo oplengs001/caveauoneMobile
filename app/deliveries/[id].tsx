@@ -1,5 +1,6 @@
 import { Colors } from "@/constants/theme";
 import { apiFetch } from "@/lib/api";
+import { formatDate } from "@/lib/utils/format";
 import { InventoryBottle, Delivery } from "@/types";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
@@ -352,7 +353,7 @@ export default function DeliveryDetail() {
             <Text
               style={[styles.statusDate, { color: statusConfig.color + "AA" }]}
             >
-              {delivery.createdAt.toLocaleDateString("en-US", {
+              {formatDate(delivery.createdAt, {
                 weekday: "long",
                 month: "long",
                 day: "numeric",

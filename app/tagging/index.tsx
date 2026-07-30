@@ -517,10 +517,8 @@ export default function TaggingScreen() {
         totalAmount = numericPrice;
       }
 
-      // For admin selling: use the bottle's own store, not profile.locationId
-      const effectiveSaleStoreId = profile?.role === "admin"
-        ? ((bottle as any).storeRef?.id || profile?.locationId)
-        : profile?.locationId;
+      const bottleStoreId = bottle.storeId || (bottle as any)?.storeRef?.id || (bottle as any)?.store?.id;
+      const effectiveSaleStoreId = profile?.locationId || bottleStoreId;
 
       await apiFetch("/sales", {
         method: "POST",
@@ -574,11 +572,18 @@ export default function TaggingScreen() {
 
               if (stockCount <= setting.parLevel) {
                 const requestsData = await apiFetch(`/wine-requests?storeId=${storeId}&status=pending`);
-                const pendingRequests: any[] = requestsData.wineRequests || requestsData;
+                const pendingRequests: any[] = Array.isArray(requestsData)
+                  ? requestsData
+                  : requestsData.wineRequests || [];
 
                 let hasPending = false;
                 pendingRequests.forEach((req: any) => {
-                  req.items?.forEach((item: any) => {
+                  const items = Array.isArray(req.items)
+                    ? req.items
+                    : typeof req.items === "string"
+                      ? JSON.parse(req.items)
+                      : [];
+                  items.forEach((item: any) => {
                     if (item.masterWineId === masterWineId) hasPending = true;
                   });
                 });
@@ -2019,16 +2024,14 @@ export default function TaggingScreen() {
         </Animated.View>
       )}
 
-      {(profile?.locationId || (bottle as any)?.storeRef?.id) && (
-        <CustomerPickerModal
-          isOpen={isCustomerModalOpen}
-          onClose={() => setIsCustomerModalOpen(false)}
-          storeId={profile?.locationId || (bottle as any)?.storeRef?.id}
-          theme={theme}
-          onSelectCustomer={setSelectedCustomer}
-          selectedCustomerId={selectedCustomer?.id}
-        />
-      )}
+      <CustomerPickerModal
+        isOpen={isCustomerModalOpen}
+        onClose={() => setIsCustomerModalOpen(false)}
+        storeId={profile?.locationId || bottle?.storeId || (bottle as any)?.storeRef?.id || ""}
+        theme={theme}
+        onSelectCustomer={setSelectedCustomer}
+        selectedCustomerId={selectedCustomer?.id}
+      />
     </SafeAreaView>
   );
 }

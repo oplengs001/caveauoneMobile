@@ -60,7 +60,7 @@ export default function CustomerPickerModal({
     setLoading(true);
     try {
       const data = await apiFetch(`/customers?storeId=${storeId}`);
-      const list: Customer[] = data.customers || data;
+      const list: Customer[] = Array.isArray(data) ? data : (data.customers || []);
       setCustomers(list);
     } catch (err) {
       console.error("Failed to fetch customers", err);

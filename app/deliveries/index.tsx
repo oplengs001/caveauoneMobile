@@ -1,6 +1,7 @@
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { apiFetch } from "@/lib/api";
+import { formatDate } from "@/lib/utils/format";
 import { Delivery } from "@/types";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
 import {
@@ -218,7 +219,7 @@ export default function DeliveriesIndex() {
                         { color: theme.textSecondary },
                       ]}
                     >
-                      {delivery.createdAt.toDate().toLocaleDateString()}
+                      {formatDate(delivery.createdAt)}
                     </Text>
                   </View>
                   <View

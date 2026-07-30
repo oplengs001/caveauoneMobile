@@ -278,11 +278,18 @@ export default function SellScreen() {
 
               if (stockCount <= setting.parLevel) {
                 const requestsData = await apiFetch(`/wine-requests?storeId=${storeId}&status=pending`);
-                const pendingRequests: any[] = requestsData.wineRequests || requestsData;
+                const pendingRequests: any[] = Array.isArray(requestsData)
+                  ? requestsData
+                  : requestsData.wineRequests || [];
 
                 let hasPending = false;
                 pendingRequests.forEach((req: any) => {
-                  req.items?.forEach((item: any) => {
+                  const items = Array.isArray(req.items)
+                    ? req.items
+                    : typeof req.items === "string"
+                      ? JSON.parse(req.items)
+                      : [];
+                  items.forEach((item: any) => {
                     if (item.masterWineId === selectedWine.id) hasPending = true;
                   });
                 });
