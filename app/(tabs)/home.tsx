@@ -20,6 +20,7 @@ import {
   Search,
   Truck,
   Wine,
+  Zap,
 } from "lucide-react-native";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -1014,27 +1015,51 @@ export default function HomeScreen() {
           )}
 
           {isStore && (
-            <TouchableOpacity
-              style={[
-                styles.actionButton,
-                { backgroundColor: "#10b981" },
-              ]}
-              onPress={() =>
-                router.push({ pathname: "/sell" })
-              }
-            >
-              <View style={styles.buttonContent}>
-                <Banknote size={32} color="#ffffff" strokeWidth={1.5} />
-                <View style={styles.buttonTextContainer}>
-                  <Text style={styles.buttonTitle}>
-                    Sell Glass or Bottle
-                  </Text>
-                  <Text style={styles.buttonDesc}>
-                    Scan a bottle to sell by glass or bottle
-                  </Text>
+            <>
+              <TouchableOpacity
+                style={[
+                  styles.actionButton,
+                  { backgroundColor: "#10b981" },
+                ]}
+                onPress={() =>
+                  router.push({ pathname: "/sell" })
+                }
+              >
+                <View style={styles.buttonContent}>
+                  <Banknote size={32} color="#ffffff" strokeWidth={1.5} />
+                  <View style={styles.buttonTextContainer}>
+                    <Text style={styles.buttonTitle}>
+                      Sell Glass or Bottle
+                    </Text>
+                    <Text style={styles.buttonDesc}>
+                      Scan a bottle to sell by glass or bottle
+                    </Text>
+                  </View>
                 </View>
-              </View>
-            </TouchableOpacity>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.actionButton,
+                  { backgroundColor: "#7c3aed" },
+                ]}
+                onPress={() =>
+                  router.push({ pathname: "/pos" })
+                }
+              >
+                <View style={styles.buttonContent}>
+                  <Zap size={32} color="#ffffff" strokeWidth={1.5} />
+                  <View style={styles.buttonTextContainer}>
+                    <Text style={styles.buttonTitle}>
+                      POS Mode
+                    </Text>
+                    <Text style={styles.buttonDesc}>
+                      Fast wine quick sales & staff attribution
+                    </Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            </>
           )}
         </View>
 

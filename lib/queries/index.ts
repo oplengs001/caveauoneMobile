@@ -6,4 +6,5 @@ export * from "./wineRequests";
 export * from "./pulloutRequests";
 export * from "./stockSettings";
 export * from "./sales";
+export * from "./users";
 

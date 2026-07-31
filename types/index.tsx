@@ -3,9 +3,11 @@ import { DocumentReference } from "firebase/firestore";
 export interface AppUser {
   id: string;
   email: string;
+  displayName?: string;
   role: "admin" | "finance" | "store" | "store_manager" | "store_staff" | "warehouse";
   accountId?: string;
   locationId?: string;
+  locationName?: string;
   createdAt: Date;
   pushTokens?: string[];
 }
