@@ -140,7 +140,14 @@ export default function AdminDashboard() {
         getStores(),
       ]);
 
-      const salesList: any[] = Array.isArray(data) ? data : Array.isArray(data.sales) ? data.sales : [];
+      let salesList: any[] = Array.isArray(data) ? data : Array.isArray(data.sales) ? data.sales : [];
+      if (profile?.role === "store_staff" && profile) {
+        salesList = salesList.filter(
+          (item: any) =>
+            item.soldById === profile.id ||
+            (item.soldByEmail && profile.email && item.soldByEmail.toLowerCase() === profile.email.toLowerCase())
+        );
+      }
       let totalRevenue = 0;
       let totalVolume = 0;
 
@@ -552,30 +559,35 @@ export default function AdminDashboard() {
           )}
 
           <View style={styles.metricsRow}>
+            {profile?.role !== "store_staff" && (
+              <TouchableOpacity
+                style={[styles.metricCard, { backgroundColor: theme.primary, flex: 1 }]}
+                onPress={() => router.push({ pathname: "/sales", params: { period: salesPeriod } })}
+              >
+                <Banknote size={22} color="#fff" strokeWidth={2.5} />
+                {loadingSales && !isFirstLoad && !refreshing ? (
+                  <ActivityIndicator color="#fff" size="small" style={{ marginVertical: 2 }} />
+                ) : (
+                  <Text style={styles.metricValue} numberOfLines={1} adjustsFontSizeToFit>
+                    {formatCurrency(salesMetrics.totalRevenue)}
+                  </Text>
+                )}
+                <Text style={styles.metricLabel}>Total Revenue</Text>
+              </TouchableOpacity>
+            )}
+
             <TouchableOpacity
-              style={[styles.metricCard, { backgroundColor: theme.primary, flex: 1 }]}
+              style={[styles.metricCard, { backgroundColor: theme.secondary, flex: 1 }]}
               onPress={() => router.push({ pathname: "/sales", params: { period: salesPeriod } })}
             >
-              <Banknote size={22} color="#fff" strokeWidth={2.5} />
-              {loadingSales && !isFirstLoad && !refreshing ? (
-                <ActivityIndicator color="#fff" size="small" style={{ marginVertical: 2 }} />
-              ) : (
-                <Text style={styles.metricValue} numberOfLines={1} adjustsFontSizeToFit>
-                  {formatCurrency(salesMetrics.totalRevenue)}
-                </Text>
-              )}
-              <Text style={styles.metricLabel}>Total Revenue</Text>
-            </TouchableOpacity>
-
-            <View style={[styles.metricCard, { backgroundColor: theme.secondary, flex: 1 }]}>
               <Wine size={22} color="#fff" strokeWidth={2.5} />
               {loadingSales && !isFirstLoad && !refreshing ? (
                 <ActivityIndicator color="#fff" size="small" style={{ marginVertical: 2 }} />
               ) : (
                 <Text style={styles.metricValue}>{salesMetrics.totalItems}</Text>
               )}
-              <Text style={styles.metricLabel}>Bottles Sold</Text>
-            </View>
+              <Text style={styles.metricLabel}>{profile?.role === "store_staff" ? "My Bottles Sold" : "Bottles Sold"}</Text>
+            </TouchableOpacity>
           </View>
 
           {/* ── Drilldown Mode Tabs & Content ────────────────────────────────── */}

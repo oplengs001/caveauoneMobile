@@ -100,7 +100,9 @@ export default function SalesScreen() {
     totalBaseSales: 0,
     totalGrossSales: 0,
     totalCost: 0,
-    totalBottles: 0
+    totalBottles: 0,
+    categoryCounts: { fast: 0, fine: 0, reserve: 0, standard: 0 },
+    portionCounts: { bottle: 0, glass: 0, carafe: 0 },
   });
 
   // Initialize the state with the passed parameter, or default to "all"
@@ -151,7 +153,7 @@ export default function SalesScreen() {
 
       const data = await apiFetch(`/sales?${params}`);
       const rawList = Array.isArray(data) ? data : Array.isArray(data.sales) ? data.sales : [];
-      const salesData: Sale[] = rawList.map((s: any) => {
+      let salesData: Sale[] = rawList.map((s: any) => {
         const rawDate = s.soldAt || s.createdAt || s.created_at || s.date;
         const d = rawDate ? new Date(rawDate) : new Date();
         const validDate = isNaN(d.getTime()) ? new Date() : d;
@@ -165,23 +167,45 @@ export default function SalesScreen() {
         };
       });
 
+      const isStaffUser = profile?.role === "store_staff";
+      if (isStaffUser && profile) {
+        salesData = salesData.filter(
+          (s: any) =>
+            s.soldById === profile.id ||
+            (s.soldByEmail && profile.email && s.soldByEmail.toLowerCase() === profile.email.toLowerCase())
+        );
+      }
+
       const totalBase = salesData.reduce((sum, s: any) => sum + Number(s.price || 0), 0);
       const totalGross = salesData.reduce((sum, s: any) => sum + Number(s.totalAmount || s.price || 0), 0);
 
       let totalCost = 0;
       let totalVolume = 0;
+      const catCounts = { fast: 0, fine: 0, reserve: 0, standard: 0 };
+      const portionCounts = { bottle: 0, glass: 0, carafe: 0 };
+
       salesData.forEach((s: any) => {
         const rawCost = Number(s.masterWinePrice || s.masterWine?.price || 0);
         const st = (s.saleType || "bottle").toLowerCase();
         if (st === "glass") {
           totalCost += rawCost / 6;
           totalVolume += 1 / 6;
+          portionCounts.glass += 1;
         } else if (st === "carafe") {
           totalCost += (rawCost * 2) / 6;
           totalVolume += 2 / 6;
+          portionCounts.carafe += 1;
         } else {
           totalCost += rawCost;
           totalVolume += Number(s.quantity || 1);
+          portionCounts.bottle += 1;
+        }
+
+        const cat = (s.wineCategory || s.masterWine?.wineCategory || "standard").toLowerCase();
+        if (cat in catCounts) {
+          catCounts[cat as keyof typeof catCounts] += 1;
+        } else {
+          catCounts.standard += 1;
         }
       });
       const roundedBottles = Math.round(totalVolume * 100) / 100;
@@ -191,6 +215,8 @@ export default function SalesScreen() {
         totalGrossSales: totalGross,
         totalCost: totalCost,
         totalBottles: roundedBottles,
+        categoryCounts: catCounts,
+        portionCounts: portionCounts,
       });
 
       setSales(salesData);
@@ -227,115 +253,191 @@ export default function SalesScreen() {
     return period.charAt(0).toUpperCase() + period.slice(1);
   };
 
+  const isStaffUser = profile?.role === "store_staff";
+
   const renderDashboardSummary = () => (
     <View style={styles.summaryContainer}>
       <Text style={[styles.sectionTitle, { color: theme.text }]}>
-        {getPeriodLabel()} Summary
+        {getPeriodLabel()} Summary {isStaffUser ? "(My Sales)" : ""}
       </Text>
 
-      {/* Row 1: Revenue Cards */}
-      <View style={styles.metricsRow}>
-        {/* Gross Revenue */}
-        <View
-          style={[
-            styles.metricCard,
-            { backgroundColor: theme.card, borderColor: theme.border },
-          ]}
-        >
-          <TrendingUp size={20} color={theme.primary} style={styles.metricIcon} />
-          <Text style={[styles.metricLabel, { color: theme.textSecondary }]}>
-            Gross Rev
-          </Text>
-          <Text style={[styles.metricValue, { color: theme.text }]} numberOfLines={1} adjustsFontSizeToFit>
-            {formatCurrency(grossSales)}
-          </Text>
-          <Text style={[styles.metricSubText, { color: theme.textSecondary }]}>
-            Inc. 12% VAT
-          </Text>
-        </View>
+      {isStaffUser ? (
+        <>
+          {/* Staff Summary Card */}
+          <View style={[styles.metricCard, { backgroundColor: theme.primary + "15", borderColor: theme.primary + "30", marginBottom: 16, padding: 16 }]}>
+            <Package size={24} color={theme.primary} style={styles.metricIcon} />
+            <Text style={[styles.metricLabel, { color: theme.primary, fontWeight: "800", letterSpacing: 0.5 }]}>
+              MY BOTTLES SOLD
+            </Text>
+            <Text style={[styles.metricValue, { color: theme.primary, fontSize: 32, marginVertical: 4 }]}>
+              {totalBottles}
+            </Text>
+            <Text style={[styles.metricSubText, { color: theme.textSecondary }]}>
+              {sales.length} transactions by {profile?.displayName || profile?.email?.split("@")[0] || "Logged-in Account"}
+            </Text>
+          </View>
 
-        {/* Net Revenue */}
-        <View
-          style={[
-            styles.metricCard,
-            { backgroundColor: theme.card, borderColor: theme.border },
-          ]}
-        >
-          <Receipt size={20} color={theme.primary} style={styles.metricIcon} />
-          <Text style={[styles.metricLabel, { color: theme.textSecondary }]}>
-            Net Revenue
+          {/* Category Breakdown */}
+          <Text style={[styles.sectionTitle, { color: theme.text, fontSize: 12, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }]}>
+            Segregated by Wine Category
           </Text>
-          <Text style={[styles.metricValue, { color: theme.text }]} numberOfLines={1} adjustsFontSizeToFit>
-            {formatCurrency(totalBaseSales)}
-          </Text>
-          <Text style={[styles.metricSubText, { color: theme.textSecondary }]}>
-            + {formatCurrency(vatAmount)} VAT
-          </Text>
-        </View>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
+            <View style={{ flex: 1, minWidth: 130, backgroundColor: "#f59e0b15", borderColor: "#f59e0b40", borderWidth: 1, padding: 12, borderRadius: 12 }}>
+              <Text style={{ fontSize: 10, fontWeight: "800", color: "#d97706" }}>⚡ FAST MOVING</Text>
+              <Text style={{ fontSize: 18, fontWeight: "900", color: "#b45309", marginTop: 4 }}>
+                {aggregates.categoryCounts.fast} sold
+              </Text>
+            </View>
+            <View style={{ flex: 1, minWidth: 130, backgroundColor: "#ec489915", borderColor: "#ec489940", borderWidth: 1, padding: 12, borderRadius: 12 }}>
+              <Text style={{ fontSize: 10, fontWeight: "800", color: "#be185d" }}>⭐ FINE WINE</Text>
+              <Text style={{ fontSize: 18, fontWeight: "900", color: "#9d174d", marginTop: 4 }}>
+                {aggregates.categoryCounts.fine} sold
+              </Text>
+            </View>
+            <View style={{ flex: 1, minWidth: 130, backgroundColor: "#6366f115", borderColor: "#6366f140", borderWidth: 1, padding: 12, borderRadius: 12 }}>
+              <Text style={{ fontSize: 10, fontWeight: "800", color: "#4338ca" }}>🔒 RESERVE</Text>
+              <Text style={{ fontSize: 18, fontWeight: "900", color: "#3730a3", marginTop: 4 }}>
+                {aggregates.categoryCounts.reserve} sold
+              </Text>
+            </View>
+            <View style={{ flex: 1, minWidth: 130, backgroundColor: "#64748b15", borderColor: "#64748b40", borderWidth: 1, padding: 12, borderRadius: 12 }}>
+              <Text style={{ fontSize: 10, fontWeight: "800", color: "#475569" }}>🍷 STANDARD</Text>
+              <Text style={{ fontSize: 18, fontWeight: "900", color: "#334155", marginTop: 4 }}>
+                {aggregates.categoryCounts.standard} sold
+              </Text>
+            </View>
+          </View>
 
-        {/* Bottles Sold */}
-        <View
-          style={[
-            styles.metricCard,
-            { backgroundColor: theme.card, borderColor: theme.border },
-          ]}
-        >
-          <Package size={20} color={theme.primary} style={styles.metricIcon} />
-          <Text style={[styles.metricLabel, { color: theme.textSecondary }]}>
-            Bottles
+          {/* Portion Breakdown */}
+          <Text style={[styles.sectionTitle, { color: theme.text, fontSize: 12, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }]}>
+            Segregated by Sales Type (Portion)
           </Text>
-          <Text style={[styles.metricValue, { color: "#f59e0b" }]} numberOfLines={1} adjustsFontSizeToFit>
-            {totalBottles}
-          </Text>
-          <Text style={[styles.metricSubText, { color: theme.textSecondary }]}>
-            Total Sold
-          </Text>
-        </View>
-      </View>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
+            <View style={{ flex: 1, minWidth: 100, backgroundColor: theme.card, borderColor: theme.border, borderWidth: 1, padding: 12, borderRadius: 12 }}>
+              <Text style={{ fontSize: 10, fontWeight: "800", color: theme.primary }}>🍾 BOTTLE</Text>
+              <Text style={{ fontSize: 16, fontWeight: "900", color: theme.text, marginTop: 4 }}>
+                {aggregates.portionCounts.bottle} sold
+              </Text>
+            </View>
+            <View style={{ flex: 1, minWidth: 100, backgroundColor: theme.card, borderColor: theme.border, borderWidth: 1, padding: 12, borderRadius: 12 }}>
+              <Text style={{ fontSize: 10, fontWeight: "800", color: "#059669" }}>🍷 GLASS (1/6)</Text>
+              <Text style={{ fontSize: 16, fontWeight: "900", color: theme.text, marginTop: 4 }}>
+                {aggregates.portionCounts.glass} sold
+              </Text>
+            </View>
+            <View style={{ flex: 1, minWidth: 100, backgroundColor: theme.card, borderColor: theme.border, borderWidth: 1, padding: 12, borderRadius: 12 }}>
+              <Text style={{ fontSize: 10, fontWeight: "800", color: "#d97706" }}>🫗 CARAFE (2/6)</Text>
+              <Text style={{ fontSize: 16, fontWeight: "900", color: theme.text, marginTop: 4 }}>
+                {aggregates.portionCounts.carafe} sold
+              </Text>
+            </View>
+          </View>
+        </>
+      ) : (
+        <>
+          {/* Row 1: Revenue Cards */}
+          <View style={styles.metricsRow}>
+            {/* Gross Revenue */}
+            <View
+              style={[
+                styles.metricCard,
+                { backgroundColor: theme.card, borderColor: theme.border },
+              ]}
+            >
+              <TrendingUp size={20} color={theme.primary} style={styles.metricIcon} />
+              <Text style={[styles.metricLabel, { color: theme.textSecondary }]}>
+                Gross Rev
+              </Text>
+              <Text style={[styles.metricValue, { color: theme.text }]} numberOfLines={1} adjustsFontSizeToFit>
+                {formatCurrency(grossSales)}
+              </Text>
+              <Text style={[styles.metricSubText, { color: theme.textSecondary }]}>
+                Inc. 12% VAT
+              </Text>
+            </View>
 
-      {/* Row 2: Profit Card (Full Width) */}
-      <View
-        style={[
-          styles.metricCard,
-          {
-            backgroundColor: netProfit >= 0 ? (Colors.store.success + "15" || "#10b98115") : (Colors.store.danger + "15" || "#ef444415"),
-            borderColor: netProfit >= 0 ? (Colors.store.success + "40" || "#10b98140") : (Colors.store.danger + "40" || "#ef444440"),
-            marginBottom: 12,
-          },
-        ]}
-      >
-        <Banknote size={24} color={netProfit >= 0 ? (Colors.store.success || "#10b981") : (Colors.store.danger || "#ef4444")} style={styles.metricIcon} />
-        <Text
-          style={[
-            styles.metricLabel,
-            { color: theme.textSecondary, marginBottom: 8 },
-          ]}
-        >
-          Net Profit
-        </Text>
-        <Text
-          style={[
-            styles.metricValue,
-            {
-              color:
-                netProfit >= 0
-                  ? Colors.store.success || "#10b981"
-                  : Colors.store.danger || "#ef4444",
-              fontSize: 32,
-            },
-          ]}
-          numberOfLines={1}
-          adjustsFontSizeToFit
-        >
-          {netProfit >= 0 ? "+" : ""}
-          {formatCurrency(netProfit)}
-        </Text>
-        <Text style={[styles.metricSubText, { color: theme.textSecondary, marginTop: 8 }]}>
-          Total Purchase Cost: {formatCurrency(totalCost)}
-        </Text>
-      </View>
+            {/* Net Revenue */}
+            <View
+              style={[
+                styles.metricCard,
+                { backgroundColor: theme.card, borderColor: theme.border },
+              ]}
+            >
+              <Receipt size={20} color={theme.primary} style={styles.metricIcon} />
+              <Text style={[styles.metricLabel, { color: theme.textSecondary }]}>
+                Net Revenue
+              </Text>
+              <Text style={[styles.metricValue, { color: theme.text }]} numberOfLines={1} adjustsFontSizeToFit>
+                {formatCurrency(totalBaseSales)}
+              </Text>
+              <Text style={[styles.metricSubText, { color: theme.textSecondary }]}>
+                + {formatCurrency(vatAmount)} VAT
+              </Text>
+            </View>
 
+            {/* Bottles Sold */}
+            <View
+              style={[
+                styles.metricCard,
+                { backgroundColor: theme.card, borderColor: theme.border },
+              ]}
+            >
+              <Package size={20} color={theme.primary} style={styles.metricIcon} />
+              <Text style={[styles.metricLabel, { color: theme.textSecondary }]}>
+                Bottles
+              </Text>
+              <Text style={[styles.metricValue, { color: "#f59e0b" }]} numberOfLines={1} adjustsFontSizeToFit>
+                {totalBottles}
+              </Text>
+              <Text style={[styles.metricSubText, { color: theme.textSecondary }]}>
+                Total Sold
+              </Text>
+            </View>
+          </View>
 
+          {/* Row 2: Profit Card (Full Width) */}
+          <View
+            style={[
+              styles.metricCard,
+              {
+                backgroundColor: netProfit >= 0 ? (Colors.store.success + "15" || "#10b98115") : (Colors.store.danger + "15" || "#ef444415"),
+                borderColor: netProfit >= 0 ? (Colors.store.success + "40" || "#10b98140") : (Colors.store.danger + "40" || "#ef444440"),
+                marginBottom: 12,
+              },
+            ]}
+          >
+            <Banknote size={24} color={netProfit >= 0 ? (Colors.store.success || "#10b981") : (Colors.store.danger || "#ef4444")} style={styles.metricIcon} />
+            <Text
+              style={[
+                styles.metricLabel,
+                { color: theme.textSecondary, marginBottom: 8 },
+              ]}
+            >
+              Net Profit
+            </Text>
+            <Text
+              style={[
+                styles.metricValue,
+                {
+                  color:
+                    netProfit >= 0
+                      ? Colors.store.success || "#10b981"
+                      : Colors.store.danger || "#ef4444",
+                  fontSize: 32,
+                },
+              ]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+            >
+              {netProfit >= 0 ? "+" : ""}
+              {formatCurrency(netProfit)}
+            </Text>
+            <Text style={[styles.metricSubText, { color: theme.textSecondary, marginTop: 8 }]}>
+              Total Purchase Cost: {formatCurrency(totalCost)}
+            </Text>
+          </View>
+        </>
+      )}
 
       <Text
         style={[
@@ -378,7 +480,7 @@ export default function SalesScreen() {
             <Text style={[styles.bottleIdText, { color: theme.textSecondary }]}>
               ID: {item.readableId || item.bottleId}
             </Text>
-            {cost > 0 && (
+            {!isStaffUser && cost > 0 && (
               <View
                 style={[
                   styles.profitBadge,
@@ -407,14 +509,25 @@ export default function SalesScreen() {
             {formatDate(item.soldAt?.toDate())}
           </Text>
         </View>
-        <View style={styles.priceContainer}>
-          <Text style={[styles.price, { color: theme.primary }]}>
-            {formatCurrency(itemTotal)}
-          </Text>
-          <Text style={[styles.vatText, { color: theme.textSecondary }]}>
-            inc. VAT
-          </Text>
-        </View>
+
+        {isStaffUser ? (
+          <View style={styles.priceContainer}>
+            <View style={{ backgroundColor: theme.primary + "15", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 }}>
+              <Text style={{ fontSize: 12, fontWeight: "800", color: theme.primary }}>
+                {saleType === "glass" ? "🍷 Glass" : saleType === "carafe" ? "🫗 Carafe" : "🍾 Bottle"}
+              </Text>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.priceContainer}>
+            <Text style={[styles.price, { color: theme.primary }]}>
+              {formatCurrency(itemTotal)}
+            </Text>
+            <Text style={[styles.vatText, { color: theme.textSecondary }]}>
+              inc. VAT
+            </Text>
+          </View>
+        )}
       </View>
     );
   };
