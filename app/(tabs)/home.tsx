@@ -278,175 +278,179 @@ export default function HomeScreen() {
         startDate = new Date(0); // for 'all'
       }
 
-      const params = new URLSearchParams({
-        storeId,
-        from: startDate.toISOString(),
-        to: new Date().toISOString(),
-      });
-      const data = await apiFetch(`/sales?${params}`);
-      const salesList = Array.isArray(data) ? data : Array.isArray(data.sales) ? data.sales : [];
-
-      const isStaffUser = profile?.role === "store_staff";
-
-      // If staff user, filter breakdown items to their own sales; if store user / manager, use ALL staff sales
-      const relevantSalesForBreakdown = isStaffUser
-        ? salesList.filter(
-            (s: any) =>
-              s.soldById === profile.id ||
-              (s.soldByEmail && profile.email && s.soldByEmail.toLowerCase() === profile.email.toLowerCase())
-          )
-        : salesList;
-
-      let totalVolume = 0;
-      let totalRevenue = 0;
-      const catCounts = { fast: 0, fine: 0, reserve: 0, standard: 0 };
-      const portionCounts = { bottle: 0, glass: 0, carafe: 0 };
-
-      const wineAggByCategory: Record<string, Record<string, { id: string; name: string; vintage?: string; volume: number }>> = {
-        fast: {},
-        fine: {},
-        reserve: {},
-        standard: {},
-      };
-
-      relevantSalesForBreakdown.forEach((item: any) => {
-        const amt = Number(item.totalAmount || item.price || 0);
-        totalRevenue += amt;
-
-        const st = (item.saleType || "bottle").toLowerCase();
-        let vol = 1;
-        if (st === "glass") {
-          vol = 1 / 6;
-          portionCounts.glass += 1;
-        } else if (st === "carafe") {
-          vol = 2 / 6;
-          portionCounts.carafe += 1;
-        } else {
-          vol = Number(item.quantity || 1);
-          portionCounts.bottle += 1;
-        }
-        totalVolume += vol;
-
-        const cat = (item.wineCategory || item.masterWine?.wineCategory || "standard").toLowerCase();
-        const cKey = cat in catCounts ? cat : "standard";
-        catCounts[cKey as keyof typeof catCounts] += vol;
-
-        const wId = item.masterWineId || item.wineName || item.bottleId || "unknown";
-        const wName = item.wineName || item.masterWine?.name || "Unknown Wine";
-        const wVintage = item.vintage || item.masterWine?.vintage || "";
-
-        if (!wineAggByCategory[cKey][wId]) {
-          wineAggByCategory[cKey][wId] = {
-            id: wId,
-            name: wName,
-            vintage: wVintage,
-            volume: 0,
-          };
-        }
-        wineAggByCategory[cKey][wId].volume += vol;
-      });
-
-      // Round category bottle volumes to 2 decimal places max
-      Object.keys(catCounts).forEach((key) => {
-        const k = key as keyof typeof catCounts;
-        catCounts[k] = Math.round(catCounts[k] * 100) / 100;
-      });
-
-      // Extract Top 5 per category
-      const top5ByCategory: {
-        fast: Array<{ name: string; vintage?: string; volume: number; pctOfTotal: number }>;
-        fine: Array<{ name: string; vintage?: string; volume: number; pctOfTotal: number }>;
-        reserve: Array<{ name: string; vintage?: string; volume: number; pctOfTotal: number }>;
-        standard: Array<{ name: string; vintage?: string; volume: number; pctOfTotal: number }>;
-      } = {
-        fast: [],
-        fine: [],
-        reserve: [],
-        standard: [],
-      };
-
-      (Object.keys(wineAggByCategory) as Array<keyof typeof top5ByCategory>).forEach((cKey) => {
-        const wines = Object.values(wineAggByCategory[cKey]);
-        wines.forEach((w) => {
-          w.volume = Math.round(w.volume * 100) / 100;
+      if (profile?.role === "store_staff") {
+        const params = new URLSearchParams({
+          storeId,
+          from: startDate.toISOString(),
+          to: new Date().toISOString(),
         });
-        wines.sort((a, b) => b.volume - a.volume);
-
-        top5ByCategory[cKey] = wines.slice(0, 5).map((w) => ({
-          name: w.name,
-          vintage: w.vintage,
-          volume: w.volume,
-          pctOfTotal: totalVolume > 0 ? Math.round((w.volume / totalVolume) * 1000) / 10 : 0,
-        }));
-      });
-
-      // Calculate Staff Rankings across ALL store sales (for both staff and store users)
-      const staffMap: Record<string, { id: string; name: string; email: string; volume: number; salesCount: number }> = {};
-
-      salesList.forEach((item: any) => {
-        const stId = item.soldById || item.soldByEmail || item.soldByName || "unknown";
-        const stName = item.soldByName || (item.soldByEmail ? item.soldByEmail.split("@")[0] : "Staff Member");
-        const stEmail = item.soldByEmail || "";
-
-        const st = (item.saleType || "bottle").toLowerCase();
-        let vol = 1;
-        if (st === "glass") vol = 1 / 6;
-        else if (st === "carafe") vol = 2 / 6;
-        else vol = Number(item.quantity || 1);
-
-        if (!staffMap[stId]) {
-          staffMap[stId] = {
-            id: stId,
-            name: stName,
-            email: stEmail,
-            volume: 0,
-            salesCount: 0,
-          };
-        }
-        staffMap[stId].volume += vol;
-        staffMap[stId].salesCount += 1;
-      });
-
-      const sortedStaffList = Object.values(staffMap)
-        .map((s) => ({
-          ...s,
-          volume: Math.round(s.volume * 100) / 100,
-        }))
-        .sort((a, b) => b.volume - a.volume);
-
-      let myRankNum = 0;
-      let myStaffVol = 0;
-
-      const staffRankingsList = sortedStaffList.map((s, idx) => {
-        const isMe = Boolean(
-          (profile?.id && s.id === profile.id) ||
-          (profile?.email && s.email && s.email.toLowerCase() === profile.email.toLowerCase())
+        const data = await apiFetch(`/sales?${params}`);
+        const salesList = Array.isArray(data) ? data : Array.isArray(data.sales) ? data.sales : [];
+        const staffSales = salesList.filter(
+          (s: any) =>
+            s.soldById === profile.id ||
+            (s.soldByEmail && profile.email && s.soldByEmail.toLowerCase() === profile.email.toLowerCase())
         );
-        if (isMe) {
-          myRankNum = idx + 1;
-          myStaffVol = s.volume;
-        }
-        return {
-          ...s,
-          rank: idx + 1,
-          isMe,
-        };
-      });
 
-      setSalesDashboardMetrics({
-        soldCount: Math.round(totalVolume * 100) / 100,
-        totalRevenue: isStaffUser ? 0 : totalRevenue,
-        activeBottles,
-        categoryCounts: catCounts,
-        portionCounts: portionCounts,
-        top5WinesByCategory: top5ByCategory,
-        staffRankings: staffRankingsList,
-        myRankInfo: {
-          rank: myRankNum,
-          totalStaff: staffRankingsList.length,
-          volume: myStaffVol,
-        },
-      });
+        let totalVolume = 0;
+        const catCounts = { fast: 0, fine: 0, reserve: 0, standard: 0 };
+        const portionCounts = { bottle: 0, glass: 0, carafe: 0 };
+
+        const wineAggByCategory: Record<string, Record<string, { id: string; name: string; vintage?: string; volume: number }>> = {
+          fast: {},
+          fine: {},
+          reserve: {},
+          standard: {},
+        };
+
+        staffSales.forEach((item: any) => {
+          const st = (item.saleType || "bottle").toLowerCase();
+          let vol = 1;
+          if (st === "glass") {
+            vol = 1 / 6;
+            portionCounts.glass += 1;
+          } else if (st === "carafe") {
+            vol = 2 / 6;
+            portionCounts.carafe += 1;
+          } else {
+            vol = Number(item.quantity || 1);
+            portionCounts.bottle += 1;
+          }
+          totalVolume += vol;
+
+          const cat = (item.wineCategory || item.masterWine?.wineCategory || "standard").toLowerCase();
+          const cKey = cat in catCounts ? cat : "standard";
+          catCounts[cKey as keyof typeof catCounts] += vol;
+
+          const wId = item.masterWineId || item.wineName || item.bottleId || "unknown";
+          const wName = item.wineName || item.masterWine?.name || "Unknown Wine";
+          const wVintage = item.vintage || item.masterWine?.vintage || "";
+
+          if (!wineAggByCategory[cKey][wId]) {
+            wineAggByCategory[cKey][wId] = {
+              id: wId,
+              name: wName,
+              vintage: wVintage,
+              volume: 0,
+            };
+          }
+          wineAggByCategory[cKey][wId].volume += vol;
+        });
+
+        // Round category bottle volumes to 2 decimal places max
+        Object.keys(catCounts).forEach((key) => {
+          const k = key as keyof typeof catCounts;
+          catCounts[k] = Math.round(catCounts[k] * 100) / 100;
+        });
+
+        // Extract Top 5 per category
+        const top5ByCategory: {
+          fast: Array<{ name: string; vintage?: string; volume: number; pctOfTotal: number }>;
+          fine: Array<{ name: string; vintage?: string; volume: number; pctOfTotal: number }>;
+          reserve: Array<{ name: string; vintage?: string; volume: number; pctOfTotal: number }>;
+          standard: Array<{ name: string; vintage?: string; volume: number; pctOfTotal: number }>;
+        } = {
+          fast: [],
+          fine: [],
+          reserve: [],
+          standard: [],
+        };
+
+        (Object.keys(wineAggByCategory) as Array<keyof typeof top5ByCategory>).forEach((cKey) => {
+          const wines = Object.values(wineAggByCategory[cKey]);
+          wines.forEach((w) => {
+            w.volume = Math.round(w.volume * 100) / 100;
+          });
+          wines.sort((a, b) => b.volume - a.volume);
+
+          top5ByCategory[cKey] = wines.slice(0, 5).map((w) => ({
+            name: w.name,
+            vintage: w.vintage,
+            volume: w.volume,
+            pctOfTotal: totalVolume > 0 ? Math.round((w.volume / totalVolume) * 1000) / 10 : 0,
+          }));
+        });
+
+        // Calculate Staff Rankings across all store sales
+        const staffMap: Record<string, { id: string; name: string; email: string; volume: number; salesCount: number }> = {};
+
+        salesList.forEach((item: any) => {
+          const stId = item.soldById || item.soldByEmail || item.soldByName || "unknown";
+          const stName = item.soldByName || (item.soldByEmail ? item.soldByEmail.split("@")[0] : "Staff Member");
+          const stEmail = item.soldByEmail || "";
+
+          const st = (item.saleType || "bottle").toLowerCase();
+          let vol = 1;
+          if (st === "glass") vol = 1 / 6;
+          else if (st === "carafe") vol = 2 / 6;
+          else vol = Number(item.quantity || 1);
+
+          if (!staffMap[stId]) {
+            staffMap[stId] = {
+              id: stId,
+              name: stName,
+              email: stEmail,
+              volume: 0,
+              salesCount: 0,
+            };
+          }
+          staffMap[stId].volume += vol;
+          staffMap[stId].salesCount += 1;
+        });
+
+        const sortedStaffList = Object.values(staffMap)
+          .map((s) => ({
+            ...s,
+            volume: Math.round(s.volume * 100) / 100,
+          }))
+          .sort((a, b) => b.volume - a.volume);
+
+        let myRankNum = 0;
+        let myStaffVol = 0;
+
+        const staffRankingsList = sortedStaffList.map((s, idx) => {
+          const isMe = Boolean(
+            (profile?.id && s.id === profile.id) ||
+            (profile?.email && s.email && s.email.toLowerCase() === profile.email.toLowerCase())
+          );
+          if (isMe) {
+            myRankNum = idx + 1;
+            myStaffVol = s.volume;
+          }
+          return {
+            ...s,
+            rank: idx + 1,
+            isMe,
+          };
+        });
+
+        setSalesDashboardMetrics({
+          soldCount: Math.round(totalVolume * 100) / 100,
+          totalRevenue: 0,
+          activeBottles,
+          categoryCounts: catCounts,
+          portionCounts: portionCounts,
+          top5WinesByCategory: top5ByCategory,
+          staffRankings: staffRankingsList,
+          myRankInfo: {
+            rank: myRankNum,
+            totalStaff: staffRankingsList.length,
+            volume: myStaffVol,
+          },
+        });
+      } else {
+        const salesResult = await getSalesByPeriod(storeId, startDate, new Date());
+        setSalesDashboardMetrics({
+          soldCount: salesResult.totalItems,
+          totalRevenue: salesResult.totalRevenue,
+          activeBottles,
+          categoryCounts: { fast: 0, fine: 0, reserve: 0, standard: 0 },
+          portionCounts: { bottle: 0, glass: 0, carafe: 0 },
+          top5WinesByCategory: { fast: [], fine: [], reserve: [], standard: [] },
+          staffRankings: [],
+          myRankInfo: { rank: 0, totalStaff: 0, volume: 0 },
+        });
+      }
     } catch (err) {
       console.error("Failed to fetch sales metrics:", err);
     } finally {
@@ -1052,40 +1056,37 @@ export default function HomeScreen() {
               </View>
             )}
 
-            {/* Main Dashboard Breakdowns for Store Users & Staff */}
-            <View style={{ marginTop: 12, gap: 16 }}>
-              {/* Staff Leaderboard & My Rank Card */}
-              <View style={{ backgroundColor: theme.card, borderRadius: 16, borderWidth: 1, borderColor: theme.border, padding: 14 }}>
-                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: theme.border, gap: 8 }}>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1 }}>
-                    <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: "#f59e0b20", alignItems: "center", justifyContent: "center" }}>
-                      <Text style={{ fontSize: 18 }}>
-                        {isStoreStaff ? (salesDashboardMetrics.myRankInfo.rank === 1 ? "🥇" : salesDashboardMetrics.myRankInfo.rank === 2 ? "🥈" : salesDashboardMetrics.myRankInfo.rank === 3 ? "🥉" : "🏆") : "🏆"}
-                      </Text>
+            {/* Main Dashboard Breakdowns for Store Staff */}
+            {isStoreStaff && (
+              <View style={{ marginTop: 12, gap: 16 }}>
+                {/* Staff Leaderboard & My Rank Card */}
+                <View style={{ backgroundColor: theme.card, borderRadius: 16, borderWidth: 1, borderColor: theme.border, padding: 14 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: theme.border, gap: 8 }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1 }}>
+                      <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: "#f59e0b20", alignItems: "center", justifyContent: "center" }}>
+                        <Text style={{ fontSize: 18 }}>
+                          {salesDashboardMetrics.myRankInfo.rank === 1 ? "🥇" : salesDashboardMetrics.myRankInfo.rank === 2 ? "🥈" : salesDashboardMetrics.myRankInfo.rank === 3 ? "🥉" : "🏆"}
+                        </Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 14, fontWeight: "900", color: theme.text }}>
+                          {salesDashboardMetrics.myRankInfo.rank === 1
+                            ? "🥇 You're Rank #1 Staff Leader!"
+                            : salesDashboardMetrics.myRankInfo.rank > 0
+                              ? `🏆 You're Rank #${salesDashboardMetrics.myRankInfo.rank} of ${salesDashboardMetrics.myRankInfo.totalStaff} Staff`
+                              : "Staff Sales Leaderboard"}
+                        </Text>
+                        <Text style={{ fontSize: 10, fontWeight: "600", color: theme.textSecondary, marginTop: 1 }}>
+                          {salesDashboardMetrics.myRankInfo.volume} btl sold by your account
+                        </Text>
+                      </View>
                     </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 14, fontWeight: "900", color: theme.text }}>
-                        {isStoreStaff
-                          ? (salesDashboardMetrics.myRankInfo.rank === 1
-                              ? "🥇 You're Rank #1 Staff Leader!"
-                              : salesDashboardMetrics.myRankInfo.rank > 0
-                                ? `🏆 You're Rank #${salesDashboardMetrics.myRankInfo.rank} of ${salesDashboardMetrics.myRankInfo.totalStaff} Staff`
-                                : "Staff Sales Leaderboard")
-                          : "🏆 Staff Sales Leaderboard"}
-                      </Text>
-                      <Text style={{ fontSize: 10, fontWeight: "600", color: theme.textSecondary, marginTop: 1 }}>
-                        {isStoreStaff
-                          ? `${salesDashboardMetrics.myRankInfo.volume} btl sold by your account`
-                          : `${salesDashboardMetrics.staffRankings.length} staff members logging sales`}
+                    <View style={{ backgroundColor: theme.primary + "15", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}>
+                      <Text style={{ fontSize: 10, fontWeight: "800", color: theme.primary }}>
+                        {salesPeriod === "today" ? "Today" : salesPeriod === "week" ? "This Week" : "All Time"}
                       </Text>
                     </View>
                   </View>
-                  <View style={{ backgroundColor: theme.primary + "15", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}>
-                    <Text style={{ fontSize: 10, fontWeight: "800", color: theme.primary }}>
-                      {salesPeriod === "today" ? "Today" : salesPeriod === "week" ? "This Week" : "All Time"}
-                    </Text>
-                  </View>
-                </View>
 
                   {/* Staff Rankings List */}
                   {salesDashboardMetrics.staffRankings.length === 0 ? (
@@ -1271,6 +1272,7 @@ export default function HomeScreen() {
                   </View>
                 </View>
               </View>
+            )}
 
           </View>
         )}
