@@ -1041,7 +1041,7 @@ export default function HomeScreen() {
               <TouchableOpacity
                 style={[
                   styles.actionButton,
-                  { backgroundColor: "#7c3aed" },
+                  { backgroundColor: Colors.store.primary },
                 ]}
                 onPress={() =>
                   router.push({ pathname: "/pos" })

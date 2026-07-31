@@ -64,7 +64,7 @@ const formatCurrency = (amount: number) => {
 export default function POSScreen() {
   const router = useRouter();
   const { profile } = useAuth();
-  const theme = profile?.role === "admin" ? Colors.admin : profile?.role === "store" ? Colors.store : Colors.warehouse;
+  const theme = Colors.store;
 
   const storeId = profile?.locationId || null;
 
@@ -351,7 +351,7 @@ export default function POSScreen() {
         </TouchableOpacity>
         <View style={{ flex: 1, marginLeft: 8 }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-            <Zap size={18} color="#7c3aed" />
+            <Zap size={18} color={theme.primary} />
             <Text style={[styles.headerTitle, { color: theme.text }]}>POS Terminal</Text>
           </View>
           <Text style={{ fontSize: 11, fontWeight: "600", color: theme.textSecondary }}>
