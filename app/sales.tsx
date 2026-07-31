@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   Package,
   Receipt,
+  RotateCcw,
   Sliders,
   TrendingUp,
 } from "lucide-react-native";
@@ -90,6 +91,8 @@ export default function SalesScreen() {
 
   const [sales, setSales] = useState<Sale[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isClearingCache, setIsClearingCache] = useState(false);
+  const [cacheToast, setCacheToast] = useState<string | null>(null);
   const [isFilterModalVisible, setFilterModalVisible] = useState(false);
 
   // Aggregate state
@@ -108,10 +111,15 @@ export default function SalesScreen() {
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
 
-  const fetchSales = async () => {
+  const fetchSales = async (forceNoCache = false) => {
     if (period === "custom" && !customStart) return;
 
-    setLoading(true);
+    if (forceNoCache) {
+      setIsClearingCache(true);
+    } else {
+      setLoading(true);
+    }
+
     try {
       let startDate: Date | null = null;
       let endDate: Date | null = null;
@@ -139,6 +147,7 @@ export default function SalesScreen() {
       if (activeStoreId) params.set("storeId", activeStoreId);
       if (startDate) params.set("from", startDate.toISOString());
       if (endDate) params.set("to", endDate.toISOString());
+      if (forceNoCache) params.set("_t", Date.now().toString());
 
       const data = await apiFetch(`/sales?${params}`);
       const rawList = Array.isArray(data) ? data : Array.isArray(data.sales) ? data.sales : [];
@@ -189,7 +198,15 @@ export default function SalesScreen() {
       console.error("Error fetching sales:", error);
     } finally {
       setLoading(false);
+      setIsClearingCache(false);
     }
+  };
+
+  const handleClearCache = async () => {
+    setCacheToast(null);
+    await fetchSales(true);
+    setCacheToast("Cache cleared! Fresh sales loaded.");
+    setTimeout(() => setCacheToast(null), 3000);
   };
 
   useEffect(() => {
@@ -426,13 +443,32 @@ export default function SalesScreen() {
         <Text style={[styles.headerTitle, { color: theme.text }]} numberOfLines={1}>
           {activeStoreName ? `${activeStoreName} Sales` : "Sales Report"}
         </Text>
-        <TouchableOpacity
-          style={styles.filterIcon}
-          onPress={() => setFilterModalVisible(true)}
-        >
-          <Sliders size={24} color={theme.textSecondary} />
-        </TouchableOpacity>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <TouchableOpacity
+            style={[styles.filterIcon, { backgroundColor: theme.primary + "15", paddingHorizontal: 10, borderRadius: 10, height: 38, flexDirection: "row", alignItems: "center", gap: 4 }]}
+            onPress={handleClearCache}
+            disabled={isClearingCache}
+          >
+            <RotateCcw size={16} color={theme.primary} />
+            <Text style={{ fontSize: 11, fontWeight: "700", color: theme.primary }}>
+              {isClearingCache ? "Clearing..." : "Clear Cache"}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.filterIcon}
+            onPress={() => setFilterModalVisible(true)}
+          >
+            <Sliders size={22} color={theme.textSecondary} />
+          </TouchableOpacity>
+        </View>
       </View>
+
+      {cacheToast && (
+        <View style={{ backgroundColor: "#dcfce7", borderColor: "#86efac", borderWidth: 1, padding: 10, marginHorizontal: 16, marginTop: 8, borderRadius: 10, flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <RotateCcw size={14} color="#15803d" />
+          <Text style={{ fontSize: 12, fontWeight: "700", color: "#15803d" }}>{cacheToast}</Text>
+        </View>
+      )}
 
       {loading ? (
         <View style={styles.centerContainer}>

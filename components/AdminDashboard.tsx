@@ -15,6 +15,7 @@ import {
   ChevronUp,
   ClipboardList,
   LogOut,
+  RotateCcw,
   Search,
   Truck,
   Wine
@@ -108,8 +109,12 @@ export default function AdminDashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [isFirstLoad, setIsFirstLoad] = useState(true);
 
+  const [cacheToast, setCacheToast] = useState<string | null>(null);
+  const [isClearingCache, setIsClearingCache] = useState(false);
+
   // ── Sales metrics ──────────────────────────────────────────────────────────
-  const fetchSalesMetrics = useCallback(async () => {
+  const fetchSalesMetrics = useCallback(async (forceNoCache = false) => {
+    if (forceNoCache) setIsClearingCache(true);
     setLoadingSales(true);
     try {
       let startDate: Date;
@@ -128,6 +133,7 @@ export default function AdminDashboard() {
         from: startDate.toISOString(),
         to: new Date().toISOString(),
       });
+      if (forceNoCache) params.set("_t", Date.now().toString());
 
       const [data, allStores] = await Promise.all([
         apiFetch(`/sales?${params}`),
@@ -317,8 +323,16 @@ export default function AdminDashboard() {
       console.error("Admin: failed to fetch sales metrics", e);
     } finally {
       setLoadingSales(false);
+      setIsClearingCache(false);
     }
   }, [salesPeriod]);
+
+  const handleClearCache = async () => {
+    setCacheToast(null);
+    await fetchSalesMetrics(true);
+    setCacheToast("Cache cleared! Sales metrics updated.");
+    setTimeout(() => setCacheToast(null), 3000);
+  };
 
   // ── Per-store inventory alerts ──────────────────────────────────────────────
   const fetchStoreAlerts = useCallback(async () => {
@@ -495,28 +509,47 @@ export default function AdminDashboard() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>All-Store Sales</Text>
-            <View style={styles.periodRow}>
-              {(["today", "week", "all"] as const).map((p) => (
-                <TouchableOpacity
-                  key={p}
-                  onPress={() => setSalesPeriod(p)}
-                  style={[
-                    styles.periodBtn,
-                    salesPeriod === p && { backgroundColor: theme.primary },
-                  ]}
-                >
-                  <Text
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <TouchableOpacity
+                style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, backgroundColor: theme.primary + "15", flexDirection: "row", alignItems: "center", gap: 4 }}
+                onPress={handleClearCache}
+                disabled={isClearingCache}
+              >
+                <RotateCcw size={12} color={theme.primary} />
+                <Text style={{ fontSize: 11, fontWeight: "700", color: theme.primary }}>
+                  {isClearingCache ? "Clearing..." : "Clear Cache"}
+                </Text>
+              </TouchableOpacity>
+              <View style={styles.periodRow}>
+                {(["today", "week", "all"] as const).map((p) => (
+                  <TouchableOpacity
+                    key={p}
+                    onPress={() => setSalesPeriod(p)}
                     style={[
-                      styles.periodBtnText,
-                      salesPeriod === p && { color: "#fff" },
+                      styles.periodBtn,
+                      salesPeriod === p && { backgroundColor: theme.primary },
                     ]}
                   >
-                    {p === "today" ? "Today" : p === "week" ? "Week" : "All"}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+                    <Text
+                      style={[
+                        styles.periodBtnText,
+                        salesPeriod === p && { color: "#fff" },
+                      ]}
+                    >
+                      {p === "today" ? "Today" : p === "week" ? "Week" : "All"}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             </View>
           </View>
+
+          {cacheToast && (
+            <View style={{ backgroundColor: "#dcfce7", borderColor: "#86efac", borderWidth: 1, padding: 8, marginBottom: 12, borderRadius: 10, flexDirection: "row", alignItems: "center", gap: 6 }}>
+              <RotateCcw size={12} color="#15803d" />
+              <Text style={{ fontSize: 11, fontWeight: "700", color: "#15803d" }}>{cacheToast}</Text>
+            </View>
+          )}
 
           <View style={styles.metricsRow}>
             <TouchableOpacity
