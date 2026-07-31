@@ -278,179 +278,181 @@ export default function HomeScreen() {
         startDate = new Date(0); // for 'all'
       }
 
-      if (profile?.role === "store_staff") {
-        const params = new URLSearchParams({
-          storeId,
-          from: startDate.toISOString(),
-          to: new Date().toISOString(),
-        });
-        const data = await apiFetch(`/sales?${params}`);
-        const salesList = Array.isArray(data) ? data : Array.isArray(data.sales) ? data.sales : [];
-        const staffSales = salesList.filter(
-          (s: any) =>
-            s.soldById === profile.id ||
-            (s.soldByEmail && profile.email && s.soldByEmail.toLowerCase() === profile.email.toLowerCase())
-        );
+      const params = new URLSearchParams({
+        storeId,
+        from: startDate.toISOString(),
+        to: new Date().toISOString(),
+      });
+      const data = await apiFetch(`/sales?${params}`);
+      const salesList = Array.isArray(data) ? data : Array.isArray(data.sales) ? data.sales : [];
 
-        let totalVolume = 0;
-        const catCounts = { fast: 0, fine: 0, reserve: 0, standard: 0 };
-        const portionCounts = { bottle: 0, glass: 0, carafe: 0 };
+      const isStaffOnly = profile?.role === "store_staff";
 
-        const wineAggByCategory: Record<string, Record<string, { id: string; name: string; vintage?: string; volume: number }>> = {
-          fast: {},
-          fine: {},
-          reserve: {},
-          standard: {},
-        };
+      // For store_staff, filter sales to logged-in user only
+      // For store / store_manager, use ALL store sales
+      const salesToAnalyze = isStaffOnly
+        ? salesList.filter(
+            (s: any) =>
+              s.soldById === profile.id ||
+              (s.soldByEmail && profile.email && s.soldByEmail.toLowerCase() === profile.email.toLowerCase())
+          )
+        : salesList;
 
-        staffSales.forEach((item: any) => {
-          const st = (item.saleType || "bottle").toLowerCase();
-          let vol = 1;
-          if (st === "glass") {
-            vol = 1 / 6;
-            portionCounts.glass += 1;
-          } else if (st === "carafe") {
-            vol = 2 / 6;
-            portionCounts.carafe += 1;
-          } else {
-            vol = Number(item.quantity || 1);
-            portionCounts.bottle += 1;
-          }
-          totalVolume += vol;
+      let totalVolume = 0;
+      let storeTotalRevenue = 0;
+      const catCounts = { fast: 0, fine: 0, reserve: 0, standard: 0 };
+      const portionCounts = { bottle: 0, glass: 0, carafe: 0 };
 
-          const cat = (item.wineCategory || item.masterWine?.wineCategory || "standard").toLowerCase();
-          const cKey = cat in catCounts ? cat : "standard";
-          catCounts[cKey as keyof typeof catCounts] += vol;
+      const wineAggByCategory: Record<string, Record<string, { id: string; name: string; vintage?: string; volume: number }>> = {
+        fast: {},
+        fine: {},
+        reserve: {},
+        standard: {},
+      };
 
-          const wId = item.masterWineId || item.wineName || item.bottleId || "unknown";
-          const wName = item.wineName || item.masterWine?.name || "Unknown Wine";
-          const wVintage = item.vintage || item.masterWine?.vintage || "";
-
-          if (!wineAggByCategory[cKey][wId]) {
-            wineAggByCategory[cKey][wId] = {
-              id: wId,
-              name: wName,
-              vintage: wVintage,
-              volume: 0,
-            };
-          }
-          wineAggByCategory[cKey][wId].volume += vol;
-        });
-
-        // Round category bottle volumes to 2 decimal places max
-        Object.keys(catCounts).forEach((key) => {
-          const k = key as keyof typeof catCounts;
-          catCounts[k] = Math.round(catCounts[k] * 100) / 100;
-        });
-
-        // Extract Top 5 per category
-        const top5ByCategory: {
-          fast: Array<{ name: string; vintage?: string; volume: number; pctOfTotal: number }>;
-          fine: Array<{ name: string; vintage?: string; volume: number; pctOfTotal: number }>;
-          reserve: Array<{ name: string; vintage?: string; volume: number; pctOfTotal: number }>;
-          standard: Array<{ name: string; vintage?: string; volume: number; pctOfTotal: number }>;
-        } = {
-          fast: [],
-          fine: [],
-          reserve: [],
-          standard: [],
-        };
-
-        (Object.keys(wineAggByCategory) as Array<keyof typeof top5ByCategory>).forEach((cKey) => {
-          const wines = Object.values(wineAggByCategory[cKey]);
-          wines.forEach((w) => {
-            w.volume = Math.round(w.volume * 100) / 100;
-          });
-          wines.sort((a, b) => b.volume - a.volume);
-
-          top5ByCategory[cKey] = wines.slice(0, 5).map((w) => ({
-            name: w.name,
-            vintage: w.vintage,
-            volume: w.volume,
-            pctOfTotal: totalVolume > 0 ? Math.round((w.volume / totalVolume) * 1000) / 10 : 0,
-          }));
-        });
-
-        // Calculate Staff Rankings across all store sales
-        const staffMap: Record<string, { id: string; name: string; email: string; volume: number; salesCount: number }> = {};
-
-        salesList.forEach((item: any) => {
-          const stId = item.soldById || item.soldByEmail || item.soldByName || "unknown";
-          const stName = item.soldByName || (item.soldByEmail ? item.soldByEmail.split("@")[0] : "Staff Member");
-          const stEmail = item.soldByEmail || "";
-
-          const st = (item.saleType || "bottle").toLowerCase();
-          let vol = 1;
-          if (st === "glass") vol = 1 / 6;
-          else if (st === "carafe") vol = 2 / 6;
-          else vol = Number(item.quantity || 1);
-
-          if (!staffMap[stId]) {
-            staffMap[stId] = {
-              id: stId,
-              name: stName,
-              email: stEmail,
-              volume: 0,
-              salesCount: 0,
-            };
-          }
-          staffMap[stId].volume += vol;
-          staffMap[stId].salesCount += 1;
-        });
-
-        const sortedStaffList = Object.values(staffMap)
-          .map((s) => ({
-            ...s,
-            volume: Math.round(s.volume * 100) / 100,
-          }))
-          .sort((a, b) => b.volume - a.volume);
-
-        let myRankNum = 0;
-        let myStaffVol = 0;
-
-        const staffRankingsList = sortedStaffList.map((s, idx) => {
-          const isMe = Boolean(
-            (profile?.id && s.id === profile.id) ||
-            (profile?.email && s.email && s.email.toLowerCase() === profile.email.toLowerCase())
-          );
-          if (isMe) {
-            myRankNum = idx + 1;
-            myStaffVol = s.volume;
-          }
-          return {
-            ...s,
-            rank: idx + 1,
-            isMe,
-          };
-        });
-
-        setSalesDashboardMetrics({
-          soldCount: Math.round(totalVolume * 100) / 100,
-          totalRevenue: 0,
-          activeBottles,
-          categoryCounts: catCounts,
-          portionCounts: portionCounts,
-          top5WinesByCategory: top5ByCategory,
-          staffRankings: staffRankingsList,
-          myRankInfo: {
-            rank: myRankNum,
-            totalStaff: staffRankingsList.length,
-            volume: myStaffVol,
-          },
-        });
-      } else {
-        const salesResult = await getSalesByPeriod(storeId, startDate, new Date());
-        setSalesDashboardMetrics({
-          soldCount: salesResult.totalItems,
-          totalRevenue: salesResult.totalRevenue,
-          activeBottles,
-          categoryCounts: { fast: 0, fine: 0, reserve: 0, standard: 0 },
-          portionCounts: { bottle: 0, glass: 0, carafe: 0 },
-          top5WinesByCategory: { fast: [], fine: [], reserve: [], standard: [] },
-          staffRankings: [],
-          myRankInfo: { rank: 0, totalStaff: 0, volume: 0 },
+      // Calculate gross revenue for entire store if store / store_manager
+      if (!isStaffOnly) {
+        salesList.forEach((s: any) => {
+          const amt = Number(s.totalAmount || s.price || 0);
+          storeTotalRevenue += amt;
         });
       }
+
+      salesToAnalyze.forEach((item: any) => {
+        const st = (item.saleType || "bottle").toLowerCase();
+        let vol = 1;
+        if (st === "glass") {
+          vol = 1 / 6;
+          portionCounts.glass += 1;
+        } else if (st === "carafe") {
+          vol = 2 / 6;
+          portionCounts.carafe += 1;
+        } else {
+          vol = Number(item.quantity || 1);
+          portionCounts.bottle += 1;
+        }
+        totalVolume += vol;
+
+        const cat = (item.wineCategory || item.masterWine?.wineCategory || "standard").toLowerCase();
+        const cKey = cat in catCounts ? cat : "standard";
+        catCounts[cKey as keyof typeof catCounts] += vol;
+
+        const wId = item.masterWineId || item.wineName || item.bottleId || "unknown";
+        const wName = item.wineName || item.masterWine?.name || "Unknown Wine";
+        const wVintage = item.vintage || item.masterWine?.vintage || "";
+
+        if (!wineAggByCategory[cKey][wId]) {
+          wineAggByCategory[cKey][wId] = {
+            id: wId,
+            name: wName,
+            vintage: wVintage,
+            volume: 0,
+          };
+        }
+        wineAggByCategory[cKey][wId].volume += vol;
+      });
+
+      // Round category bottle volumes to 2 decimal places max
+      Object.keys(catCounts).forEach((key) => {
+        const k = key as keyof typeof catCounts;
+        catCounts[k] = Math.round(catCounts[k] * 100) / 100;
+      });
+
+      // Extract Top 5 per category
+      const top5ByCategory: {
+        fast: Array<{ name: string; vintage?: string; volume: number; pctOfTotal: number }>;
+        fine: Array<{ name: string; vintage?: string; volume: number; pctOfTotal: number }>;
+        reserve: Array<{ name: string; vintage?: string; volume: number; pctOfTotal: number }>;
+        standard: Array<{ name: string; vintage?: string; volume: number; pctOfTotal: number }>;
+      } = {
+        fast: [],
+        fine: [],
+        reserve: [],
+        standard: [],
+      };
+
+      (Object.keys(wineAggByCategory) as Array<keyof typeof top5ByCategory>).forEach((cKey) => {
+        const wines = Object.values(wineAggByCategory[cKey]);
+        wines.forEach((w) => {
+          w.volume = Math.round(w.volume * 100) / 100;
+        });
+        wines.sort((a, b) => b.volume - a.volume);
+
+        top5ByCategory[cKey] = wines.slice(0, 5).map((w) => ({
+          name: w.name,
+          vintage: w.vintage,
+          volume: w.volume,
+          pctOfTotal: totalVolume > 0 ? Math.round((w.volume / totalVolume) * 1000) / 10 : 0,
+        }));
+      });
+
+      // Calculate Staff Rankings across all store sales
+      const staffMap: Record<string, { id: string; name: string; email: string; volume: number; salesCount: number }> = {};
+
+      salesList.forEach((item: any) => {
+        const stId = item.soldById || item.soldByEmail || item.soldByName || "unknown";
+        const stName = item.soldByName || (item.soldByEmail ? item.soldByEmail.split("@")[0] : "Staff Member");
+        const stEmail = item.soldByEmail || "";
+
+        const st = (item.saleType || "bottle").toLowerCase();
+        let vol = 1;
+        if (st === "glass") vol = 1 / 6;
+        else if (st === "carafe") vol = 2 / 6;
+        else vol = Number(item.quantity || 1);
+
+        if (!staffMap[stId]) {
+          staffMap[stId] = {
+            id: stId,
+            name: stName,
+            email: stEmail,
+            volume: 0,
+            salesCount: 0,
+          };
+        }
+        staffMap[stId].volume += vol;
+        staffMap[stId].salesCount += 1;
+      });
+
+      const sortedStaffList = Object.values(staffMap)
+        .map((s) => ({
+          ...s,
+          volume: Math.round(s.volume * 100) / 100,
+        }))
+        .sort((a, b) => b.volume - a.volume);
+
+      let myRankNum = 0;
+      let myStaffVol = 0;
+
+      const staffRankingsList = sortedStaffList.map((s, idx) => {
+        const isMe = Boolean(
+          (profile?.id && s.id === profile.id) ||
+          (profile?.email && s.email && s.email.toLowerCase() === profile.email.toLowerCase())
+        );
+        if (isMe) {
+          myRankNum = idx + 1;
+          myStaffVol = s.volume;
+        }
+        return {
+          ...s,
+          rank: idx + 1,
+          isMe,
+        };
+      });
+
+      setSalesDashboardMetrics({
+        soldCount: Math.round(totalVolume * 100) / 100,
+        totalRevenue: isStaffOnly ? 0 : storeTotalRevenue,
+        activeBottles,
+        categoryCounts: catCounts,
+        portionCounts: portionCounts,
+        top5WinesByCategory: top5ByCategory,
+        staffRankings: staffRankingsList,
+        myRankInfo: {
+          rank: myRankNum,
+          totalStaff: staffRankingsList.length,
+          volume: myStaffVol,
+        },
+      });
     } catch (err) {
       console.error("Failed to fetch sales metrics:", err);
     } finally {
