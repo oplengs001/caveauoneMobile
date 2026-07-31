@@ -3,7 +3,7 @@ import { useAuth } from "@/context/AuthContext";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { apiFetch } from "@/lib/api";
 import { clearToken } from "@/lib/auth";
-import { getSalesByPeriodAllStores, getStores } from "@/lib/queries";
+import { getStores } from "@/lib/queries";
 import { Delivery, PulloutRequest } from "@/types";
 import { useFocusEffect, useRouter } from "expo-router";
 import {
@@ -19,7 +19,7 @@ import {
   Truck,
   Wine
 } from "lucide-react-native";
-import React, { useCallback, useState, useEffect } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -52,7 +52,7 @@ interface StoreSalesBreakdown {
 }
 
 interface TypeSalesBreakdown {
-  type: "bottle" | "glass" | "karaf";
+  type: "bottle" | "glass" | "carafe";
   label: string;
   count: number;
   revenue: number;
@@ -167,7 +167,7 @@ export default function AdminDashboard() {
       > = {
         bottle: { label: "Full Bottle", count: 0, revenue: 0, volume: 0, stores: {} },
         glass: { label: "Glass (1/6)", count: 0, revenue: 0, volume: 0, stores: {} },
-        karaf: { label: "Karaf (2/6)", count: 0, revenue: 0, volume: 0, stores: {} },
+        carafe: { label: "Carafe (2/6)", count: 0, revenue: 0, volume: 0, stores: {} },
       };
 
       const categoryAgg: Record<
@@ -196,7 +196,7 @@ export default function AdminDashboard() {
         let vol = 1;
         if (st === "glass") {
           vol = 1 / 6;
-        } else if (st === "karaf") {
+        } else if (st === "carafe") {
           vol = 2 / 6;
         } else {
           vol = Number(item.quantity || 1);
@@ -221,7 +221,7 @@ export default function AdminDashboard() {
         storeAgg[sId].volume += vol;
         storeAgg[sId].count += 1;
 
-        const tKey = st === "glass" ? "glass" : st === "karaf" ? "karaf" : "bottle";
+        const tKey = st === "glass" ? "glass" : st === "carafe" ? "carafe" : "bottle";
         if (!storeAgg[sId].typeCounts[tKey]) {
           storeAgg[sId].typeCounts[tKey] = { count: 0, revenue: 0 };
         }
@@ -269,7 +269,7 @@ export default function AdminDashboard() {
           count: val.count,
           percentage: totalRevenue > 0 ? Math.round((val.revenue / totalRevenue) * 100) : 0,
           types: Object.entries(val.typeCounts).map(([tk, tv]) => ({
-            label: tk === "glass" ? "Glass (1/6)" : tk === "karaf" ? "Karaf (2/6)" : "Full Bottle",
+            label: tk === "glass" ? "Glass (1/6)" : tk === "carafe" ? "Carafe (2/6)" : "Full Bottle",
             count: tv.count,
             revenue: tv.revenue,
           })),
@@ -862,7 +862,7 @@ export default function AdminDashboard() {
                       >
                         <View style={[styles.typeBadge, { backgroundColor: bgBadgeColor + "18" }]}>
                           <Text style={[styles.typeBadgeText, { color: bgBadgeColor }]}>
-                            {isBottle ? "🍾 BOTTLE" : isGlass ? "🍷 GLASS" : "🍶 KARAF"}
+                            {isBottle ? "🍾 BOTTLE" : isGlass ? "🍷 GLASS" : "🫗 CARAFE"}
                           </Text>
                         </View>
                         <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
@@ -1086,8 +1086,8 @@ export default function AdminDashboard() {
             >
               <Banknote size={32} color="#fff" strokeWidth={1.5} />
               <View style={{ flex: 1 }}>
-                <Text style={styles.actionTitle}>Sell Bottle</Text>
-                <Text style={styles.actionDesc}>Scan a bottle QR to process a sale</Text>
+                <Text style={styles.actionTitle}>Sell Glass or Bottle</Text>
+                <Text style={styles.actionDesc}>Scan a bottle QR to process a sale by glass or bottle</Text>
               </View>
             </TouchableOpacity>
 

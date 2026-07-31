@@ -1027,10 +1027,10 @@ export default function HomeScreen() {
                 <Banknote size={32} color="#ffffff" strokeWidth={1.5} />
                 <View style={styles.buttonTextContainer}>
                   <Text style={styles.buttonTitle}>
-                    Sell Bottle
+                    Sell Glass or Bottle
                   </Text>
                   <Text style={styles.buttonDesc}>
-                    Scan a bottle to mark it as sold
+                    Scan a bottle to sell by glass or bottle
                   </Text>
                 </View>
               </View>

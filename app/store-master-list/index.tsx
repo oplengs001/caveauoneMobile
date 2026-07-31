@@ -159,6 +159,8 @@ export default function StoreMasterListScreen() {
   const [sheetPar, setSheetPar] = useState("");
   const [sheetSafety, setSheetSafety] = useState("");
   const [sheetSellingPrice, setSheetSellingPrice] = useState("");
+  const [sheetGlassPrice, setSheetGlassPrice] = useState("");
+  const [sheetCarafePrice, setSheetCarafePrice] = useState("");
   const [sheetDiscontinued, setSheetDiscontinued] = useState(false);
   const [sheetWineCategory, setSheetWineCategory] = useState<"fast" | "fine" | "reserve" | "none">("none");
   const [sheetVatMode, setSheetVatMode] = useState<"included" | "excluded">("excluded");
@@ -352,6 +354,8 @@ export default function StoreMasterListScreen() {
     setSheetPar(entry.setting?.parLevel?.toString() ?? "");
     setSheetSafety(entry.setting?.safetyStock?.toString() ?? "");
     setSheetSellingPrice(entry.setting?.sellingPrice?.toString() ?? "");
+    setSheetGlassPrice(entry.setting?.glassPrice?.toString() ?? "");
+    setSheetCarafePrice(entry.setting?.carafePrice?.toString() ?? "");
     setSheetDiscontinued(entry.setting?.discontinued ?? false);
 
     let cat: "fast" | "fine" | "reserve" | "none" = "none";
@@ -386,6 +390,8 @@ export default function StoreMasterListScreen() {
           parLevel: par,
           safetyStock: safety,
           sellingPrice: sheetSellingPrice ? parseFloat(sheetSellingPrice) : null,
+          glassPrice: sheetGlassPrice ? parseFloat(sheetGlassPrice) : null,
+          carafePrice: sheetCarafePrice ? parseFloat(sheetCarafePrice) : null,
           discontinued: sheetDiscontinued,
           wineCategory: sheetWineCategory === "none" ? null : sheetWineCategory,
           vatMode: sheetVatMode,
@@ -1155,25 +1161,14 @@ export default function StoreMasterListScreen() {
                 </View>
                 <View style={styles.divider} />
 
-                {/* Selling Price */}
-                <View style={styles.settingRow}>
-                  <View style={styles.settingTextContainer}>
-                    <Text style={styles.fieldLabel}>SELLING PRICE</Text>
-                    <Text style={styles.fieldHint}>
-                      The retail price of this wine at this store.
-                    </Text>
-                  </View>
-                  <View style={{ alignItems: "flex-end", gap: 8 }}>
-                    <View style={styles.priceInputContainer}>
-                      <Text style={styles.currencyPrefix}>₱</Text>
-                      <TextInput
-                        style={[styles.input, styles.inputPrice]}
-                        value={sheetSellingPrice}
-                        onChangeText={setSheetSellingPrice}
-                        keyboardType="decimal-pad"
-                        placeholder="0.00"
-                        placeholderTextColor="#94a3b8"
-                      />
+                {/* Selling Prices (Bottle, Glass, Carafe) */}
+                <View style={[styles.settingRow, { flexDirection: "column", alignItems: "stretch", gap: 12 }]}>
+                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                    <View style={styles.settingTextContainer}>
+                      <Text style={styles.fieldLabel}>PRICING & VAT</Text>
+                      <Text style={styles.fieldHint}>
+                        Set retail prices per bottle, glass (1/6), and carafe (2/6).
+                      </Text>
                     </View>
                     <View style={{ flexDirection: "row", backgroundColor: Colors.store.primary + "1A", borderRadius: 8, padding: 2 }}>
                       <TouchableOpacity
@@ -1208,6 +1203,54 @@ export default function StoreMasterListScreen() {
                       >
                         <Text style={{ fontSize: 10, fontWeight: "800", color: sheetVatMode === "included" ? Colors.store.primary : Colors.store.primary + "80" }}>INC VAT</Text>
                       </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  {/* Bottle Price */}
+                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                    <Text style={{ fontSize: 13, fontWeight: "600", color: theme.text }}>🍾 Bottle Price</Text>
+                    <View style={styles.priceInputContainer}>
+                      <Text style={styles.currencyPrefix}>₱</Text>
+                      <TextInput
+                        style={[styles.input, styles.inputPrice]}
+                        value={sheetSellingPrice}
+                        onChangeText={setSheetSellingPrice}
+                        keyboardType="decimal-pad"
+                        placeholder="0.00"
+                        placeholderTextColor="#94a3b8"
+                      />
+                    </View>
+                  </View>
+
+                  {/* Glass Price */}
+                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                    <Text style={{ fontSize: 13, fontWeight: "600", color: theme.text }}>🍷 Glass Price (1/6)</Text>
+                    <View style={styles.priceInputContainer}>
+                      <Text style={styles.currencyPrefix}>₱</Text>
+                      <TextInput
+                        style={[styles.input, styles.inputPrice]}
+                        value={sheetGlassPrice}
+                        onChangeText={setSheetGlassPrice}
+                        keyboardType="decimal-pad"
+                        placeholder="0.00"
+                        placeholderTextColor="#94a3b8"
+                      />
+                    </View>
+                  </View>
+
+                  {/* Carafe Price */}
+                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                    <Text style={{ fontSize: 13, fontWeight: "600", color: theme.text }}>🫗 Carafe Price (2/6)</Text>
+                    <View style={styles.priceInputContainer}>
+                      <Text style={styles.currencyPrefix}>₱</Text>
+                      <TextInput
+                        style={[styles.input, styles.inputPrice]}
+                        value={sheetCarafePrice}
+                        onChangeText={setSheetCarafePrice}
+                        keyboardType="decimal-pad"
+                        placeholder="0.00"
+                        placeholderTextColor="#94a3b8"
+                      />
                     </View>
                   </View>
                 </View>

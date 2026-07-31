@@ -158,6 +158,12 @@ export default function LoginScreen() {
             >
               <Text style={styles.testButtonText}>Login as Store</Text>
             </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.testButton}
+              onPress={() => quickLogin("gstaff@gmail.com", "123456")}
+            >
+              <Text style={styles.testButtonText}>Login as Staff</Text>
+            </TouchableOpacity>
           </View>
         </View>
 

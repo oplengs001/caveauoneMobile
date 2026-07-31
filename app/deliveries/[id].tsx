@@ -6,6 +6,7 @@ import { CameraView, useCameraPermissions } from "expo-camera";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import {
   ArrowLeft,
+  Ban,
   CheckCircle2,
   Clock,
   Package,
@@ -150,7 +151,7 @@ export default function DeliveryDetail() {
         ...item,
         ingressedQty: (item.ingressedQty || 0) + 1,
       };
-      const allReceived = newItems.every((i) => (i.ingressedQty || 0) >= i.qty);
+      const allReceived = newItems.every((i) => (i.ingressedQty || 0) + (i.skippedQty || 0) >= i.qty);
       const newStatus = allReceived ? "ingress_complete" : "receiving";
 
       await apiFetch(`/deliveries/${delivery.id}`, {
@@ -202,6 +203,102 @@ export default function DeliveryDetail() {
       ]);
     } finally {
       isProcessing.current = false;
+    }
+  };
+
+  const handleManualReceive = (itemIndex: number) => {
+    if (!delivery || isProcessing.current) return;
+    const item = delivery.items[itemIndex];
+    const ingressedQty = item.ingressedQty || 0;
+    const targetQty = item.qty;
+
+    if (ingressedQty >= targetQty) {
+      Alert.alert("Fully Received", "All units of this wine have already been received.");
+      return;
+    }
+
+    const remaining = targetQty - ingressedQty;
+
+    Alert.alert(
+      "Manual Receive (Skip QR)",
+      `Receive 1 unit of ${item.wineName} manually without scanning QR?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Receive 1 Unit",
+          onPress: () => processManualReceive(itemIndex, 1),
+        },
+        ...(remaining > 1
+          ? [
+              {
+                text: `Receive All Remaining (${remaining})`,
+                onPress: () => processManualReceive(itemIndex, remaining),
+              },
+            ]
+          : []),
+      ]
+    );
+  };
+
+  const processManualReceive = async (itemIndex: number, count: number) => {
+    if (!delivery) return;
+    setLoading(true);
+    try {
+      const item = delivery.items[itemIndex];
+      const currentIngressed = item.ingressedQty || 0;
+      const remainingNeeded = Math.max(0, item.qty - currentIngressed);
+      const receiveToAdd = Math.min(count, remainingNeeded);
+
+      if (receiveToAdd <= 0) return;
+
+      // Update matching outbound bottles in backend if available
+      try {
+        const bottles = await apiFetch(
+          `/bottles?masterWineId=${item.masterWineId}&status=outbound&limit=${receiveToAdd}`
+        );
+        const matchingBottles = Array.isArray(bottles) ? bottles : (bottles.bottles || []);
+        for (const b of matchingBottles) {
+          await apiFetch(`/bottles/${b.id}`, {
+            method: "PATCH",
+            body: JSON.stringify({
+              status: "received",
+              storeId: delivery.storeId,
+              locationId: null,
+              outboundStoreId: null,
+            }),
+          });
+        }
+      } catch (err) {
+        console.warn("Manual receive bottle status update error:", err);
+      }
+
+      const newItems = [...delivery.items];
+      newItems[itemIndex] = {
+        ...item,
+        ingressedQty: currentIngressed + receiveToAdd,
+      };
+      const allReceived = newItems.every((i) => (i.ingressedQty || 0) >= i.qty);
+      const newStatus = allReceived ? "ingress_complete" : "receiving";
+
+      await apiFetch(`/deliveries/${delivery.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          items: newItems,
+          status: newStatus,
+        }),
+      });
+
+      Alert.alert(
+        "✓ Received Manually",
+        `Received ${receiveToAdd} unit(s) of ${item.wineName} without QR scan.`
+      );
+
+      fetchDelivery();
+    } catch (error) {
+      console.error("Error receiving manually:", error);
+      Alert.alert("Error", "Failed to receive item manually.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -420,15 +517,28 @@ export default function DeliveryDetail() {
                 )}
               </View>
 
-              {/* Pulled qty indicator */}
+              {/* Received qty indicator & Manual Receive Action (Skip QR) */}
               {(delivery.status === "dispatched" ||
                 delivery.status === "receiving" ||
                 delivery.status === "ingress_complete") && (
-                <View style={styles.progressContainer}>
-                  <Text style={styles.progressText}>
-                    {wine.ingressedQty || 0} / {wine.qty}
-                  </Text>
-                  <Text style={styles.progressLabel}>RECEIVED</Text>
+                <View style={{ alignItems: "flex-end", gap: 6 }}>
+                  <View style={styles.progressContainer}>
+                    <Text style={styles.progressText}>
+                      {wine.ingressedQty || 0} / {wine.qty}
+                    </Text>
+                    <Text style={styles.progressLabel}>RECEIVED</Text>
+                  </View>
+
+                  {(wine.ingressedQty || 0) < wine.qty &&
+                    (delivery.status === "dispatched" || delivery.status === "receiving") && (
+                    <TouchableOpacity
+                      onPress={() => handleManualReceive(idx)}
+                      style={styles.manualReceiveBtn}
+                    >
+                      <PackageCheck size={12} color="#10b981" strokeWidth={2.5} />
+                      <Text style={styles.manualReceiveText}>Manual Receive</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               )}
             </View>
@@ -592,4 +702,18 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   cancelScanText: { color: "#fff", fontSize: 16, fontWeight: "700" },
+  manualReceiveBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "rgba(16, 185, 129, 0.12)",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  manualReceiveText: {
+    color: "#10b981",
+    fontSize: 11,
+    fontWeight: "800",
+  },
 });

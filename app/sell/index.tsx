@@ -62,7 +62,7 @@ export default function SellScreen() {
   const [bottlesList, setBottlesList] = useState<BottleWithLocation[]>([]);
   const [selectedBottleId, setSelectedBottleId] = useState<string | null>(null);
   const [openBottle, setOpenBottle] = useState<InventoryBottle | null>(null);
-  const [saleType, setSaleType] = useState<"bottle" | "glass" | "karaf">("bottle");
+  const [saleType, setSaleType] = useState<"bottle" | "glass" | "carafe">("bottle");
 
   const [isFetchingLocations, setIsFetchingLocations] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -201,16 +201,33 @@ export default function SellScreen() {
         if (settingsList.length > 0) {
           const setting = settingsList[0];
           setWineCategory(setting.wineCategory ?? null);
-          if (setting.sellingPrice) setSalePrice(setting.sellingPrice.toString());
           if (setting.vatMode) setStoreVatMode(setting.vatMode);
-        } else if (wine.price) {
+
+          let priceToUse: number | null = null;
+          const storeCarafePrice = setting.carafePrice;
+          if (saleType === "glass" && setting.glassPrice != null) {
+            priceToUse = setting.glassPrice;
+          } else if (saleType === "carafe" && storeCarafePrice != null) {
+            priceToUse = storeCarafePrice;
+          } else if (saleType === "bottle" && setting.sellingPrice != null) {
+            priceToUse = setting.sellingPrice;
+          }
+
+          if (priceToUse != null) setSalePrice(priceToUse.toFixed(2));
+          else if (saleType === "bottle" && wine.price) setSalePrice(wine.price.toString());
+          else setSalePrice("");
+        } else if (saleType === "bottle" && wine.price) {
           setSalePrice(wine.price.toString());
+        } else {
+          setSalePrice("");
         }
-      } else if (wine.price) {
+      } else if (saleType === "bottle" && wine.price) {
         setSalePrice(wine.price.toString());
+      } else {
+        setSalePrice("");
       }
 
-      // For Glass or Karaf: skip locate & verify entirely!
+      // For Glass or Carafe: skip locate & verify entirely!
       // Select open bottle if available, otherwise select first available bottle.
       if (saleType !== "bottle") {
         if (foundOpenBottle) {
@@ -230,7 +247,7 @@ export default function SellScreen() {
     }
   };
 
-  const handleSelectPortion = (type: "bottle" | "glass" | "karaf") => {
+  const handleSelectPortion = (type: "bottle" | "glass" | "carafe") => {
     setSaleType(type);
     setStep("search");
   };
@@ -294,7 +311,7 @@ export default function SellScreen() {
       if (saleType === "glass") {
         glassCount = 0.1667;
         glassesDeducted = 1;
-      } else if (saleType === "karaf") {
+      } else if (saleType === "carafe") {
         glassCount = 0.3333;
         glassesDeducted = 2;
       }
@@ -517,14 +534,14 @@ export default function SellScreen() {
       }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
           <Text style={{ fontSize: 20 }}>
-            {saleType === "glass" ? "🍷" : saleType === "karaf" ? "🫗" : "🍾"}
+            {saleType === "glass" ? "🍷" : saleType === "carafe" ? "🫗" : "🍾"}
           </Text>
           <View>
             <Text style={{ fontSize: 10, fontWeight: "800", color: theme.primary, textTransform: "uppercase", letterSpacing: 0.5 }}>
               Selling Portion
             </Text>
             <Text style={{ fontSize: 14, fontWeight: "700", color: theme.text }}>
-              {saleType === "glass" ? "Glass (1/6 Bottle)" : saleType === "karaf" ? "Karaf (2/6 Bottle)" : "Whole Bottle"}
+              {saleType === "glass" ? "Glass (1/6 Bottle)" : saleType === "carafe" ? "Carafe (2/6 Bottle)" : "Whole Bottle"}
             </Text>
           </View>
         </View>
@@ -627,13 +644,13 @@ export default function SellScreen() {
 
         <TouchableOpacity
           style={[styles.verifyOptionBtn, { backgroundColor: theme.card, borderColor: theme.border, padding: 18 }]}
-          onPress={() => handleSelectPortion("karaf")}
+          onPress={() => handleSelectPortion("carafe")}
         >
           <View style={[styles.verifyIconBox, { backgroundColor: theme.primary + "20", width: 50, height: 50, borderRadius: 25 }]}>
             <Text style={{ fontSize: 24 }}>🫗</Text>
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={[styles.verifyOptionTitle, { color: theme.text, fontSize: 17 }]}>Karaf (2/6 Bottle)</Text>
+            <Text style={[styles.verifyOptionTitle, { color: theme.text, fontSize: 17 }]}>Carafe (2/6 Bottle)</Text>
             <Text style={[styles.verifyOptionDesc, { color: theme.textSecondary, fontSize: 13 }]}>
               Pour 2 glasses / carafe (applies to 75cl bottles)
             </Text>
@@ -895,20 +912,20 @@ export default function SellScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              onPress={() => setSaleType("karaf")}
+              onPress={() => setSaleType("carafe")}
               style={{
                 flex: 1,
                 paddingVertical: 12,
                 borderRadius: 12,
                 alignItems: "center",
                 borderWidth: 1.5,
-                borderColor: saleType === "karaf" ? theme.primary : theme.border,
-                backgroundColor: saleType === "karaf" ? theme.primary + "15" : theme.card,
+                borderColor: saleType === "carafe" ? theme.primary : theme.border,
+                backgroundColor: saleType === "carafe" ? theme.primary + "15" : theme.card,
               }}
             >
               <Text style={{ fontSize: 18 }}>🫗</Text>
-              <Text style={{ fontSize: 13, fontWeight: "700", color: saleType === "karaf" ? theme.primary : theme.text, marginTop: 4 }}>
-                Karaf
+              <Text style={{ fontSize: 13, fontWeight: "700", color: saleType === "carafe" ? theme.primary : theme.text, marginTop: 4 }}>
+                Carafe
               </Text>
               <Text style={{ fontSize: 10, color: theme.textSecondary }}>2/6 bottle</Text>
             </TouchableOpacity>
@@ -1063,13 +1080,13 @@ export default function SellScreen() {
       <View style={[styles.content, { alignItems: "center", justifyContent: "center" }]}>
         <CheckCircle2 size={80} color={theme.primary} />
         <Text style={[styles.headerText, { color: theme.text, marginTop: 24 }]}>
-          {saleType === "glass" ? "Glass Sold! 🍷" : saleType === "karaf" ? "Karaf Sold! 🫗" : "Bottle Sold! 🍾"}
+          {saleType === "glass" ? "Glass Sold! 🍷" : saleType === "carafe" ? "Carafe Sold! 🫗" : "Bottle Sold! 🍾"}
         </Text>
         <Text style={[styles.subText, { color: theme.textSecondary, textAlign: "center", marginBottom: 24 }]}>
           {saleType === "glass"
             ? "1 glass (1/6 bottle) has been recorded."
-            : saleType === "karaf"
-              ? "1 karaf (2/6 bottle) has been recorded."
+            : saleType === "carafe"
+              ? "1 carafe (2/6 bottle) has been recorded."
               : "The bottle has been marked as sold."}
         </Text>
 
@@ -1108,7 +1125,7 @@ export default function SellScreen() {
           <View style={{ flexDirection: "row", justifyContent: "center", marginTop: 6, gap: 6 }}>
             <View style={{ backgroundColor: theme.primary + "1A", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 }}>
               <Text style={{ fontSize: 11, fontWeight: "700", color: theme.primary }}>
-                {saleType === "glass" ? "🍷 Glass (1/6)" : saleType === "karaf" ? "🫗 Karaf (2/6)" : "🍾 Whole Bottle"}
+                {saleType === "glass" ? "🍷 Glass (1/6)" : saleType === "carafe" ? "🫗 Carafe (2/6)" : "🍾 Whole Bottle"}
               </Text>
             </View>
           </View>

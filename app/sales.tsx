@@ -167,7 +167,7 @@ export default function SalesScreen() {
         if (st === "glass") {
           totalCost += rawCost / 6;
           totalVolume += 1 / 6;
-        } else if (st === "karaf") {
+        } else if (st === "carafe") {
           totalCost += (rawCost * 2) / 6;
           totalVolume += 2 / 6;
         } else {
@@ -337,7 +337,7 @@ export default function SalesScreen() {
 
     const rawCost = Number(item.masterWinePrice || item.masterWine?.price || 0);
     const saleType = (item.saleType || "bottle").toLowerCase();
-    const cost = saleType === "glass" ? rawCost / 6 : saleType === "karaf" ? (rawCost * 2) / 6 : rawCost;
+    const cost = saleType === "glass" ? rawCost / 6 : saleType === "carafe" ? (rawCost * 2) / 6 : rawCost;
 
     const itemProfit = price - cost;
     const isProfitable = itemProfit >= 0;

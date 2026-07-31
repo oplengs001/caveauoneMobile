@@ -16,7 +16,7 @@ export async function getSalesByPeriod(storeId: string, periodStart: Date, perio
     totalRevenue += Number(item.totalAmount || item.price || 0);
     if (item.saleType === "glass") {
       totalVolume += 1 / 6;
-    } else if (item.saleType === "karaf") {
+    } else if (item.saleType === "carafe") {
       totalVolume += 2 / 6;
     } else {
       totalVolume += Number(item.quantity || 1);
@@ -46,7 +46,7 @@ export async function getSalesByPeriodAllStores(periodStart: Date, periodEnd: Da
     totalRevenue += Number(item.totalAmount || item.price || 0);
     if (item.saleType === "glass") {
       totalVolume += 1 / 6;
-    } else if (item.saleType === "karaf") {
+    } else if (item.saleType === "carafe") {
       totalVolume += 2 / 6;
     } else {
       totalVolume += Number(item.quantity || 1);

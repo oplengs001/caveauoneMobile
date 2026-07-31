@@ -146,6 +146,7 @@ export interface DeliveryItem {
   sku: string;
   qty: number;
   ingressedQty: number;
+  skippedQty?: number;
   bottleIds: string[];
 }
 
@@ -230,6 +231,8 @@ export interface StoreWineSetting {
   updatedAt: any;
   wineCategory?: "fast" | "fine" | "reserve" | null;
   sellingPrice?: number;
+  glassPrice?: number;
+  carafePrice?: number;
   vatMode?: "included" | "excluded";
 }
 
