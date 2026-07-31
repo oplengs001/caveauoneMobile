@@ -276,62 +276,6 @@ export default function SalesScreen() {
               {sales.length} transactions by {profile?.displayName || profile?.email?.split("@")[0] || "Logged-in Account"}
             </Text>
           </View>
-
-          {/* Category Breakdown */}
-          <Text style={[styles.sectionTitle, { color: theme.text, fontSize: 12, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }]}>
-            Segregated by Wine Category
-          </Text>
-          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
-            <View style={{ flex: 1, minWidth: 130, backgroundColor: "#f59e0b15", borderColor: "#f59e0b40", borderWidth: 1, padding: 12, borderRadius: 12 }}>
-              <Text style={{ fontSize: 10, fontWeight: "800", color: "#d97706" }}>⚡ FAST MOVING</Text>
-              <Text style={{ fontSize: 18, fontWeight: "900", color: "#b45309", marginTop: 4 }}>
-                {aggregates.categoryCounts.fast} sold
-              </Text>
-            </View>
-            <View style={{ flex: 1, minWidth: 130, backgroundColor: "#ec489915", borderColor: "#ec489940", borderWidth: 1, padding: 12, borderRadius: 12 }}>
-              <Text style={{ fontSize: 10, fontWeight: "800", color: "#be185d" }}>⭐ FINE WINE</Text>
-              <Text style={{ fontSize: 18, fontWeight: "900", color: "#9d174d", marginTop: 4 }}>
-                {aggregates.categoryCounts.fine} sold
-              </Text>
-            </View>
-            <View style={{ flex: 1, minWidth: 130, backgroundColor: "#6366f115", borderColor: "#6366f140", borderWidth: 1, padding: 12, borderRadius: 12 }}>
-              <Text style={{ fontSize: 10, fontWeight: "800", color: "#4338ca" }}>🔒 RESERVE</Text>
-              <Text style={{ fontSize: 18, fontWeight: "900", color: "#3730a3", marginTop: 4 }}>
-                {aggregates.categoryCounts.reserve} sold
-              </Text>
-            </View>
-            <View style={{ flex: 1, minWidth: 130, backgroundColor: "#64748b15", borderColor: "#64748b40", borderWidth: 1, padding: 12, borderRadius: 12 }}>
-              <Text style={{ fontSize: 10, fontWeight: "800", color: "#475569" }}>🍷 STANDARD</Text>
-              <Text style={{ fontSize: 18, fontWeight: "900", color: "#334155", marginTop: 4 }}>
-                {aggregates.categoryCounts.standard} sold
-              </Text>
-            </View>
-          </View>
-
-          {/* Portion Breakdown */}
-          <Text style={[styles.sectionTitle, { color: theme.text, fontSize: 12, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }]}>
-            Segregated by Sales Type (Portion)
-          </Text>
-          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
-            <View style={{ flex: 1, minWidth: 100, backgroundColor: theme.card, borderColor: theme.border, borderWidth: 1, padding: 12, borderRadius: 12 }}>
-              <Text style={{ fontSize: 10, fontWeight: "800", color: theme.primary }}>🍾 BOTTLE</Text>
-              <Text style={{ fontSize: 16, fontWeight: "900", color: theme.text, marginTop: 4 }}>
-                {aggregates.portionCounts.bottle} sold
-              </Text>
-            </View>
-            <View style={{ flex: 1, minWidth: 100, backgroundColor: theme.card, borderColor: theme.border, borderWidth: 1, padding: 12, borderRadius: 12 }}>
-              <Text style={{ fontSize: 10, fontWeight: "800", color: "#059669" }}>🍷 GLASS (1/6)</Text>
-              <Text style={{ fontSize: 16, fontWeight: "900", color: theme.text, marginTop: 4 }}>
-                {aggregates.portionCounts.glass} sold
-              </Text>
-            </View>
-            <View style={{ flex: 1, minWidth: 100, backgroundColor: theme.card, borderColor: theme.border, borderWidth: 1, padding: 12, borderRadius: 12 }}>
-              <Text style={{ fontSize: 10, fontWeight: "800", color: "#d97706" }}>🫗 CARAFE (2/6)</Text>
-              <Text style={{ fontSize: 16, fontWeight: "900", color: theme.text, marginTop: 4 }}>
-                {aggregates.portionCounts.carafe} sold
-              </Text>
-            </View>
-          </View>
         </>
       ) : (
         <>

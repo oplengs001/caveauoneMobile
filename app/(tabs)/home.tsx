@@ -57,6 +57,8 @@ export default function HomeScreen() {
     soldCount: 0,
     totalRevenue: 0,
     activeBottles: 0,
+    categoryCounts: { fast: 0, fine: 0, reserve: 0, standard: 0 },
+    portionCounts: { bottle: 0, glass: 0, carafe: 0 },
   });
   const [loadingSales, setLoadingSales] = useState(true);
   const [salesPeriod, setSalesPeriod] = useState<"today" | "week" | "all">(
@@ -271,16 +273,36 @@ export default function HomeScreen() {
         );
 
         let totalVolume = 0;
+        const catCounts = { fast: 0, fine: 0, reserve: 0, standard: 0 };
+        const portionCounts = { bottle: 0, glass: 0, carafe: 0 };
+
         staffSales.forEach((item: any) => {
-          if (item.saleType === "glass") totalVolume += 1 / 6;
-          else if (item.saleType === "carafe") totalVolume += 2 / 6;
-          else totalVolume += Number(item.quantity || 1);
+          const st = (item.saleType || "bottle").toLowerCase();
+          if (st === "glass") {
+            totalVolume += 1 / 6;
+            portionCounts.glass += 1;
+          } else if (st === "carafe") {
+            totalVolume += 2 / 6;
+            portionCounts.carafe += 1;
+          } else {
+            totalVolume += Number(item.quantity || 1);
+            portionCounts.bottle += 1;
+          }
+
+          const cat = (item.wineCategory || item.masterWine?.wineCategory || "standard").toLowerCase();
+          if (cat in catCounts) {
+            catCounts[cat as keyof typeof catCounts] += 1;
+          } else {
+            catCounts.standard += 1;
+          }
         });
 
         setSalesDashboardMetrics({
           soldCount: Math.round(totalVolume * 100) / 100,
           totalRevenue: 0,
           activeBottles,
+          categoryCounts: catCounts,
+          portionCounts: portionCounts,
         });
       } else {
         const salesResult = await getSalesByPeriod(storeId, startDate, new Date());
@@ -288,6 +310,8 @@ export default function HomeScreen() {
           soldCount: salesResult.totalItems,
           totalRevenue: salesResult.totalRevenue,
           activeBottles,
+          categoryCounts: { fast: 0, fine: 0, reserve: 0, standard: 0 },
+          portionCounts: { bottle: 0, glass: 0, carafe: 0 },
         });
       }
     } catch (err) {
@@ -894,6 +918,71 @@ export default function HomeScreen() {
                 <Text style={styles.metricSubLabel}>Current Stock</Text>
               </View>
             </View>
+
+            {/* Main Dashboard Breakdowns for Store Staff */}
+            {isStoreStaff && (
+              <View style={{ marginTop: 20, gap: 16 }}>
+                {/* Segregated by Wine Category */}
+                <View>
+                  <Text style={{ fontSize: 12, fontWeight: "800", color: theme.text, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>
+                    Segregated by Wine Category
+                  </Text>
+                  <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                    <View style={{ flex: 1, minWidth: 140, backgroundColor: "#f59e0b15", borderColor: "#f59e0b40", borderWidth: 1, padding: 12, borderRadius: 12 }}>
+                      <Text style={{ fontSize: 10, fontWeight: "800", color: "#d97706" }}>⚡ FAST MOVING</Text>
+                      <Text style={{ fontSize: 18, fontWeight: "900", color: "#b45309", marginTop: 4 }}>
+                        {salesDashboardMetrics.categoryCounts.fast} sold
+                      </Text>
+                    </View>
+                    <View style={{ flex: 1, minWidth: 140, backgroundColor: "#ec489915", borderColor: "#ec489940", borderWidth: 1, padding: 12, borderRadius: 12 }}>
+                      <Text style={{ fontSize: 10, fontWeight: "800", color: "#be185d" }}>⭐ FINE WINE</Text>
+                      <Text style={{ fontSize: 18, fontWeight: "900", color: "#9d174d", marginTop: 4 }}>
+                        {salesDashboardMetrics.categoryCounts.fine} sold
+                      </Text>
+                    </View>
+                    <View style={{ flex: 1, minWidth: 140, backgroundColor: "#6366f115", borderColor: "#6366f140", borderWidth: 1, padding: 12, borderRadius: 12 }}>
+                      <Text style={{ fontSize: 10, fontWeight: "800", color: "#4338ca" }}>🔒 RESERVE</Text>
+                      <Text style={{ fontSize: 18, fontWeight: "900", color: "#3730a3", marginTop: 4 }}>
+                        {salesDashboardMetrics.categoryCounts.reserve} sold
+                      </Text>
+                    </View>
+                    <View style={{ flex: 1, minWidth: 140, backgroundColor: "#64748b15", borderColor: "#64748b40", borderWidth: 1, padding: 12, borderRadius: 12 }}>
+                      <Text style={{ fontSize: 10, fontWeight: "800", color: "#475569" }}>🍷 STANDARD</Text>
+                      <Text style={{ fontSize: 18, fontWeight: "900", color: "#334155", marginTop: 4 }}>
+                        {salesDashboardMetrics.categoryCounts.standard} sold
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                {/* Segregated by Sales Type / Portion */}
+                <View>
+                  <Text style={{ fontSize: 12, fontWeight: "800", color: theme.text, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>
+                    Segregated by Sales Type (Portion)
+                  </Text>
+                  <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                    <View style={{ flex: 1, minWidth: 100, backgroundColor: theme.card, borderColor: theme.border, borderWidth: 1, padding: 12, borderRadius: 12 }}>
+                      <Text style={{ fontSize: 10, fontWeight: "800", color: theme.primary }}>🍾 BOTTLE</Text>
+                      <Text style={{ fontSize: 16, fontWeight: "900", color: theme.text, marginTop: 4 }}>
+                        {salesDashboardMetrics.portionCounts.bottle} sold
+                      </Text>
+                    </View>
+                    <View style={{ flex: 1, minWidth: 100, backgroundColor: theme.card, borderColor: theme.border, borderWidth: 1, padding: 12, borderRadius: 12 }}>
+                      <Text style={{ fontSize: 10, fontWeight: "800", color: "#059669" }}>🍷 GLASS (1/6)</Text>
+                      <Text style={{ fontSize: 16, fontWeight: "900", color: theme.text, marginTop: 4 }}>
+                        {salesDashboardMetrics.portionCounts.glass} sold
+                      </Text>
+                    </View>
+                    <View style={{ flex: 1, minWidth: 100, backgroundColor: theme.card, borderColor: theme.border, borderWidth: 1, padding: 12, borderRadius: 12 }}>
+                      <Text style={{ fontSize: 10, fontWeight: "800", color: "#d97706" }}>🫗 CARAFE (2/6)</Text>
+                      <Text style={{ fontSize: 16, fontWeight: "900", color: theme.text, marginTop: 4 }}>
+                        {salesDashboardMetrics.portionCounts.carafe} sold
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              </View>
+            )}
 
           </View>
         )}
