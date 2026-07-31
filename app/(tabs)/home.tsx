@@ -256,12 +256,40 @@ export default function HomeScreen() {
         startDate = new Date(0); // for 'all'
       }
 
-      const salesResult = await getSalesByPeriod(storeId, startDate, new Date());
-      setSalesDashboardMetrics({
-        soldCount: salesResult.totalItems,
-        totalRevenue: salesResult.totalRevenue,
-        activeBottles,
-      });
+      if (profile?.role === "store_staff") {
+        const params = new URLSearchParams({
+          storeId,
+          from: startDate.toISOString(),
+          to: new Date().toISOString(),
+        });
+        const data = await apiFetch(`/sales?${params}`);
+        const salesList = Array.isArray(data) ? data : Array.isArray(data.sales) ? data.sales : [];
+        const staffSales = salesList.filter(
+          (s: any) =>
+            s.soldById === profile.id ||
+            (s.soldByEmail && profile.email && s.soldByEmail.toLowerCase() === profile.email.toLowerCase())
+        );
+
+        let totalVolume = 0;
+        staffSales.forEach((item: any) => {
+          if (item.saleType === "glass") totalVolume += 1 / 6;
+          else if (item.saleType === "carafe") totalVolume += 2 / 6;
+          else totalVolume += Number(item.quantity || 1);
+        });
+
+        setSalesDashboardMetrics({
+          soldCount: Math.round(totalVolume * 100) / 100,
+          totalRevenue: 0,
+          activeBottles,
+        });
+      } else {
+        const salesResult = await getSalesByPeriod(storeId, startDate, new Date());
+        setSalesDashboardMetrics({
+          soldCount: salesResult.totalItems,
+          totalRevenue: salesResult.totalRevenue,
+          activeBottles,
+        });
+      }
     } catch (err) {
       console.error("Failed to fetch sales metrics:", err);
     } finally {
@@ -779,50 +807,52 @@ export default function HomeScreen() {
 
             {/* Replaced ScrollView with Responsive Grid */}
             <View style={styles.responsiveGrid}>
-              {/* Card 1: Total Revenue (Clickable) */}
-              <TouchableOpacity
-                style={[
-                  styles.metricCard,
-                  { width: cardWidth, backgroundColor: theme.primary },
-                ]}
-                onPress={() =>
-                  router.push({
-                    pathname: "/sales",
-                    params: { period: salesPeriod },
-                  })
-                }
-                activeOpacity={0.8}
-              >
-                <Banknote size={24} color="#ffffff" strokeWidth={2.5} />
-                <Text
-                  style={[styles.metricCount, { color: "#ffffff" }]}
-                  numberOfLines={1}
-                  adjustsFontSizeToFit
+              {/* Card 1: Total Revenue (Clickable for Non-Staff) */}
+              {!isStoreStaff && (
+                <TouchableOpacity
+                  style={[
+                    styles.metricCard,
+                    { width: cardWidth, backgroundColor: theme.primary },
+                  ]}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/sales",
+                      params: { period: salesPeriod },
+                    })
+                  }
+                  activeOpacity={0.8}
                 >
-                  ₱
-                  {salesDashboardMetrics.totalRevenue?.toLocaleString(
-                    undefined,
-                    {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    },
-                  )}
-                </Text>
-                <Text style={styles.metricLabel}>Total Revenue</Text>
-                <Text style={styles.metricSubLabel}>
-                  {salesPeriod === "today"
-                    ? "Today"
-                    : salesPeriod === "week"
-                      ? "This Week"
-                      : "All Time"}
-                </Text>
-              </TouchableOpacity>
+                  <Banknote size={24} color="#ffffff" strokeWidth={2.5} />
+                  <Text
+                    style={[styles.metricCount, { color: "#ffffff" }]}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                  >
+                    ₱
+                    {salesDashboardMetrics.totalRevenue?.toLocaleString(
+                      undefined,
+                      {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      },
+                    )}
+                  </Text>
+                  <Text style={styles.metricLabel}>Total Revenue</Text>
+                  <Text style={styles.metricSubLabel}>
+                    {salesPeriod === "today"
+                      ? "Today"
+                      : salesPeriod === "week"
+                        ? "This Week"
+                        : "All Time"}
+                  </Text>
+                </TouchableOpacity>
+              )}
 
               {/* Card 2: Bottles Sold (Clickable) */}
               <TouchableOpacity
                 style={[
                   styles.metricCard,
-                  { width: cardWidth, backgroundColor: theme.secondary },
+                  { width: isStoreStaff ? (isTablet ? cardWidth : "100%") : cardWidth, backgroundColor: theme.secondary },
                 ]}
                 onPress={() =>
                   router.push({
@@ -836,7 +866,7 @@ export default function HomeScreen() {
                 <Text style={[styles.metricCount, { color: "#ffffff" }]}>
                   {salesDashboardMetrics.soldCount % 1 === 0 ? salesDashboardMetrics.soldCount : salesDashboardMetrics.soldCount.toFixed(2)}
                 </Text>
-                <Text style={styles.metricLabel}>Bottles Sold</Text>
+                <Text style={styles.metricLabel}>{isStoreStaff ? "My Bottles Sold" : "Bottles Sold"}</Text>
                 <Text style={styles.metricSubLabel}>
                   {salesPeriod === "today"
                     ? "Today"
