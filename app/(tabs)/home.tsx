@@ -3,7 +3,7 @@ import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { apiFetch } from "@/lib/api";
 import { clearToken } from "@/lib/auth";
-import { countBottlesForStoreDashboard, getSalesByPeriod, getStores } from "@/lib/queries";
+import { countBottlesForStoreDashboard, getStores } from "@/lib/queries";
 import { Delivery, PulloutRequest, Store, WineRequest } from "@/types";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
@@ -292,10 +292,10 @@ export default function HomeScreen() {
       // For store / store_manager, use ALL store sales
       const salesToAnalyze = isStaffOnly
         ? salesList.filter(
-            (s: any) =>
-              s.soldById === profile.id ||
-              (s.soldByEmail && profile.email && s.soldByEmail.toLowerCase() === profile.email.toLowerCase())
-          )
+          (s: any) =>
+            s.soldById === profile.id ||
+            (s.soldByEmail && profile.email && s.soldByEmail.toLowerCase() === profile.email.toLowerCase())
+        )
         : salesList;
 
       let totalVolume = 0;
