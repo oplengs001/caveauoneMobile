@@ -65,6 +65,20 @@ export default function HomeScreen() {
       reserve: [] as Array<{ name: string; vintage?: string; volume: number; pctOfTotal: number }>,
       standard: [] as Array<{ name: string; vintage?: string; volume: number; pctOfTotal: number }>,
     },
+    staffRankings: [] as Array<{
+      id: string;
+      name: string;
+      email: string;
+      volume: number;
+      salesCount: number;
+      rank: number;
+      isMe: boolean;
+    }>,
+    myRankInfo: {
+      rank: 0,
+      totalStaff: 0,
+      volume: 0,
+    },
   });
   const [loadingSales, setLoadingSales] = useState(true);
   const [salesPeriod, setSalesPeriod] = useState<"today" | "week" | "all">(
@@ -357,6 +371,59 @@ export default function HomeScreen() {
           }));
         });
 
+        // Calculate Staff Rankings across all store sales
+        const staffMap: Record<string, { id: string; name: string; email: string; volume: number; salesCount: number }> = {};
+
+        salesList.forEach((item: any) => {
+          const stId = item.soldById || item.soldByEmail || item.soldByName || "unknown";
+          const stName = item.soldByName || (item.soldByEmail ? item.soldByEmail.split("@")[0] : "Staff Member");
+          const stEmail = item.soldByEmail || "";
+
+          const st = (item.saleType || "bottle").toLowerCase();
+          let vol = 1;
+          if (st === "glass") vol = 1 / 6;
+          else if (st === "carafe") vol = 2 / 6;
+          else vol = Number(item.quantity || 1);
+
+          if (!staffMap[stId]) {
+            staffMap[stId] = {
+              id: stId,
+              name: stName,
+              email: stEmail,
+              volume: 0,
+              salesCount: 0,
+            };
+          }
+          staffMap[stId].volume += vol;
+          staffMap[stId].salesCount += 1;
+        });
+
+        const sortedStaffList = Object.values(staffMap)
+          .map((s) => ({
+            ...s,
+            volume: Math.round(s.volume * 100) / 100,
+          }))
+          .sort((a, b) => b.volume - a.volume);
+
+        let myRankNum = 0;
+        let myStaffVol = 0;
+
+        const staffRankingsList = sortedStaffList.map((s, idx) => {
+          const isMe = Boolean(
+            (profile?.id && s.id === profile.id) ||
+            (profile?.email && s.email && s.email.toLowerCase() === profile.email.toLowerCase())
+          );
+          if (isMe) {
+            myRankNum = idx + 1;
+            myStaffVol = s.volume;
+          }
+          return {
+            ...s,
+            rank: idx + 1,
+            isMe,
+          };
+        });
+
         setSalesDashboardMetrics({
           soldCount: Math.round(totalVolume * 100) / 100,
           totalRevenue: 0,
@@ -364,6 +431,12 @@ export default function HomeScreen() {
           categoryCounts: catCounts,
           portionCounts: portionCounts,
           top5WinesByCategory: top5ByCategory,
+          staffRankings: staffRankingsList,
+          myRankInfo: {
+            rank: myRankNum,
+            totalStaff: staffRankingsList.length,
+            volume: myStaffVol,
+          },
         });
       } else {
         const salesResult = await getSalesByPeriod(storeId, startDate, new Date());
@@ -374,6 +447,8 @@ export default function HomeScreen() {
           categoryCounts: { fast: 0, fine: 0, reserve: 0, standard: 0 },
           portionCounts: { bottle: 0, glass: 0, carafe: 0 },
           top5WinesByCategory: { fast: [], fine: [], reserve: [], standard: [] },
+          staffRankings: [],
+          myRankInfo: { rank: 0, totalStaff: 0, volume: 0 },
         });
       }
     } catch (err) {
@@ -984,6 +1059,92 @@ export default function HomeScreen() {
             {/* Main Dashboard Breakdowns for Store Staff */}
             {isStoreStaff && (
               <View style={{ marginTop: 12, gap: 16 }}>
+                {/* Staff Leaderboard & My Rank Card */}
+                <View style={{ backgroundColor: theme.card, borderRadius: 16, borderWidth: 1, borderColor: theme.border, padding: 14 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: theme.border, gap: 8 }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1 }}>
+                      <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: "#f59e0b20", alignItems: "center", justifyContent: "center" }}>
+                        <Text style={{ fontSize: 18 }}>
+                          {salesDashboardMetrics.myRankInfo.rank === 1 ? "🥇" : salesDashboardMetrics.myRankInfo.rank === 2 ? "🥈" : salesDashboardMetrics.myRankInfo.rank === 3 ? "🥉" : "🏆"}
+                        </Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 14, fontWeight: "900", color: theme.text }}>
+                          {salesDashboardMetrics.myRankInfo.rank === 1
+                            ? "🥇 You're Rank #1 Staff Leader!"
+                            : salesDashboardMetrics.myRankInfo.rank > 0
+                              ? `🏆 You're Rank #${salesDashboardMetrics.myRankInfo.rank} of ${salesDashboardMetrics.myRankInfo.totalStaff} Staff`
+                              : "Staff Sales Leaderboard"}
+                        </Text>
+                        <Text style={{ fontSize: 10, fontWeight: "600", color: theme.textSecondary, marginTop: 1 }}>
+                          {salesDashboardMetrics.myRankInfo.volume} btl sold by your account
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={{ backgroundColor: theme.primary + "15", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}>
+                      <Text style={{ fontSize: 10, fontWeight: "800", color: theme.primary }}>
+                        {salesPeriod === "today" ? "Today" : salesPeriod === "week" ? "This Week" : "All Time"}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Staff Rankings List */}
+                  {salesDashboardMetrics.staffRankings.length === 0 ? (
+                    <Text style={{ fontSize: 11, color: theme.textSecondary, textAlign: "center", paddingVertical: 10 }}>
+                      No staff sales recorded for this period.
+                    </Text>
+                  ) : (
+                    <View style={{ gap: 6 }}>
+                      {salesDashboardMetrics.staffRankings.map((staff) => (
+                        <View
+                          key={staff.id}
+                          style={{
+                            flexDirection: "row",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            padding: 8,
+                            borderRadius: 10,
+                            backgroundColor: staff.isMe ? theme.primary + "15" : theme.background,
+                            borderWidth: staff.isMe ? 1 : 0,
+                            borderColor: staff.isMe ? theme.primary + "40" : "transparent",
+                          }}
+                        >
+                          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}>
+                            <View
+                              style={{
+                                width: 22,
+                                height: 22,
+                                borderRadius: 11,
+                                backgroundColor: staff.rank === 1 ? "#f59e0b" : staff.rank === 2 ? "#94a3b8" : staff.rank === 3 ? "#d97706" : theme.border,
+                                alignItems: "center",
+                                justifyContent: "center",
+                              }}
+                            >
+                              <Text style={{ fontSize: 10, fontWeight: "900", color: staff.rank <= 3 ? "#ffffff" : theme.textSecondary }}>
+                                #{staff.rank}
+                              </Text>
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Text style={{ fontSize: 12, fontWeight: staff.isMe ? "900" : "700", color: theme.text }} numberOfLines={1}>
+                                {staff.name} {staff.isMe ? "(You)" : ""}
+                              </Text>
+                              <Text style={{ fontSize: 9, color: theme.textSecondary }}>
+                                {staff.salesCount} transaction{staff.salesCount !== 1 ? "s" : ""}
+                              </Text>
+                            </View>
+                          </View>
+
+                          <View style={{ alignItems: "flex-end" }}>
+                            <Text style={{ fontSize: 13, fontWeight: "900", color: staff.isMe ? theme.primary : theme.text }}>
+                              {staff.volume % 1 === 0 ? staff.volume : staff.volume.toFixed(2)} btl
+                            </Text>
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                </View>
+
                 {/* Segregated by Wine Category (Glass Computation in Bottles) */}
                 <View>
                   <Text style={{ fontSize: 12, fontWeight: "800", color: theme.text, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>
