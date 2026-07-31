@@ -59,6 +59,12 @@ export default function HomeScreen() {
     activeBottles: 0,
     categoryCounts: { fast: 0, fine: 0, reserve: 0, standard: 0 },
     portionCounts: { bottle: 0, glass: 0, carafe: 0 },
+    top5WinesByCategory: {
+      fast: [] as Array<{ name: string; vintage?: string; volume: number; pctOfTotal: number }>,
+      fine: [] as Array<{ name: string; vintage?: string; volume: number; pctOfTotal: number }>,
+      reserve: [] as Array<{ name: string; vintage?: string; volume: number; pctOfTotal: number }>,
+      standard: [] as Array<{ name: string; vintage?: string; volume: number; pctOfTotal: number }>,
+    },
   });
   const [loadingSales, setLoadingSales] = useState(true);
   const [salesPeriod, setSalesPeriod] = useState<"today" | "week" | "all">(
@@ -276,6 +282,13 @@ export default function HomeScreen() {
         const catCounts = { fast: 0, fine: 0, reserve: 0, standard: 0 };
         const portionCounts = { bottle: 0, glass: 0, carafe: 0 };
 
+        const wineAggByCategory: Record<string, Record<string, { id: string; name: string; vintage?: string; volume: number }>> = {
+          fast: {},
+          fine: {},
+          reserve: {},
+          standard: {},
+        };
+
         staffSales.forEach((item: any) => {
           const st = (item.saleType || "bottle").toLowerCase();
           let vol = 1;
@@ -292,11 +305,22 @@ export default function HomeScreen() {
           totalVolume += vol;
 
           const cat = (item.wineCategory || item.masterWine?.wineCategory || "standard").toLowerCase();
-          if (cat in catCounts) {
-            catCounts[cat as keyof typeof catCounts] += vol;
-          } else {
-            catCounts.standard += vol;
+          const cKey = cat in catCounts ? cat : "standard";
+          catCounts[cKey as keyof typeof catCounts] += vol;
+
+          const wId = item.masterWineId || item.wineName || item.bottleId || "unknown";
+          const wName = item.wineName || item.masterWine?.name || "Unknown Wine";
+          const wVintage = item.vintage || item.masterWine?.vintage || "";
+
+          if (!wineAggByCategory[cKey][wId]) {
+            wineAggByCategory[cKey][wId] = {
+              id: wId,
+              name: wName,
+              vintage: wVintage,
+              volume: 0,
+            };
           }
+          wineAggByCategory[cKey][wId].volume += vol;
         });
 
         // Round category bottle volumes to 2 decimal places max
@@ -305,12 +329,41 @@ export default function HomeScreen() {
           catCounts[k] = Math.round(catCounts[k] * 100) / 100;
         });
 
+        // Extract Top 5 per category
+        const top5ByCategory: {
+          fast: Array<{ name: string; vintage?: string; volume: number; pctOfTotal: number }>;
+          fine: Array<{ name: string; vintage?: string; volume: number; pctOfTotal: number }>;
+          reserve: Array<{ name: string; vintage?: string; volume: number; pctOfTotal: number }>;
+          standard: Array<{ name: string; vintage?: string; volume: number; pctOfTotal: number }>;
+        } = {
+          fast: [],
+          fine: [],
+          reserve: [],
+          standard: [],
+        };
+
+        (Object.keys(wineAggByCategory) as Array<keyof typeof top5ByCategory>).forEach((cKey) => {
+          const wines = Object.values(wineAggByCategory[cKey]);
+          wines.forEach((w) => {
+            w.volume = Math.round(w.volume * 100) / 100;
+          });
+          wines.sort((a, b) => b.volume - a.volume);
+
+          top5ByCategory[cKey] = wines.slice(0, 5).map((w) => ({
+            name: w.name,
+            vintage: w.vintage,
+            volume: w.volume,
+            pctOfTotal: totalVolume > 0 ? Math.round((w.volume / totalVolume) * 1000) / 10 : 0,
+          }));
+        });
+
         setSalesDashboardMetrics({
           soldCount: Math.round(totalVolume * 100) / 100,
           totalRevenue: 0,
           activeBottles,
           categoryCounts: catCounts,
           portionCounts: portionCounts,
+          top5WinesByCategory: top5ByCategory,
         });
       } else {
         const salesResult = await getSalesByPeriod(storeId, startDate, new Date());
@@ -320,6 +373,7 @@ export default function HomeScreen() {
           activeBottles,
           categoryCounts: { fast: 0, fine: 0, reserve: 0, standard: 0 },
           portionCounts: { bottle: 0, glass: 0, carafe: 0 },
+          top5WinesByCategory: { fast: [], fine: [], reserve: [], standard: [] },
         });
       }
     } catch (err) {
@@ -933,7 +987,7 @@ export default function HomeScreen() {
                 {/* Segregated by Wine Category (Glass Computation in Bottles) */}
                 <View>
                   <Text style={{ fontSize: 12, fontWeight: "800", color: theme.text, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>
-                    Segregated by Wine Category
+                    Wine Category (Top 5 Sellers)
                   </Text>
                   <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
                     <View style={{ flex: 1, minWidth: 140, backgroundColor: "#f59e0b15", borderColor: "#f59e0b40", borderWidth: 1, padding: 12, borderRadius: 12 }}>
@@ -943,7 +997,22 @@ export default function HomeScreen() {
                           ? `${salesDashboardMetrics.categoryCounts.fast} btl`
                           : `${salesDashboardMetrics.categoryCounts.fast.toFixed(2)} btl`}
                       </Text>
+                      {salesDashboardMetrics.top5WinesByCategory.fast.length > 0 && (
+                        <View style={{ marginTop: 8, borderTopWidth: 1, borderTopColor: "#f59e0b30", paddingTop: 6, gap: 4 }}>
+                          {salesDashboardMetrics.top5WinesByCategory.fast.map((w, idx) => (
+                            <View key={idx} style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                              <Text style={{ fontSize: 10, fontWeight: "700", color: "#b45309", flex: 1 }} numberOfLines={1}>
+                                #{idx + 1} {w.name}
+                              </Text>
+                              <Text style={{ fontSize: 10, fontWeight: "800", color: "#d97706", marginLeft: 4 }}>
+                                {w.volume} btl ({w.pctOfTotal}%)
+                              </Text>
+                            </View>
+                          ))}
+                        </View>
+                      )}
                     </View>
+
                     <View style={{ flex: 1, minWidth: 140, backgroundColor: "#ec489915", borderColor: "#ec489940", borderWidth: 1, padding: 12, borderRadius: 12 }}>
                       <Text style={{ fontSize: 10, fontWeight: "800", color: "#be185d" }}>⭐ FINE WINE</Text>
                       <Text style={{ fontSize: 18, fontWeight: "900", color: "#9d174d", marginTop: 4 }}>
@@ -951,7 +1020,22 @@ export default function HomeScreen() {
                           ? `${salesDashboardMetrics.categoryCounts.fine} btl`
                           : `${salesDashboardMetrics.categoryCounts.fine.toFixed(2)} btl`}
                       </Text>
+                      {salesDashboardMetrics.top5WinesByCategory.fine.length > 0 && (
+                        <View style={{ marginTop: 8, borderTopWidth: 1, borderTopColor: "#ec489930", paddingTop: 6, gap: 4 }}>
+                          {salesDashboardMetrics.top5WinesByCategory.fine.map((w, idx) => (
+                            <View key={idx} style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                              <Text style={{ fontSize: 10, fontWeight: "700", color: "#9d174d", flex: 1 }} numberOfLines={1}>
+                                #{idx + 1} {w.name}
+                              </Text>
+                              <Text style={{ fontSize: 10, fontWeight: "800", color: "#be185d", marginLeft: 4 }}>
+                                {w.volume} btl ({w.pctOfTotal}%)
+                              </Text>
+                            </View>
+                          ))}
+                        </View>
+                      )}
                     </View>
+
                     <View style={{ flex: 1, minWidth: 140, backgroundColor: "#6366f115", borderColor: "#6366f140", borderWidth: 1, padding: 12, borderRadius: 12 }}>
                       <Text style={{ fontSize: 10, fontWeight: "800", color: "#4338ca" }}>🔒 RESERVE</Text>
                       <Text style={{ fontSize: 18, fontWeight: "900", color: "#3730a3", marginTop: 4 }}>
@@ -959,7 +1043,22 @@ export default function HomeScreen() {
                           ? `${salesDashboardMetrics.categoryCounts.reserve} btl`
                           : `${salesDashboardMetrics.categoryCounts.reserve.toFixed(2)} btl`}
                       </Text>
+                      {salesDashboardMetrics.top5WinesByCategory.reserve.length > 0 && (
+                        <View style={{ marginTop: 8, borderTopWidth: 1, borderTopColor: "#6366f130", paddingTop: 6, gap: 4 }}>
+                          {salesDashboardMetrics.top5WinesByCategory.reserve.map((w, idx) => (
+                            <View key={idx} style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                              <Text style={{ fontSize: 10, fontWeight: "700", color: "#3730a3", flex: 1 }} numberOfLines={1}>
+                                #{idx + 1} {w.name}
+                              </Text>
+                              <Text style={{ fontSize: 10, fontWeight: "800", color: "#4338ca", marginLeft: 4 }}>
+                                {w.volume} btl ({w.pctOfTotal}%)
+                              </Text>
+                            </View>
+                          ))}
+                        </View>
+                      )}
                     </View>
+
                     <View style={{ flex: 1, minWidth: 140, backgroundColor: "#64748b15", borderColor: "#64748b40", borderWidth: 1, padding: 12, borderRadius: 12 }}>
                       <Text style={{ fontSize: 10, fontWeight: "800", color: "#475569" }}>🍷 STANDARD</Text>
                       <Text style={{ fontSize: 18, fontWeight: "900", color: "#334155", marginTop: 4 }}>
@@ -967,6 +1066,20 @@ export default function HomeScreen() {
                           ? `${salesDashboardMetrics.categoryCounts.standard} btl`
                           : `${salesDashboardMetrics.categoryCounts.standard.toFixed(2)} btl`}
                       </Text>
+                      {salesDashboardMetrics.top5WinesByCategory.standard.length > 0 && (
+                        <View style={{ marginTop: 8, borderTopWidth: 1, borderTopColor: "#64748b30", paddingTop: 6, gap: 4 }}>
+                          {salesDashboardMetrics.top5WinesByCategory.standard.map((w, idx) => (
+                            <View key={idx} style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                              <Text style={{ fontSize: 10, fontWeight: "700", color: "#334155", flex: 1 }} numberOfLines={1}>
+                                #{idx + 1} {w.name}
+                              </Text>
+                              <Text style={{ fontSize: 10, fontWeight: "800", color: "#475569", marginLeft: 4 }}>
+                                {w.volume} btl ({w.pctOfTotal}%)
+                              </Text>
+                            </View>
+                          ))}
+                        </View>
+                      )}
                     </View>
                   </View>
                 </View>
@@ -974,7 +1087,7 @@ export default function HomeScreen() {
                 {/* Segregated by Sales Type / Portion */}
                 <View>
                   <Text style={{ fontSize: 12, fontWeight: "800", color: theme.text, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>
-                    Segregated by Sales Type (Portion)
+                    Sales Type (Portion)
                   </Text>
                   <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
                     <View style={{ flex: 1, minWidth: 100, backgroundColor: theme.card, borderColor: theme.border, borderWidth: 1, padding: 12, borderRadius: 12 }}>
