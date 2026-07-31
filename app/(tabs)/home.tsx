@@ -278,23 +278,31 @@ export default function HomeScreen() {
 
         staffSales.forEach((item: any) => {
           const st = (item.saleType || "bottle").toLowerCase();
+          let vol = 1;
           if (st === "glass") {
-            totalVolume += 1 / 6;
+            vol = 1 / 6;
             portionCounts.glass += 1;
           } else if (st === "carafe") {
-            totalVolume += 2 / 6;
+            vol = 2 / 6;
             portionCounts.carafe += 1;
           } else {
-            totalVolume += Number(item.quantity || 1);
+            vol = Number(item.quantity || 1);
             portionCounts.bottle += 1;
           }
+          totalVolume += vol;
 
           const cat = (item.wineCategory || item.masterWine?.wineCategory || "standard").toLowerCase();
           if (cat in catCounts) {
-            catCounts[cat as keyof typeof catCounts] += 1;
+            catCounts[cat as keyof typeof catCounts] += vol;
           } else {
-            catCounts.standard += 1;
+            catCounts.standard += vol;
           }
+        });
+
+        // Round category bottle volumes to 2 decimal places max
+        Object.keys(catCounts).forEach((key) => {
+          const k = key as keyof typeof catCounts;
+          catCounts[k] = Math.round(catCounts[k] * 100) / 100;
         });
 
         setSalesDashboardMetrics({
@@ -829,10 +837,10 @@ export default function HomeScreen() {
               </View>
             </View>
 
-            {/* Replaced ScrollView with Responsive Grid */}
-            <View style={styles.responsiveGrid}>
-              {/* Card 1: Total Revenue (Clickable for Non-Staff) */}
-              {!isStoreStaff && (
+            {/* Replaced ScrollView with Responsive Grid for Non-Staff */}
+            {!isStoreStaff && (
+              <View style={styles.responsiveGrid}>
+                {/* Card 1: Total Revenue (Clickable) */}
                 <TouchableOpacity
                   style={[
                     styles.metricCard,
@@ -870,59 +878,59 @@ export default function HomeScreen() {
                         : "All Time"}
                   </Text>
                 </TouchableOpacity>
-              )}
 
-              {/* Card 2: Bottles Sold (Clickable) */}
-              <TouchableOpacity
-                style={[
-                  styles.metricCard,
-                  { width: isStoreStaff ? (isTablet ? cardWidth : "100%") : cardWidth, backgroundColor: theme.secondary },
-                ]}
-                onPress={() =>
-                  router.push({
-                    pathname: "/sales",
-                    params: { period: salesPeriod },
-                  })
-                }
-                activeOpacity={0.8}
-              >
-                <Wine size={24} color="#ffffff" strokeWidth={2.5} />
-                <Text style={[styles.metricCount, { color: "#ffffff" }]}>
-                  {salesDashboardMetrics.soldCount % 1 === 0 ? salesDashboardMetrics.soldCount : salesDashboardMetrics.soldCount.toFixed(2)}
-                </Text>
-                <Text style={styles.metricLabel}>{isStoreStaff ? "My Bottles Sold" : "Bottles Sold"}</Text>
-                <Text style={styles.metricSubLabel}>
-                  {salesPeriod === "today"
-                    ? "Today"
-                    : salesPeriod === "week"
-                      ? "This Week"
-                      : "All Time"}
-                </Text>
-              </TouchableOpacity>
+                {/* Card 2: Bottles Sold (Clickable) */}
+                <TouchableOpacity
+                  style={[
+                    styles.metricCard,
+                    { width: cardWidth, backgroundColor: theme.secondary },
+                  ]}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/sales",
+                      params: { period: salesPeriod },
+                    })
+                  }
+                  activeOpacity={0.8}
+                >
+                  <Wine size={24} color="#ffffff" strokeWidth={2.5} />
+                  <Text style={[styles.metricCount, { color: "#ffffff" }]}>
+                    {salesDashboardMetrics.soldCount % 1 === 0 ? salesDashboardMetrics.soldCount : salesDashboardMetrics.soldCount.toFixed(2)}
+                  </Text>
+                  <Text style={styles.metricLabel}>Bottles Sold</Text>
+                  <Text style={styles.metricSubLabel}>
+                    {salesPeriod === "today"
+                      ? "Today"
+                      : salesPeriod === "week"
+                        ? "This Week"
+                        : "All Time"}
+                  </Text>
+                </TouchableOpacity>
 
-              {/* Card 3: Active Inventory (Non-clickable as requested) */}
-              <View
-                style={[
-                  styles.metricCard,
-                  {
-                    width: isTablet ? cardWidth : "100%",
-                    backgroundColor: "#64748b",
-                  },
-                ]}
-              >
-                <LayoutList size={24} color="#ffffff" strokeWidth={2.5} />
-                <Text style={[styles.metricCount, { color: "#ffffff" }]}>
-                  {salesDashboardMetrics.activeBottles}
-                </Text>
-                <Text style={styles.metricLabel}>Active Inventory</Text>
-                <Text style={styles.metricSubLabel}>Current Stock</Text>
+                {/* Card 3: Active Inventory (Non-clickable as requested) */}
+                <View
+                  style={[
+                    styles.metricCard,
+                    {
+                      width: isTablet ? cardWidth : "100%",
+                      backgroundColor: "#64748b",
+                    },
+                  ]}
+                >
+                  <LayoutList size={24} color="#ffffff" strokeWidth={2.5} />
+                  <Text style={[styles.metricCount, { color: "#ffffff" }]}>
+                    {salesDashboardMetrics.activeBottles}
+                  </Text>
+                  <Text style={styles.metricLabel}>Active Inventory</Text>
+                  <Text style={styles.metricSubLabel}>Current Stock</Text>
+                </View>
               </View>
-            </View>
+            )}
 
             {/* Main Dashboard Breakdowns for Store Staff */}
             {isStoreStaff && (
-              <View style={{ marginTop: 20, gap: 16 }}>
-                {/* Segregated by Wine Category */}
+              <View style={{ marginTop: 12, gap: 16 }}>
+                {/* Segregated by Wine Category (Glass Computation in Bottles) */}
                 <View>
                   <Text style={{ fontSize: 12, fontWeight: "800", color: theme.text, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>
                     Segregated by Wine Category
@@ -931,25 +939,33 @@ export default function HomeScreen() {
                     <View style={{ flex: 1, minWidth: 140, backgroundColor: "#f59e0b15", borderColor: "#f59e0b40", borderWidth: 1, padding: 12, borderRadius: 12 }}>
                       <Text style={{ fontSize: 10, fontWeight: "800", color: "#d97706" }}>⚡ FAST MOVING</Text>
                       <Text style={{ fontSize: 18, fontWeight: "900", color: "#b45309", marginTop: 4 }}>
-                        {salesDashboardMetrics.categoryCounts.fast} sold
+                        {salesDashboardMetrics.categoryCounts.fast % 1 === 0
+                          ? `${salesDashboardMetrics.categoryCounts.fast} btl`
+                          : `${salesDashboardMetrics.categoryCounts.fast.toFixed(2)} btl`}
                       </Text>
                     </View>
                     <View style={{ flex: 1, minWidth: 140, backgroundColor: "#ec489915", borderColor: "#ec489940", borderWidth: 1, padding: 12, borderRadius: 12 }}>
                       <Text style={{ fontSize: 10, fontWeight: "800", color: "#be185d" }}>⭐ FINE WINE</Text>
                       <Text style={{ fontSize: 18, fontWeight: "900", color: "#9d174d", marginTop: 4 }}>
-                        {salesDashboardMetrics.categoryCounts.fine} sold
+                        {salesDashboardMetrics.categoryCounts.fine % 1 === 0
+                          ? `${salesDashboardMetrics.categoryCounts.fine} btl`
+                          : `${salesDashboardMetrics.categoryCounts.fine.toFixed(2)} btl`}
                       </Text>
                     </View>
                     <View style={{ flex: 1, minWidth: 140, backgroundColor: "#6366f115", borderColor: "#6366f140", borderWidth: 1, padding: 12, borderRadius: 12 }}>
                       <Text style={{ fontSize: 10, fontWeight: "800", color: "#4338ca" }}>🔒 RESERVE</Text>
                       <Text style={{ fontSize: 18, fontWeight: "900", color: "#3730a3", marginTop: 4 }}>
-                        {salesDashboardMetrics.categoryCounts.reserve} sold
+                        {salesDashboardMetrics.categoryCounts.reserve % 1 === 0
+                          ? `${salesDashboardMetrics.categoryCounts.reserve} btl`
+                          : `${salesDashboardMetrics.categoryCounts.reserve.toFixed(2)} btl`}
                       </Text>
                     </View>
                     <View style={{ flex: 1, minWidth: 140, backgroundColor: "#64748b15", borderColor: "#64748b40", borderWidth: 1, padding: 12, borderRadius: 12 }}>
                       <Text style={{ fontSize: 10, fontWeight: "800", color: "#475569" }}>🍷 STANDARD</Text>
                       <Text style={{ fontSize: 18, fontWeight: "900", color: "#334155", marginTop: 4 }}>
-                        {salesDashboardMetrics.categoryCounts.standard} sold
+                        {salesDashboardMetrics.categoryCounts.standard % 1 === 0
+                          ? `${salesDashboardMetrics.categoryCounts.standard} btl`
+                          : `${salesDashboardMetrics.categoryCounts.standard.toFixed(2)} btl`}
                       </Text>
                     </View>
                   </View>
