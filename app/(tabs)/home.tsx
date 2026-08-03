@@ -488,10 +488,11 @@ export default function HomeScreen() {
           } else {
             fetchMetrics();
             fetchOutboundRequests();
+            fetchSalesMetrics();
           }
         });
       }
-    }, [loading, profile, fetchMetrics, fetchOutboundRequests, onRefresh]),
+    }, [loading, profile, fetchMetrics, fetchOutboundRequests, fetchSalesMetrics, onRefresh]),
   );
 
   useEffect(() => {
