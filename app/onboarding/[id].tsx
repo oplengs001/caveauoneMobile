@@ -1205,6 +1205,12 @@ function OnboardingDetailSkeleton() {
               >
                 <Text style={styles.mainButtonText}>Grant Permission</Text>
               </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setCurrentStep("overview")}
+                style={[styles.mainButton, { backgroundColor: "transparent", borderWidth: 1, borderColor: "#64748b", marginTop: 12 }]}
+              >
+                <Text style={[styles.mainButtonText, { color: "#64748b" }]}>Go Back</Text>
+              </TouchableOpacity>
             </View>
           ) : (
             <View style={styles.camera}>

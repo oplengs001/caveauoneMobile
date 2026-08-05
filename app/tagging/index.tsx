@@ -689,6 +689,12 @@ export default function TaggingScreen() {
         >
           <Text style={styles.permissionButtonText}>Grant Permission</Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.permissionButton, { backgroundColor: "transparent", borderWidth: 1, borderColor: "#64748b", marginTop: 12 }]}
+          onPress={() => router.back()}
+        >
+          <Text style={[styles.permissionButtonText, { color: "#64748b" }]}>Go Back</Text>
+        </TouchableOpacity>
       </View>
     );
   }

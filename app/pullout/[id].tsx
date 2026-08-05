@@ -679,7 +679,7 @@ export default function PulloutDetailScreen() {
   if (!permission) return <View />;
   if (!permission.granted) {
     return (
-      <View style={[styles.container, { backgroundColor: theme.background }]}>
+      <View style={[styles.container, { backgroundColor: theme.background, justifyContent: "center", alignItems: "center", padding: 20 }]}>
         <Text style={[styles.permissionText, { color: theme.textSecondary }]}>
           Camera permission required
         </Text>
@@ -688,6 +688,12 @@ export default function PulloutDetailScreen() {
           onPress={requestPermission}
         >
           <Text style={styles.permissionButtonText}>Grant Permission</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={{ marginTop: 16, paddingVertical: 10, paddingHorizontal: 20 }}
+          onPress={() => router.back()}
+        >
+          <Text style={{ color: theme.primary, fontWeight: "700", fontSize: 15 }}>Go Back</Text>
         </TouchableOpacity>
       </View>
     );

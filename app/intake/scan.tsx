@@ -24,6 +24,9 @@ export default function ScanScreen() {
         <TouchableOpacity style={styles.permissionButton} onPress={requestPermission}>
           <Text style={styles.permissionButtonText}>Grant Permission</Text>
         </TouchableOpacity>
+        <TouchableOpacity style={[styles.permissionButton, { backgroundColor: 'transparent', borderWidth: 1, borderColor: '#9ca3af', marginTop: 12 }]} onPress={() => router.back()}>
+          <Text style={[styles.permissionButtonText, { color: '#9ca3af' }]}>Go Back</Text>
+        </TouchableOpacity>
       </View>
     );
   }

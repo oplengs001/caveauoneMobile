@@ -343,13 +343,19 @@ export default function DeliveryDetail() {
 
   if (!permission?.granted && scanning) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: "#000" }]}>
+      <SafeAreaView style={[styles.container, { backgroundColor: "#000", justifyContent: "center", alignItems: "center" }]}>
         <Text style={styles.permissionText}>Camera permission required</Text>
         <TouchableOpacity
           style={styles.permissionButton}
           onPress={requestPermission}
         >
           <Text style={styles.permissionButtonText}>Grant Permission</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.cancelScanButton}
+          onPress={() => setScanning(false)}
+        >
+          <Text style={styles.cancelScanText}>Cancel</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
