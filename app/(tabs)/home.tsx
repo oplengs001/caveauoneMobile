@@ -21,6 +21,8 @@ import {
   Truck,
   Wine,
   Zap,
+  CalendarCheck,
+  ChevronRight,
 } from "lucide-react-native";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -460,12 +462,36 @@ export default function HomeScreen() {
     }
   }, [profile, salesPeriod]);
 
+  const [todayCloseStatus, setTodayCloseStatus] = useState<{
+    status: string;
+    totalRevenue: number;
+    totalBottlesSold: number;
+  } | null>(null);
+
+  const fetchTodayCloseStatus = useCallback(async () => {
+    const isManager = profile?.role === "store_manager" || profile?.role === "store";
+    if (!isManager || !profile?.locationId) return;
+    try {
+      const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
+      const res = await apiFetch(`/day-close?storeId=${profile.locationId}&date=${todayStr}`);
+      if (res?.dayClose) {
+        setTodayCloseStatus({
+          status: res.dayClose.status,
+          totalRevenue: Number(res.dayClose.totalRevenue || 0),
+          totalBottlesSold: Number(res.dayClose.totalBottlesSold || 0),
+        });
+      }
+    } catch (err) {
+      console.warn("Failed to fetch today close status", err);
+    }
+  }, [profile]);
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
       const isStoreUser = profile?.role === "store" || profile?.role === "store_manager" || profile?.role === "store_staff";
       if (isStoreUser) {
-        const promises: Promise<any>[] = [fetchSalesMetrics()];
+        const promises: Promise<any>[] = [fetchSalesMetrics(), fetchTodayCloseStatus()];
         if (profile?.role !== "store_staff") {
           promises.push(fetchMetrics(), fetchOutboundRequests());
         }
@@ -476,7 +502,7 @@ export default function HomeScreen() {
     } finally {
       setRefreshing(false);
     }
-  }, [profile, fetchMetrics, fetchOutboundRequests, fetchSalesMetrics]);
+  }, [profile, fetchMetrics, fetchOutboundRequests, fetchSalesMetrics, fetchTodayCloseStatus]);
 
   useFocusEffect(
     useCallback(() => {
@@ -489,17 +515,19 @@ export default function HomeScreen() {
             fetchMetrics();
             fetchOutboundRequests();
             fetchSalesMetrics();
+            fetchTodayCloseStatus();
           }
         });
       }
-    }, [loading, profile, fetchMetrics, fetchOutboundRequests, fetchSalesMetrics, onRefresh]),
+    }, [loading, profile, fetchMetrics, fetchOutboundRequests, fetchSalesMetrics, fetchTodayCloseStatus, onRefresh]),
   );
 
   useEffect(() => {
     if (!loading) {
       fetchSalesMetrics();
+      fetchTodayCloseStatus();
     }
-  }, [loading, profile, salesPeriod, fetchSalesMetrics]);
+  }, [loading, profile, salesPeriod, fetchSalesMetrics, fetchTodayCloseStatus]);
 
   const handleSignOut = () => {
     Alert.alert("Sign Out", "Are you sure you want to exit the system?", [
@@ -641,6 +669,62 @@ export default function HomeScreen() {
               : "Warehouse Management System"}
           </Text>
         </View>
+
+        {isStore && (profile?.role === "store_manager" || profile?.role === "store") && (
+          <TouchableOpacity
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              padding: 14,
+              borderRadius: 16,
+              borderWidth: 1,
+              marginBottom: 16,
+              gap: 12,
+              backgroundColor:
+                todayCloseStatus?.status === "submitted" || todayCloseStatus?.status === "acknowledged"
+                  ? "#10b98115"
+                  : "#f59e0b15",
+              borderColor:
+                todayCloseStatus?.status === "submitted" || todayCloseStatus?.status === "acknowledged"
+                  ? "#10b98140"
+                  : "#f59e0b40",
+            }}
+            onPress={() => router.push("/day-close")}
+          >
+            <CalendarCheck
+              size={24}
+              color={
+                todayCloseStatus?.status === "submitted" || todayCloseStatus?.status === "acknowledged"
+                  ? "#10b981"
+                  : "#f59e0b"
+              }
+            />
+            <View style={{ flex: 1 }}>
+              <Text
+                style={{
+                  fontSize: 14,
+                  fontWeight: "900",
+                  color:
+                    todayCloseStatus?.status === "submitted" || todayCloseStatus?.status === "acknowledged"
+                      ? "#059669"
+                      : "#d97706",
+                }}
+              >
+                {todayCloseStatus?.status === "acknowledged"
+                  ? "Day Close Acknowledged ✓"
+                  : todayCloseStatus?.status === "submitted"
+                  ? "Today's Day Close Submitted ✓"
+                  : "Today's Sales Day Is Still Open ⚠️"}
+              </Text>
+              <Text style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>
+                {todayCloseStatus?.status === "submitted" || todayCloseStatus?.status === "acknowledged"
+                  ? `₱${todayCloseStatus.totalRevenue.toLocaleString()} · ${todayCloseStatus.totalBottlesSold} btl sold`
+                  : "Tap to review metrics, report discrepancies & close day →"}
+              </Text>
+            </View>
+            <ChevronRight size={18} color="#94a3b8" />
+          </TouchableOpacity>
+        )}
 
         {isStore && hasAlerts && (
           <View style={styles.metricsDashboard}>
