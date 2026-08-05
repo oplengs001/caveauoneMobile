@@ -12,10 +12,21 @@ import { getToken } from "@/lib/auth";
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowBanner: true,
+    shouldShowList: true,
     shouldPlaySound: true,
-    shouldSetBadge: true,
+    shouldSetBadge: false,
   }),
 });
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,   // Determines if banner shows in foreground (deprecated in newer SDKs, but still works)
+    shouldShowBanner: true,  // Use this for newer SDKs to show the banner
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
+
 
 export interface PushNotificationState {
   expoPushToken?: Notifications.ExpoPushToken;
@@ -60,6 +71,7 @@ export const usePushNotifications = (): PushNotificationState => {
           Constants?.expoConfig?.extra?.eas?.projectId ??
           Constants?.easConfig?.projectId;
 
+        console.log('🔍 [PUSH] Using projectId:', projectId);
         token = await Notifications.getExpoPushTokenAsync({
           projectId,
         });
@@ -85,7 +97,7 @@ export const usePushNotifications = (): PushNotificationState => {
               body: JSON.stringify({ pushToken: token.data }),
             }).catch((err) => console.error("Error auto-syncing push token:", err));
           }
-        }).catch(() => {});
+        }).catch(() => { });
       }
     }).catch((err) => {
       console.log("Registration Error", String(err));

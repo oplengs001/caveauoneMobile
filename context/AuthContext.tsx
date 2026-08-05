@@ -37,14 +37,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const userData = (data?.user || data) as AppUser;
       setUser(userData);
       setProfile(userData);
-
-      if (expoPushToken?.data) {
-        apiFetch('/auth/me', {
-          method: 'POST',
-          body: JSON.stringify({ pushToken: expoPushToken.data }),
-        }).catch((err) => console.error('Error syncing push token:', err));
-      }
-
+      // Push token sync is handled by the useEffect below (fires when user+token both available)
       return userData;
     } catch (err) {
       console.error('Auth refresh error:', err);
@@ -94,10 +87,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     if (user && expoPushToken?.data) {
+      console.log('🔵 [AuthContext] Syncing push token to backend:', expoPushToken.data);
       apiFetch('/auth/me', {
         method: 'POST',
         body: JSON.stringify({ pushToken: expoPushToken.data }),
-      }).catch((err) => console.error('Error syncing push token:', err));
+      })
+        .then(() => console.log('✅ [AuthContext] Push token synced successfully'))
+        .catch((err) => console.error('❌ [AuthContext] Error syncing push token:', err));
+    } else {
+      console.log('⏸️ [AuthContext] Push token sync skipped — user:', !!user, '| token:', expoPushToken?.data ?? 'none');
     }
   }, [user, expoPushToken?.data]);
 
