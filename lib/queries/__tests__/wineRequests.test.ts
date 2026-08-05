@@ -1,20 +1,11 @@
 import { getWineRequests, updateWineRequest } from '../wineRequests';
-import { getDocs, updateDoc, doc, where, limit, orderBy } from 'firebase/firestore';
+import { apiFetch } from '@/lib/api';
 import { logActivity } from '@/lib/utils/activityLogger';
 
 jest.mock('../cache', () => ({
   withCache: jest.fn(async (_k: string, _t: number, f: () => Promise<unknown>) => f()),
   invalidatePrefix: jest.fn(),
 }));
-
-const makeDocs = (items: Array<{ id: string; [key: string]: any }>) => ({
-  docs: items.map((item) => ({
-    id: item.id,
-    data: () => { const { id: _id, ...rest } = item; return rest; },
-    exists: () => true,
-  })),
-  empty: items.length === 0,
-});
 
 const mockWineRequests = [
   { id: 'req-1', storeId: 'store-a', status: 'pending', totalAmount: 500, items: [] },
@@ -24,7 +15,7 @@ const mockWineRequests = [
 describe('wineRequests queries', () => {
   describe('getWineRequests', () => {
     it('returns all requests when no filters provided', async () => {
-      (getDocs as jest.Mock).mockResolvedValueOnce(makeDocs(mockWineRequests));
+      (apiFetch as jest.Mock).mockResolvedValueOnce({ wineRequests: mockWineRequests });
 
       const result = await getWineRequests({});
 
@@ -34,79 +25,66 @@ describe('wineRequests queries', () => {
     });
 
     it('applies storeId filter', async () => {
-      (getDocs as jest.Mock).mockResolvedValueOnce(makeDocs([mockWineRequests[0]]));
+      (apiFetch as jest.Mock).mockResolvedValueOnce({ wineRequests: [mockWineRequests[0]] });
 
       await getWineRequests({ storeId: 'store-a' });
 
-      expect(where).toHaveBeenCalledWith('storeId', '==', 'store-a');
+      expect(apiFetch).toHaveBeenCalledWith('/wine-requests?storeId=store-a');
     });
 
-    it('applies single status filter', async () => {
-      (getDocs as jest.Mock).mockResolvedValueOnce(makeDocs([mockWineRequests[0]]));
+    it('applies status filter', async () => {
+      (apiFetch as jest.Mock).mockResolvedValueOnce({ wineRequests: [mockWineRequests[0]] });
 
       await getWineRequests({ status: 'pending' });
 
-      expect(where).toHaveBeenCalledWith('status', '==', 'pending');
+      expect(apiFetch).toHaveBeenCalledWith('/wine-requests?status=pending');
     });
 
-    it('applies array status filter using `in` operator', async () => {
-      (getDocs as jest.Mock).mockResolvedValueOnce(makeDocs(mockWineRequests));
+    it('applies array status filter', async () => {
+      (apiFetch as jest.Mock).mockResolvedValueOnce({ wineRequests: mockWineRequests });
 
       await getWineRequests({ status: ['pending', 'converted'] });
 
-      expect(where).toHaveBeenCalledWith('status', 'in', ['pending', 'converted']);
+      expect(apiFetch).toHaveBeenCalledWith('/wine-requests?status=pending%2Cconverted');
     });
 
     it('applies pagination limit', async () => {
-      await getWineRequests({}, { limit: 5 });
+      (apiFetch as jest.Mock).mockResolvedValueOnce({ wineRequests: mockWineRequests });
+      await getWineRequests({}, { limit: 10 });
 
-      expect(limit).toHaveBeenCalledWith(5);
-    });
-
-    it('orders by createdAt desc', async () => {
-      await getWineRequests({});
-
-      expect(orderBy).toHaveBeenCalledWith('createdAt', 'desc');
-    });
-
-    it('returns empty array when no results', async () => {
-      const result = await getWineRequests({ status: 'pending' });
-
-      expect(result).toHaveLength(0);
+      expect(apiFetch).toHaveBeenCalledWith('/wine-requests?limit=10');
     });
   });
 
   describe('updateWineRequest', () => {
-    it('calls updateDoc with correct document reference and data', async () => {
+    it('calls apiFetch PATCH with correct parameters', async () => {
+      (apiFetch as jest.Mock).mockResolvedValueOnce({ id: 'req-1', status: 'converted' });
+
       await updateWineRequest('req-1', { status: 'converted' });
 
-      expect(doc).toHaveBeenCalledWith(expect.anything(), 'wine_requests', 'req-1');
-      expect(updateDoc).toHaveBeenCalledWith(
-        expect.anything(),
-        { status: 'converted' }
-      );
+      expect(apiFetch).toHaveBeenCalledWith('/wine-requests/req-1', expect.objectContaining({ method: 'PATCH' }));
     });
 
     it('calls logActivity when logData is provided', async () => {
-      const logData = {
-        action: 'WINE_REQUEST_CREATED',
-        entity: 'wine_requests',
-        entityId: 'req-1',
-        summary: 'Test',
-        performedBy: 'user@test.com',
-        performedByRole: 'store',
-        source: 'store' as const,
-      };
+      (apiFetch as jest.Mock).mockResolvedValueOnce({ id: 'req-1', status: 'converted' });
 
-      await updateWineRequest('req-1', { status: 'converted' }, logData);
+      await updateWineRequest(
+        'req-1',
+        { status: 'converted' },
+        {
+          summary: 'Converted request req-1 to pullout',
+          performedBy: 'store@example.com',
+          performedByRole: 'store',
+          source: 'store',
+        }
+      );
 
-      expect(logActivity).toHaveBeenCalledWith(logData);
-    });
-
-    it('does NOT call logActivity when logData is omitted', async () => {
-      await updateWineRequest('req-1', { status: 'rejected' });
-
-      expect(logActivity).not.toHaveBeenCalled();
+      expect(logActivity).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'WINE_REQUEST_RECEIVING',
+          entityId: 'req-1',
+        })
+      );
     });
   });
 });

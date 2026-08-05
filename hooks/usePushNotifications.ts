@@ -4,6 +4,8 @@ import * as Notifications from "expo-notifications";
 import { useEffect, useRef, useState } from "react";
 import { Platform } from "react-native";
 
+import { router } from "expo-router";
+
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -94,6 +96,10 @@ export const usePushNotifications = (): PushNotificationState => {
     responseListener.current =
       Notifications.addNotificationResponseReceivedListener((response) => {
         console.log("👆 [PUSH NOTIFICATION] TAPPED BY USER:", JSON.stringify(response, null, 2));
+        const screen = response.notification.request.content.data?.screen;
+        if (screen === "day-close") {
+          router.push("/day-close");
+        }
       });
 
     return () => {

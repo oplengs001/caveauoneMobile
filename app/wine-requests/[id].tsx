@@ -1,12 +1,12 @@
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
-import { db } from "@/lib/firebase";
+import { apiFetch } from "@/lib/api";
 import { logActivity } from "@/lib/utils/activityLogger";
+import { formatDate } from "@/lib/utils/format";
 import { InventoryBottle, PulloutRequest, WineRequest } from "@/types";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { collection, doc, documentId, getDoc, getDocs, limit, query, serverTimestamp, updateDoc, where, writeBatch } from "firebase/firestore";
 import {
   ArrowLeft,
   Ban,
@@ -52,6 +52,7 @@ export default function WineRequestDetail() {
   const [pulloutRequest, setPulloutRequest] = useState<PulloutRequest | null>(null);
   const [batchBottles, setBatchBottles] = useState<{
     bottleId: string;
+    readableId?: string;
     masterWineId: string;
     wineName: string;
     vintage?: string;
@@ -76,60 +77,35 @@ export default function WineRequestDetail() {
     if (!id) return;
     setLoading(true);
     try {
-      const snap = await getDoc(doc(db, "wine_requests", id as string));
-      if (snap.exists()) {
-        const reqData = {
-          id: snap.id,
-          ...snap.data(),
-          createdAt: snap.data().createdAt?.toDate() || new Date(),
-        } as WineRequest;
-        setRequest(reqData);
+      const reqData = await apiFetch(`/wine-requests/${id}`);
+      setRequest(reqData as WineRequest);
 
-        // Fetch associated pullout request to populate batch bottles
-        const pulloutsRef = collection(db, "pullout_requests");
-        const q = query(pulloutsRef, where("wineRequestId", "==", id), limit(1));
-        const pulloutSnap = await getDocs(q);
+      // Fetch associated pullout request to populate batch bottles
+      const pulloutData = await apiFetch(`/pullout-requests?wineRequestId=${id}&limit=1`);
+      const pullouts: PulloutRequest[] = pulloutData.pulloutRequests || pulloutData;
 
-        if (!pulloutSnap.empty) {
-          const poData = { id: pulloutSnap.docs[0].id, ...pulloutSnap.docs[0].data() } as PulloutRequest;
-          setPulloutRequest(poData);
+      if (pullouts && pullouts.length > 0) {
+        const poData = pullouts[0];
+        setPulloutRequest(poData);
 
-          const bottles: any[] = [];
-          poData.items.forEach(item => {
-            if (item.pulledBottleIds) {
-              item.pulledBottleIds.forEach(bid => {
-                bottles.push({
-                  bottleId: bid,
-                  masterWineId: item.masterWineId,
-                  wineName: item.wineName,
-                  vintage: item.vintage,
-                  format: item.format,
-                  producer: item.producer
-                });
+        const bottles: any[] = [];
+        poData.items.forEach((item: any) => {
+          if (item.pulledBottleIds) {
+            item.pulledBottleIds.forEach((bid: string) => {
+              bottles.push({
+                bottleId: bid,
+                readableId: bid,
+                masterWineId: item.masterWineId,
+                wineName: item.wineName,
+                vintage: item.vintage,
+                format: item.format,
+                producer: item.producer,
               });
-            }
-          });
-          setBatchBottles(bottles);
-
-          // Verify which bottles are already received
-          const bIds = bottles.map(b => b.bottleId);
-          const verified = new Set<string>();
-          if (bIds.length > 0) {
-            const chunks = [];
-            for (let i = 0; i < bIds.length; i += 10) chunks.push(bIds.slice(i, i + 10));
-
-            for (const chunk of chunks) {
-              const bq = query(collection(db, "inventory_bottles"), where(documentId(), "in", chunk));
-              const bSnap = await getDocs(bq);
-              bSnap.docs.forEach(d => {
-                if (d.data().status === "received" || d.data().status === "shelved") {
-                  verified.add(d.id);
-                }
-              });
-            }
+            });
           }
-          setVerifiedBottleIds(verified);
-        }
+        });
+
+        setBatchBottles(bottles);
       }
     } catch (err) {
       console.error("Failed to fetch request:", err);
@@ -144,18 +120,17 @@ export default function WineRequestDetail() {
     setScanning(false);
 
     try {
-      const bottleRef = doc(db, "inventory_bottles", data);
-      const bottleSnap = await getDoc(bottleRef);
-
-      if (!bottleSnap.exists()) {
+      let bottleData: InventoryBottle;
+      try {
+        bottleData = await apiFetch(`/bottles/${data}`);
+      } catch {
         Alert.alert("Not Found", `No bottle found with ID: ${data}`, [
           { text: "OK", onPress: () => setScanning(true) },
         ]);
         return;
       }
 
-      const bottleData = bottleSnap.data() as InventoryBottle;
-      if (bottleData.storeRef?.id === request.storeId) {
+      if (bottleData.storeId === request.storeId) {
         Alert.alert(
           "Already Received",
           "This bottle has already been received for this request.",
@@ -163,7 +138,7 @@ export default function WineRequestDetail() {
         );
         return;
       }
-      if (bottleData.outboundLocationRef?.id !== request.storeId) {
+      if (bottleData.outboundStoreId !== request.storeId) {
         Alert.alert(
           "Wrong Store",
           "This bottle is not designated for your location.",
@@ -181,7 +156,7 @@ export default function WineRequestDetail() {
         return;
       }
 
-      const masterWineId = bottleData.masterWineRef.id;
+      const masterWineId = bottleData.masterWineId;
       const itemIndex = request.items.findIndex(
         (i) => i.masterWineId === masterWineId,
       );
@@ -207,12 +182,14 @@ export default function WineRequestDetail() {
         return;
       }
 
-      await updateDoc(bottleRef, {
-        status: "received",
-        storeRef: doc(db, "stores", request.storeId),
-        locationRef: null,
-        outboundLocationRef: null,
-        updatedAt: serverTimestamp(),
+      await apiFetch(`/bottles/${data}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          status: "received",
+          storeId: request.storeId,
+          locationId: null,
+          outboundStoreId: null,
+        }),
       });
 
       const newItems = [...request.items];
@@ -221,16 +198,17 @@ export default function WineRequestDetail() {
         ingressedQty: (item.ingressedQty || 0) + 1,
       };
 
-      // Request is complete if every item's received + skipped quantity equals or exceeds what was asked
       const allReceived = newItems.every(
         (i) => (i.ingressedQty || 0) + (i.skippedQty || 0) >= i.qty,
       );
       const newStatus = allReceived ? "ingress_complete" : "receiving";
 
-      await updateDoc(doc(db, "wine_requests", request.id), {
-        items: newItems,
-        status: newStatus,
-        updatedAt: serverTimestamp(),
+      await apiFetch(`/wine-requests/${request.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          items: newItems,
+          status: newStatus,
+        }),
       });
 
       // Invalidate dashboard metrics cache for this store
@@ -257,36 +235,55 @@ export default function WineRequestDetail() {
 
       const scannedBottleId = data;
 
-      Alert.alert(
-        "✓ Received",
-        `${item.wineName} has been received.\n\nWould you like to tag a storage location for this bottle?`,
-        [
-          {
-            text: "Tag Location",
-            onPress: () => {
-              router.replace({
-                pathname: "/tagging",
-                params: {
-                  bottleId: scannedBottleId,
-                  mode: "tagging",
-                  source: "wine-request",
-                  fromRequestId: id,
-                },
-              });
+      if (allReceived) {
+        Alert.alert(
+          "✓ All Items Received",
+          `${item.wineName} has been received.\n\nAll bottles in this request have been received! Would you like to tag a storage location?`,
+          [
+            {
+              text: "Tag Location",
+              onPress: () => {
+                router.replace({
+                  pathname: "/tagging",
+                  params: {
+                    bottleId: scannedBottleId,
+                    mode: "tagging",
+                    source: "wine-request",
+                    fromRequestId: id,
+                  },
+                });
+              },
             },
-          },
-          {
-            text: "Scan Next",
-            onPress: () => {
-              setScanning(true);
+            {
+              text: "Scan Next",
+              onPress: () => {
+                setScanning(true);
+              },
             },
-          },
-          {
-            text: "Done",
-            style: "cancel",
-          },
-        ],
-      );
+            {
+              text: "Done",
+              style: "cancel",
+            },
+          ],
+        );
+      } else {
+        Alert.alert(
+          "✓ Received",
+          `${item.wineName} has been received.`,
+          [
+            {
+              text: "Scan Next",
+              onPress: () => {
+                setScanning(true);
+              },
+            },
+            {
+              text: "Done",
+              style: "cancel",
+            },
+          ],
+        );
+      }
 
       fetchRequest();
     } catch (error) {
@@ -318,13 +315,14 @@ export default function WineRequestDetail() {
     isProcessing.current = true;
 
     try {
-      const bottleRef = doc(db, "inventory_bottles", data);
-      await updateDoc(bottleRef, {
-        status: "received",
-        storeRef: doc(db, "stores", request.storeId),
-        locationRef: null,
-        outboundLocationRef: null,
-        updatedAt: serverTimestamp(),
+      await apiFetch(`/bottles/${data}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          status: "received",
+          storeId: request.storeId,
+          locationId: null,
+          outboundStoreId: null,
+        }),
       });
 
       const itemIndex = request.items.findIndex((i) => i.masterWineId === expectedBottle.masterWineId);
@@ -341,10 +339,12 @@ export default function WineRequestDetail() {
         );
         const newStatus = allReceived ? "ingress_complete" : "receiving";
 
-        await updateDoc(doc(db, "wine_requests", request.id), {
-          items: newItems,
-          status: newStatus,
-          updatedAt: serverTimestamp(),
+        await apiFetch(`/wine-requests/${request.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            items: newItems,
+            status: newStatus,
+          }),
         });
 
         setRequest(prev => prev ? { ...prev, items: newItems, status: newStatus as any } : prev);
@@ -384,10 +384,12 @@ export default function WineRequestDetail() {
               );
               const newStatus = allReceived ? "ingress_complete" : "receiving";
 
-              await updateDoc(doc(db, "wine_requests", request.id), {
-                items: newItems,
-                status: newStatus,
-                updatedAt: serverTimestamp(),
+              await apiFetch(`/wine-requests/${request.id}`, {
+                method: "PATCH",
+                body: JSON.stringify({
+                  items: newItems,
+                  status: newStatus,
+                }),
               });
 
               setRequest(prev => prev ? { ...prev, items: newItems, status: newStatus as any } : prev);
@@ -421,18 +423,20 @@ export default function WineRequestDetail() {
           onPress: async () => {
             isProcessing.current = true;
             try {
-              const batch = writeBatch(db);
-              
-              pendingBottles.forEach(b => {
-                const bottleRef = doc(db, "inventory_bottles", b.bottleId);
-                batch.update(bottleRef, {
-                  status: "received",
-                  isTagged: false,
-                  storeRef: doc(db, "stores", request.storeId),
-                  outboundLocationRef: null,
-                  updatedAt: serverTimestamp(),
-                });
-              });
+              await Promise.all(
+                pendingBottles.map((b) =>
+                  apiFetch(`/bottles/${b.bottleId}`, {
+                    method: "PATCH",
+                    body: JSON.stringify({
+                      status: "received",
+                      isTagged: false,
+                      storeId: request.storeId,
+                      locationId: null,
+                      outboundStoreId: null,
+                    }),
+                  })
+                )
+              );
 
               const newItems = [...request.items];
               pendingBottles.forEach(b => {
@@ -448,13 +452,13 @@ export default function WineRequestDetail() {
               const isAllReceived = newItems.every(i => (i.ingressedQty || 0) + (i.skippedQty || 0) >= i.qty);
               const newStatus = isAllReceived ? "ingress_complete" : request.status;
 
-              batch.update(doc(db, "wine_requests", request.id), {
-                items: newItems,
-                status: newStatus,
-                updatedAt: serverTimestamp(),
+              await apiFetch(`/wine-requests/${request.id}`, {
+                method: "PATCH",
+                body: JSON.stringify({
+                  items: newItems,
+                  status: newStatus,
+                }),
               });
-
-              await batch.commit();
 
               logActivity({
                 action: "WINE_REQUEST_INGRESS_MANUAL_BATCH",
@@ -472,7 +476,7 @@ export default function WineRequestDetail() {
               });
 
               setRequest(prev => prev ? { ...prev, items: newItems, status: newStatus as any } : prev);
-              
+
               const nextVerified = new Set(verifiedBottleIds);
               pendingBottles.forEach(b => nextVerified.add(b.bottleId));
               setVerifiedBottleIds(nextVerified);
@@ -493,7 +497,7 @@ export default function WineRequestDetail() {
 
   const handleBatchNoQR = async (bottleId: string) => {
     if (!request || isProcessing.current) return;
-    
+
     if (verifiedBottleIds.has(bottleId) || skippedBottleIds.has(bottleId)) return;
 
     const expectedBottle = batchBottles.find(b => b.bottleId === bottleId);
@@ -504,18 +508,20 @@ export default function WineRequestDetail() {
       "Mark this bottle as received even though there is no QR label?",
       [
         { text: "Cancel", style: "cancel" },
-        { 
-          text: "Receive", 
+        {
+          text: "Receive",
           onPress: async () => {
             isProcessing.current = true;
             try {
-              const bottleRef = doc(db, "inventory_bottles", bottleId);
-              await updateDoc(bottleRef, {
-                status: "received",
-                isTagged: false,
-                storeRef: doc(db, "stores", request.storeId),
-                outboundLocationRef: null,
-                updatedAt: serverTimestamp(),
+              await apiFetch(`/bottles/${bottleId}`, {
+                method: "PATCH",
+                body: JSON.stringify({
+                  status: "received",
+                  isTagged: false,
+                  storeId: request.storeId,
+                  locationId: null,
+                  outboundStoreId: null,
+                }),
               });
 
               logActivity({
@@ -539,22 +545,24 @@ export default function WineRequestDetail() {
                 const newItems = [...request.items];
                 const currentIngressed = newItems[itemIndex].ingressedQty || 0;
                 newItems[itemIndex].ingressedQty = currentIngressed + 1;
-                
+
                 const isAllReceived = newItems.every(i => (i.ingressedQty || 0) + (i.skippedQty || 0) >= i.qty);
                 const newStatus = isAllReceived ? "ingress_complete" : request.status;
 
-                await updateDoc(doc(db, "wine_requests", request.id), {
-                  items: newItems,
-                  status: newStatus,
-                  updatedAt: serverTimestamp(),
+                await apiFetch(`/wine-requests/${request.id}`, {
+                  method: "PATCH",
+                  body: JSON.stringify({
+                    items: newItems,
+                    status: newStatus,
+                  }),
                 });
-                
+
                 setRequest(prev => prev ? { ...prev, items: newItems, status: newStatus as any } : prev);
               }
-              
+
               setVerifiedBottleIds(prev => new Set(prev).add(bottleId));
               await AsyncStorage.removeItem(`dashboard_metrics_${request.storeId}`);
-              
+
             } catch (err) {
               console.error(err);
               Alert.alert("Error", "Failed to receive bottle manually.");
@@ -721,7 +729,7 @@ export default function WineRequestDetail() {
                       {[bottle.producer, bottle.vintage, bottle.format].filter(Boolean).join(" · ")}
                     </Text>
                     <Text style={{ color: theme.textSecondary, fontSize: 11, fontWeight: "700", fontFamily: "monospace", marginTop: 4 }}>
-                      {bottle.bottleId.slice(-12)}
+                      {bottle.readableId || bottle.bottleId}
                     </Text>
                   </View>
                   <View style={{ alignItems: "flex-end", gap: 6 }}>
@@ -760,7 +768,16 @@ export default function WineRequestDetail() {
           </ScrollView>
 
           <View style={{ padding: 24, backgroundColor: theme.background }}>
-            {verifiedBottleIds.size > 0 && (
+            {isAllBatchHandled && (
+              <View style={[styles.successIndicator, { marginBottom: 12 }]}>
+                <CheckCircle2 size={20} color="#059669" />
+                <Text style={styles.successIndicatorText}>
+                  All items successfully received
+                </Text>
+              </View>
+            )}
+
+            {isAllBatchHandled && verifiedBottleIds.size > 0 && (
               <TouchableOpacity
                 style={[styles.scanButton, { marginBottom: 12, backgroundColor: "#10b981", shadowColor: "#10b981" }]}
                 onPress={() => {
@@ -800,7 +817,9 @@ export default function WineRequestDetail() {
               </TouchableOpacity>
             )}
             <TouchableOpacity style={[styles.scanButton, { backgroundColor: theme.card, borderWidth: 1, borderColor: theme.border, shadowOpacity: 0 }]} onPress={() => setIsBatchMode(false)}>
-              <Text style={[styles.scanButtonText, { color: theme.text }]}>Cancel Batch</Text>
+              <Text style={[styles.scanButtonText, { color: theme.text }]}>
+                {isAllBatchHandled ? "Done" : "Cancel Batch"}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -920,7 +939,7 @@ export default function WineRequestDetail() {
             <Text
               style={[styles.statusDate, { color: statusConfig.color + "AA" }]}
             >
-              {request.createdAt.toLocaleDateString("en-US", {
+              {formatDate(request.createdAt, {
                 weekday: "long",
                 month: "long",
                 day: "numeric",

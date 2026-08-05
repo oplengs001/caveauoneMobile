@@ -6,7 +6,8 @@ export function useThemeColor(
   colorName: keyof typeof Colors.warehouse
 ) {
   const { profile } = useAuth();
-  const role = profile?.role === 'store' ? 'store' : 'warehouse';
+  const isStore = profile?.role === 'store' || profile?.role === 'store_manager' || profile?.role === 'store_staff';
+  const role = isStore ? 'store' : 'warehouse';
 
   // Map props for compatibility: light -> store, dark -> warehouse
   const themePropKey = role === 'store' ? 'light' : 'dark';

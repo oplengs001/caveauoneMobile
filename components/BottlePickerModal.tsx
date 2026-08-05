@@ -14,6 +14,9 @@ export interface BottleWithLocation {
   bottleId: string;
   locationName: string;
   locationId: string;
+  status?: string;
+  glassesRemaining?: number;
+  readableId?: string;
 }
 
 interface Props {

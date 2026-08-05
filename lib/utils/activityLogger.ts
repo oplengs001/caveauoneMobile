@@ -1,13 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /**
- * activityLogger — Warehouse App (client-side, firebase/firestore)
+ * activityLogger — Warehouse App (client-side, REST API v2)
  *
- * Writes a single operation-level log entry to the `activity_logs` Firestore
- * collection. Fire-and-forget: errors are swallowed so they never break the
+ * Writes a single operation-level log entry to activity logs.
+ * Fire-and-forget: errors are swallowed so they never break the
  * calling operation.
  */
-import { db } from "@/lib/firebase";
-import { addDoc, collection, serverTimestamp } from "firebase/firestore";
+import { apiFetch } from "@/lib/api";
 
 export type ActivitySource = "admin" | "warehouse" | "store";
 export type ActivityAction =
@@ -34,8 +33,8 @@ export type ActivityAction =
 
 export interface LogActivityArgs {
   action: ActivityAction;
-  entity: string;          // Firestore collection, e.g. "pullout_requests"
-  entityId: string;        // Document ID that was mutated
+  entity: string;          // e.g. "pullout_requests"
+  entityId: string;        // ID that was mutated
   summary: string;         // Human-readable one-liner
   details?: Record<string, any>; // Optional extra payload
   performedBy: string;     // email or uid
@@ -45,9 +44,9 @@ export interface LogActivityArgs {
 
 export async function logActivity(args: LogActivityArgs): Promise<void> {
   try {
-    await addDoc(collection(db, "activity_logs"), {
-      ...args,
-      timestamp: serverTimestamp(),
+    await apiFetch("/activity-logs", {
+      method: "POST",
+      body: JSON.stringify(args),
     });
   } catch (err) {
     // Never throw — logging must never break the calling flow

@@ -1,21 +1,15 @@
-import { db } from "@/lib/firebase";
-import { Stack, useRouter } from "expo-router";
-import {
-  collection,
-  onSnapshot,
-  orderBy,
-  query,
-  where,
-} from "firebase/firestore";
+import { apiFetch } from "@/lib/api";
+import { Stack, useFocusEffect, useRouter } from "expo-router";
 import {
   ArrowRight,
   ChevronLeft,
   FileDown,
   Package,
 } from "lucide-react-native";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
   FlatList,
   SafeAreaView,
   StyleSheet,
@@ -25,6 +19,60 @@ import {
 } from "react-native";
 import { OnboardingTask } from "../../types";
 
+function OnboardingListSkeleton() {
+  const pulseAnim = useRef(new Animated.Value(0.25)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 0.7,
+          duration: 750,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 0.25,
+          duration: 750,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, [pulseAnim]);
+
+  return (
+    <View style={{ flex: 1, paddingHorizontal: 16, paddingTop: 8, gap: 12 }}>
+      {[1, 2, 3, 4].map((i) => (
+        <View
+          key={i}
+          style={{
+            backgroundColor: "#1e293b",
+            borderRadius: 16,
+            padding: 16,
+            borderWidth: 1,
+            borderColor: "#334155",
+            gap: 12,
+          }}
+        >
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+              <Animated.View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: "#334155", opacity: pulseAnim }} />
+              <View style={{ gap: 6 }}>
+                <Animated.View style={{ width: 90, height: 14, borderRadius: 6, backgroundColor: "#334155", opacity: pulseAnim }} />
+                <Animated.View style={{ width: 130, height: 10, borderRadius: 6, backgroundColor: "#334155", opacity: pulseAnim }} />
+              </View>
+            </View>
+            <Animated.View style={{ width: 70, height: 22, borderRadius: 8, backgroundColor: "#334155", opacity: pulseAnim }} />
+          </View>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingTop: 4 }}>
+            <Animated.View style={{ width: 110, height: 12, borderRadius: 6, backgroundColor: "#334155", opacity: pulseAnim }} />
+            <Animated.View style={{ width: 80, height: 12, borderRadius: 6, backgroundColor: "#334155", opacity: pulseAnim }} />
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 export default function OnboardingTasksScreen() {
   const [tasks, setTasks] = useState<OnboardingTask[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,47 +81,36 @@ export default function OnboardingTasksScreen() {
   >("incoming");
   const router = useRouter();
 
-  useEffect(() => {
-    // Map tabs to Firestore statuses
-    const statusMap = {
-      incoming: "warehouse", // From admin: moves to warehouse status
-      active: "warehouse", // We track "active" locally or by checking if any item has onboardedQty > 0
-      completed: "completed",
-    };
+  useFocusEffect(
+    useCallback(() => {
+      setLoading(true);
+      const statusMap = {
+        incoming: "warehouse",
+        active: "warehouse",
+        completed: "completed",
+      };
 
-    const q = query(
-      collection(db, "onboarding_tasks"),
-      where("status", "==", statusMap[selectedTab]),
-      orderBy("createdAt", "desc"),
-    );
-
-    const unsubscribe = onSnapshot(q, (snap) => {
-      const data = snap.docs.map((doc) => ({
-        id: doc.id,
-        ...(doc.data() as object),
-      })) as OnboardingTask[];
-
-      // Local filtering for "Active" vs "Incoming"
-      if (selectedTab === "incoming") {
-        setTasks(
-          data.filter((t) => t.items.every((i) => i.onboardedQty === 0)),
-        );
-      } else if (selectedTab === "active") {
-        setTasks(
-          data.filter(
-            (t) =>
-              t.items.some((i) => i.onboardedQty > 0) &&
-              t.items.some((i) => i.onboardedQty < i.qty),
-          ),
-        );
-      } else {
-        setTasks(data);
-      }
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [selectedTab]);
+      apiFetch(`/onboarding?status=${statusMap[selectedTab]}`)
+        .then((data) => {
+          const all: OnboardingTask[] = data.onboardingTasks || data;
+          if (selectedTab === "incoming") {
+            setTasks(all.filter((t) => t.items.every((i) => i.onboardedQty === 0)));
+          } else if (selectedTab === "active") {
+            setTasks(
+              all.filter(
+                (t) =>
+                  t.items.some((i) => i.onboardedQty > 0) &&
+                  t.items.some((i) => i.onboardedQty < i.qty),
+              ),
+            );
+          } else {
+            setTasks(all);
+          }
+        })
+        .catch((err) => console.error("Failed to load onboarding tasks:", err))
+        .finally(() => setLoading(false));
+    }, [selectedTab])
+  );
 
   const renderItem = ({ item }: { item: OnboardingTask }) => {
     const totalQty = item.items.reduce((sum, i) => sum + i.qty, 0);
@@ -209,10 +246,7 @@ export default function OnboardingTasksScreen() {
       </View>
 
       {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#4f46e5" />
-          <Text style={styles.loadingText}>Loading tasks...</Text>
-        </View>
+        <OnboardingListSkeleton />
       ) : (
         <FlatList
           data={tasks}

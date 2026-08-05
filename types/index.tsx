@@ -3,8 +3,11 @@ import { DocumentReference } from "firebase/firestore";
 export interface AppUser {
   id: string;
   email: string;
-  role: "admin" | "store" | "warehouse";
+  displayName?: string;
+  role: "admin" | "finance" | "store" | "store_manager" | "store_staff" | "warehouse";
+  accountId?: string;
   locationId?: string;
+  locationName?: string;
   createdAt: Date;
   pushTokens?: string[];
 }
@@ -25,10 +28,15 @@ export interface MasterWine {
 
 export interface InventoryBottle {
   id: string;
-  masterWineRef: DocumentReference;
-  locationRef: DocumentReference | null;
-  storeRef: DocumentReference | null;
-  outboundLocationRef?: DocumentReference | null;
+  bottleId?: string;
+  masterWineRef?: any;
+  locationRef?: any;
+  storeRef?: any;
+  outboundLocationRef?: any;
+  masterWineId?: string;
+  locationId?: string | null;
+  storeId?: string | null;
+  outboundStoreId?: string | null;
   sku: string;
   readableId?: string;
   isTagged?: boolean;
@@ -37,10 +45,12 @@ export interface InventoryBottle {
     | "received"
     | "tagged"
     | "shelved"
+    | "open"
     | "consumed"
     | "damaged"
     | "lost"
     | "outbound";
+  glassesRemaining?: number;
   receiptId?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -119,12 +129,14 @@ export interface WineRequest {
     | "converted"
     | "rejected"
     | "ingress_complete"
-    | "receiving";
+    | "receiving"
+    | "outbound";
   items: WineRequestItem[];
   totalAmount: number;
   createdAt: any;
   updatedAt: any;
   rejectionReason?: string;
+  resolutionType?: "swap" | "discontinued" | "stay_pending" | "stockout" | null;
 }
 
 export interface DeliveryItem {
@@ -136,6 +148,7 @@ export interface DeliveryItem {
   sku: string;
   qty: number;
   ingressedQty: number;
+  skippedQty?: number;
   bottleIds: string[];
 }
 
@@ -220,6 +233,8 @@ export interface StoreWineSetting {
   updatedAt: any;
   wineCategory?: "fast" | "fine" | "reserve" | null;
   sellingPrice?: number;
+  glassPrice?: number;
+  carafePrice?: number;
   vatMode?: "included" | "excluded";
 }
 
@@ -242,6 +257,9 @@ export interface Customer {
   email?: string;
   contactNo?: string;
   notes?: string;
+  favoriteProducers?: string[];
+  favoriteRegions?: string[];
+  favoriteWineStyle?: string;
   storeId: string;
   createdAt: any;
   updatedAt: any;

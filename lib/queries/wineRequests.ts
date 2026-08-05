@@ -1,41 +1,37 @@
-import { db } from "@/lib/firebase";
-import { logActivity } from "@/lib/utils/activityLogger";
-import { collection, doc, getDocs, limit, orderBy, query, updateDoc, where } from "firebase/firestore";
+import { apiFetch } from "@/lib/api";
 import { WineRequest } from "@/types";
+import { logActivity } from "@/lib/utils/activityLogger";
 import { invalidatePrefix } from "./cache";
 
 export async function getWineRequests(
   filters: { storeId?: string; status?: string | string[] },
   pagination?: { limit: number }
 ): Promise<WineRequest[]> {
-  let q: any = collection(db, "wine_requests");
-
-  if (filters.storeId) {
-    q = query(q, where("storeId", "==", filters.storeId));
-  }
-
+  const params = new URLSearchParams();
+  if (filters.storeId) params.set("storeId", filters.storeId);
   if (filters.status) {
-    if (Array.isArray(filters.status)) {
-      q = query(q, where("status", "in", filters.status));
-    } else {
-      q = query(q, where("status", "==", filters.status));
-    }
+    params.set("status", Array.isArray(filters.status) ? filters.status.join(",") : filters.status);
   }
-
-  q = query(q, orderBy("createdAt", "desc"));
-
-  if (pagination?.limit) {
-    q = query(q, limit(pagination.limit));
-  }
-
-  const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...(d.data() as Omit<WineRequest, 'id'>) } as WineRequest));
+  if (pagination?.limit) params.set("limit", String(pagination.limit));
+  const data = await apiFetch(`/wine-requests?${params}`);
+  return (data.wineRequests || data) as WineRequest[];
 }
 
 export async function updateWineRequest(id: string, data: any, logData?: any) {
-  await updateDoc(doc(db, "wine_requests", id), data);
+  await apiFetch(`/wine-requests/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
   if (logData) {
-    await logActivity(logData);
+    await logActivity({
+      action: "WINE_REQUEST_RECEIVING",
+      entity: "wine_requests",
+      entityId: id,
+      summary: logData.summary || `Updated wine request ${id}`,
+      performedBy: logData.performedBy || "unknown",
+      performedByRole: logData.performedByRole || "store",
+      source: logData.source || "store",
+    });
   }
-  invalidatePrefix("admin_dashboard"); // invalidate admin dashboard cache
+  invalidatePrefix("admin_dashboard");
 }

@@ -1,25 +1,18 @@
-import { collection, doc, setDoc, getDocs, query, where } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { apiFetch } from "@/lib/api";
 import { StoreWineSetting } from "@/types";
 
 export async function getStoreWineSettings(filters?: { storeId?: string; masterWineId?: string; discontinued?: boolean }): Promise<StoreWineSetting[]> {
-  let q: any = collection(db, "store_wine_settings");
-  
-  if (filters?.storeId) {
-    q = query(q, where("storeId", "==", filters.storeId));
-  }
-  if (filters?.masterWineId) {
-    q = query(q, where("masterWineId", "==", filters.masterWineId));
-  }
-  if (filters?.discontinued !== undefined) {
-    q = query(q, where("discontinued", "==", filters.discontinued));
-  }
-  
-  const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...(d.data() as Omit<StoreWineSetting, 'id'>) } as StoreWineSetting));
+  const params = new URLSearchParams();
+  if (filters?.storeId) params.set("storeId", filters.storeId);
+  if (filters?.masterWineId) params.set("masterWineId", filters.masterWineId);
+  if (filters?.discontinued !== undefined) params.set("discontinued", String(filters.discontinued));
+  const data = await apiFetch(`/stock-settings?${params}`);
+  return (data.settings || data) as StoreWineSetting[];
 }
 
 export async function upsertStoreWineSetting(storeId: string, wineId: string, data: Partial<StoreWineSetting>) {
-  const docId = `${storeId}_${wineId}`;
-  await setDoc(doc(db, "store_wine_settings", docId), data, { merge: true });
+  await apiFetch("/stock-settings", {
+    method: "POST",
+    body: JSON.stringify({ storeId, masterWineId: wineId, ...data }),
+  });
 }

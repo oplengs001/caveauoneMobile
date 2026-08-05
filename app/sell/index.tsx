@@ -1,57 +1,43 @@
-import React, { useState, useEffect, useMemo } from "react";
-import {
-  SafeAreaView,
-  StyleSheet,
-  View,
-  Text,
-  TouchableOpacity,
-  TextInput,
-  ScrollView,
-  FlatList,
-  Alert,
-  ActivityIndicator,
-  Linking,
-} from "react-native";
-import { Stack, useRouter, useLocalSearchParams } from "expo-router";
-import {
-  Search,
-  MapPin,
-  Camera,
-  Scan,
-  Tag,
-  User,
-  Plus,
-  X,
-  CheckCircle2,
-  AlertCircle,
-  Wine,
-} from "lucide-react-native";
-import { CameraView, useCameraPermissions } from "expo-camera";
-import {
-  collection,
-  query,
-  getDocs,
-  where,
-  doc,
-  getDoc,
-  updateDoc,
-  serverTimestamp,
-  addDoc,
-  increment,
-  getCountFromServer,
-} from "firebase/firestore";
-
-import { db } from "@/lib/firebase";
-import { useAuth } from "@/context/AuthContext";
-import { Colors } from "@/constants/theme";
-import { MasterWine, InventoryBottle, Customer } from "@/types";
 import BottlePickerModal, { BottleWithLocation } from "@/components/BottlePickerModal";
+import CustomerPickerModal from "@/components/CustomerPickerModal";
 import LabelScanModal from "@/components/LabelScanModal";
 import VatBreakdownCard, { formatCurrency } from "@/components/VatBreakdownCard";
-import CustomerPickerModal from "@/components/CustomerPickerModal";
+import { Colors } from "@/constants/theme";
+import { useAuth } from "@/context/AuthContext";
+import { apiFetch } from "@/lib/api";
+import { Customer, InventoryBottle, MasterWine } from "@/types";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { CameraView, useCameraPermissions } from "expo-camera";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
+import {
+  AlertCircle,
+  Camera,
+  CheckCircle2,
+  MapPin,
+  Plus,
+  Scan,
+  Search,
+  Tag,
+  User,
+  Wine,
+  X,
+} from "lucide-react-native";
+import React, { useEffect, useMemo, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Linking,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
-type SellStep = "search" | "locate" | "verify" | "sell" | "success";
+type SellStep = "search" | "portion" | "locate" | "verify" | "sell" | "success";
 
 const VAT_RATE = 0.12;
 
@@ -59,31 +45,40 @@ export default function SellScreen() {
   const router = useRouter();
   const { wineId } = useLocalSearchParams();
   const { profile } = useAuth();
-  const theme = profile?.role === "store" ? Colors.store : profile?.role === "admin" ? Colors.admin : Colors.warehouse;
+  const isStore = profile?.role === "store" || profile?.role === "store_manager" || profile?.role === "store_staff";
+  const theme = isStore ? Colors.store : profile?.role === "admin" ? Colors.admin : Colors.warehouse;
 
   // Permissions
   const [permission, requestPermission] = useCameraPermissions();
 
   // State
-  const [step, setStep] = useState<SellStep>("search");
+  const [step, setStep] = useState<SellStep>("portion");
   const [searchQuery, setSearchQuery] = useState("");
   const [masterWines, setMasterWines] = useState<MasterWine[]>([]);
   const [selectedWine, setSelectedWine] = useState<MasterWine | null>(null);
   const [inStockWineIds, setInStockWineIds] = useState<Set<string>>(new Set());
-  
+  const [openBottlesMap, setOpenBottlesMap] = useState<Record<string, InventoryBottle>>({});
+
   const [bottlesList, setBottlesList] = useState<BottleWithLocation[]>([]);
   const [selectedBottleId, setSelectedBottleId] = useState<string | null>(null);
-  
+  const [openBottle, setOpenBottle] = useState<InventoryBottle | null>(null);
+  const [saleType, setSaleType] = useState<"bottle" | "glass" | "carafe">("bottle");
+
   const [isFetchingLocations, setIsFetchingLocations] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [parAlertInfo, setParAlertInfo] = useState<{
+    wineName: string;
+    requestedQty: number;
+    stockCount: number;
+  } | null>(null);
 
   // Verification UI
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [isLabelModalOpen, setIsLabelModalOpen] = useState(false);
   const [isPickerModalOpen, setIsPickerModalOpen] = useState(false);
-  
+
   const [displayLimit, setDisplayLimit] = useState(20);
-  
+
   // Sell Form
   const [salePrice, setSalePrice] = useState("");
   const [storeVatMode, setStoreVatMode] = useState<"included" | "excluded">("excluded");
@@ -98,23 +93,35 @@ export default function SellScreen() {
 
   const fetchMasterWines = async () => {
     try {
-      const snap = await getDocs(collection(db, "master_wines"));
-      setMasterWines(snap.docs.map((d) => ({ id: d.id, ...d.data() } as MasterWine)));
+      const winesData = await apiFetch("/wines");
+      const winesList: MasterWine[] = Array.isArray(winesData)
+        ? winesData
+        : Array.isArray(winesData?.wines)
+          ? winesData.wines
+          : [];
+      setMasterWines(winesList);
 
       if (profile?.locationId) {
-        const bottlesSnap = await getDocs(
-          query(
-            collection(db, "inventory_bottles"),
-            where("storeRef", "==", doc(db, "stores", profile.locationId)),
-            where("status", "in", ["received", "shelved"])
-          )
-        );
+        const bottlesData = await apiFetch(`/bottles?storeId=${profile.locationId}&status=received,shelved,open`);
+        const bottlesList: InventoryBottle[] = Array.isArray(bottlesData)
+          ? bottlesData
+          : Array.isArray(bottlesData?.bottles)
+            ? bottlesData.bottles
+            : [];
         const inStockIds = new Set<string>();
-        bottlesSnap.docs.forEach(d => {
-          const ref = d.data().masterWineRef;
-          if (ref) inStockIds.add(ref.id);
+        const openMap: Record<string, InventoryBottle> = {};
+
+        bottlesList.forEach((b: any) => {
+          const refId = b.masterWineId || b.masterWineRef?.id;
+          if (refId) {
+            inStockIds.add(refId);
+            if (b.status === "open" && (b.glassesRemaining ?? 0) > 0) {
+              openMap[refId] = b;
+            }
+          }
         });
         setInStockWineIds(inStockIds);
+        setOpenBottlesMap(openMap);
       }
     } catch (err) {
       console.error("Error fetching master wines", err);
@@ -132,14 +139,14 @@ export default function SellScreen() {
 
   const filteredWines = useMemo(() => {
     let available = masterWines;
-    if (profile?.locationId) {
+    if (profile?.locationId && inStockWineIds.size > 0) {
       available = masterWines.filter(w => inStockWineIds.has(w.id));
     }
-    
+
     if (!searchQuery) return available.slice(0, displayLimit);
     const q = searchQuery.toLowerCase();
-    return available.filter(w => 
-      w.name?.toLowerCase().includes(q) || 
+    return available.filter(w =>
+      w.name?.toLowerCase().includes(q) ||
       w.sku?.toLowerCase().includes(q) ||
       w.vintage?.toLowerCase().includes(q) ||
       w.producer?.toLowerCase().includes(q)
@@ -153,73 +160,85 @@ export default function SellScreen() {
   const handleSelectWine = async (wine: MasterWine) => {
     setSelectedWine(wine);
     setSearchQuery("");
-    setStep("locate");
-    
+    setOpenBottle(null);
+
     // Fetch bottles for this wine at this store
     setIsFetchingLocations(true);
     try {
-      const constraints = [
-        where("masterWineRef", "==", doc(db, "master_wines", wine.id)),
-        where("status", "in", ["received", "shelved"])
-      ];
+      const params = new URLSearchParams({
+        masterWineId: wine.id,
+        status: "received,shelved,open",
+      });
+      if (profile?.locationId) params.set("storeId", profile.locationId);
+
+      const bottlesData = await apiFetch(`/bottles?${params}`);
+      const bottles: InventoryBottle[] = bottlesData.bottles || bottlesData;
+
+      const foundOpenBottle = bottles.find(
+        (b) => b.status === "open" && (b.glassesRemaining ?? 0) > 0
+      );
+      setOpenBottle(foundOpenBottle || null);
+
+      const locationsData = await apiFetch("/locations");
+      const locs: any[] = locationsData.locations || locationsData;
+      const locationMap: Record<string, string> = {};
+      locs.forEach((l) => (locationMap[l.id] = l.name));
+
+      const bottlePickerList: BottleWithLocation[] = bottles.map((b: any) => ({
+        bottleId: b.id || b.bottleId || b.readableId || `btl-${Math.random()}`,
+        locationName: b.locationId ? (locationMap[b.locationId] || "Assigned") : "Unassigned",
+        locationId: b.locationId || "unassigned",
+        status: b.status,
+        glassesRemaining: b.glassesRemaining,
+        readableId: b.bottleId || b.readableId || b.id || "N/A",
+      }));
+
+      setBottlesList(bottlePickerList);
+
       if (profile?.locationId) {
-        constraints.push(where("storeRef", "==", doc(db, "stores", profile.locationId)));
-      }
-
-      const q = query(collection(db, "inventory_bottles"), ...constraints);
-      const snap = await getDocs(q);
-
-      const bottles: BottleWithLocation[] = [];
-      const locationCache: Record<string, string> = {};
-
-      for (const d of snap.docs) {
-        const data = d.data() as InventoryBottle;
-        let locName = "Unassigned";
-        if (data.locationRef) {
-          if (locationCache[data.locationRef.id]) {
-            locName = locationCache[data.locationRef.id];
-          } else {
-            const locSnap = await getDoc(data.locationRef);
-            if (locSnap.exists()) {
-              locName = locSnap.data().name;
-              locationCache[data.locationRef.id] = locName;
-            }
-          }
-        }
-        bottles.push({
-          bottleId: d.id,
-          locationName: locName,
-          locationId: data.locationRef?.id || "unassigned",
-        });
-      }
-      
-      setBottlesList(bottles);
-      
-      // Auto-skip to verification if bottles exist?
-      // No, the plan says LOCATE is an explicit step to see where bottles are.
-
-      // Also check store settings for fast moving and price
-      if (profile?.locationId) {
-        const settingsSnap = await getDocs(
-          query(
-            collection(db, "store_wine_settings"),
-            where("storeId", "==", profile.locationId),
-            where("masterWineId", "==", wine.id)
-          )
-        );
-        if (!settingsSnap.empty) {
-          const setting = settingsSnap.docs[0].data();
+        const settingsData = await apiFetch(`/stock-settings?storeId=${profile.locationId}&masterWineId=${wine.id}`);
+        const settingsList: any[] = settingsData.settings || settingsData;
+        if (settingsList.length > 0) {
+          const setting = settingsList[0];
           setWineCategory(setting.wineCategory ?? null);
-          if (setting.sellingPrice) setSalePrice(setting.sellingPrice.toString());
           if (setting.vatMode) setStoreVatMode(setting.vatMode);
+
+          let priceToUse: number | null = null;
+          const storeCarafePrice = setting.carafePrice;
+          if (saleType === "glass" && setting.glassPrice != null) {
+            priceToUse = setting.glassPrice;
+          } else if (saleType === "carafe" && storeCarafePrice != null) {
+            priceToUse = storeCarafePrice;
+          } else if (saleType === "bottle" && setting.sellingPrice != null) {
+            priceToUse = setting.sellingPrice;
+          }
+
+          if (priceToUse != null) setSalePrice(priceToUse.toFixed(2));
+          else if (saleType === "bottle" && wine.price) setSalePrice(wine.price.toString());
+          else setSalePrice("");
+        } else if (saleType === "bottle" && wine.price) {
+          setSalePrice(wine.price.toString());
         } else {
-          // fallback to master wine price
-          if (wine.price) setSalePrice(wine.price.toString());
+          setSalePrice("");
         }
+      } else if (saleType === "bottle" && wine.price) {
+        setSalePrice(wine.price.toString());
       } else {
-        if (wine.price) setSalePrice(wine.price.toString());
+        setSalePrice("");
       }
-      
+
+      // For Glass or Carafe: skip locate & verify entirely!
+      // Select open bottle if available, otherwise select first available bottle.
+      if (saleType !== "bottle") {
+        if (foundOpenBottle) {
+          setSelectedBottleId(foundOpenBottle.id || foundOpenBottle.bottleId || null);
+        } else if (bottles.length > 0) {
+          setSelectedBottleId(bottles[0].id || (bottles[0] as any).bottleId || null);
+        }
+        setStep("sell");
+      } else {
+        setStep("locate");
+      }
     } catch (err) {
       console.error(err);
       Alert.alert("Error", "Could not load bottle locations.");
@@ -228,22 +247,30 @@ export default function SellScreen() {
     }
   };
 
+  const handleSelectPortion = (type: "bottle" | "glass" | "carafe") => {
+    setSaleType(type);
+    setStep("search");
+  };
+
   const handleQRScanned = ({ data }: { data: string }) => {
     if (!isCameraActive || step !== "verify") return;
-    
+
     const isValid = bottlesList.some(b => b.bottleId === data);
     if (!isValid) {
       Alert.alert("Invalid Bottle", "This QR code does not belong to an available bottle of the selected wine in this store.");
       return;
     }
-    
+
     setIsCameraActive(false);
     setSelectedBottleId(data);
     setStep("sell");
   };
 
-  const handleBottleSelected = (bottleId: string) => {
-    setSelectedBottleId(bottleId);
+  const handleBottleSelected = (bottleId?: string) => {
+    const validId = bottleId || (bottlesList.length > 0 ? bottlesList[0].bottleId : null);
+    if (validId) {
+      setSelectedBottleId(validId);
+    }
     setStep("sell");
   };
 
@@ -253,7 +280,18 @@ export default function SellScreen() {
       setPriceError("Please enter a valid price");
       return;
     }
-    if (!selectedBottleId) return;
+
+    let targetBottleId: string | null = selectedBottleId;
+    if (saleType !== "bottle" && openBottle) {
+      targetBottleId = openBottle.id || openBottle.bottleId || null;
+    }
+    if (!targetBottleId && bottlesList.length > 0) {
+      targetBottleId = bottlesList[0].bottleId;
+    }
+    if (!targetBottleId) {
+      Alert.alert("Error", "No bottle selected or available.");
+      return;
+    }
 
     setIsProcessing(true);
     try {
@@ -268,19 +306,33 @@ export default function SellScreen() {
         totalAmount = numericPrice;
       }
 
-      const bottleRef = doc(db, "inventory_bottles", selectedBottleId);
+      let glassCount = 1.0;
+      let glassesDeducted = 6;
+      if (saleType === "glass") {
+        glassCount = 0.1667;
+        glassesDeducted = 1;
+      } else if (saleType === "carafe") {
+        glassCount = 0.3333;
+        glassesDeducted = 2;
+      }
 
-      // Log sale activity
-      await addDoc(collection(db, "activity_logs"), {
-        action: "bottle_sold",
-        entity: "inventory_bottles",
-        entityId: selectedBottleId,
-        summary: `Sold bottle of ${selectedWine?.name}`,
-        performedBy: profile?.email || "unknown",
-        performedByRole: profile?.role || "unknown",
-        source: profile?.role === "admin" ? "admin" : "warehouse",
-        timestamp: serverTimestamp(),
-        details: {
+      const selectedBottleObj = bottlesList.find((b: any) => b.id === targetBottleId || b.bottleId === targetBottleId);
+      const readableId = selectedBottleObj?.readableId || selectedBottleObj?.bottleId || (targetBottleId?.startsWith("WB-") ? targetBottleId : null);
+
+      // Create a sales record
+      await apiFetch("/sales", {
+        method: "POST",
+        body: JSON.stringify({
+          bottleId: targetBottleId,
+          readableId: readableId,
+          masterWineId: selectedWine?.id || null,
+          wineName: selectedWine?.name,
+          vintage: selectedWine?.vintage,
+          producer: selectedWine?.producer,
+          format: selectedWine?.format,
+          storeId: profile?.locationId || null,
+          soldById: profile?.id,
+          soldByEmail: profile?.email,
           price: netPrice,
           vatAmount,
           totalAmount,
@@ -289,122 +341,131 @@ export default function SellScreen() {
           customerName: selectedCustomer?.name || null,
           wineCategory,
           masterWinePrice: selectedWine?.price || null,
-        },
+          saleType,
+          glassCount,
+        }),
       });
 
-      // Create a sales record
-      await addDoc(collection(db, "sales"), {
-        bottleId: selectedBottleId,
-        masterWineId: selectedWine?.id || null,
-        wineName: selectedWine?.name,
-        vintage: selectedWine?.vintage,
-        producer: selectedWine?.producer,
-        format: selectedWine?.format,
-        storeId: profile?.locationId || null,
-        soldById: profile?.id,
-        soldByEmail: profile?.email,
-        soldAt: serverTimestamp(),
-        price: netPrice,
-        vatAmount,
-        totalAmount,
-        vatMode: storeVatMode,
-        customerId: selectedCustomer?.id || null,
-        customerName: selectedCustomer?.name || null,
-        wineCategory,
-        masterWinePrice: selectedWine?.price || null,
-      });
+      // Update bottle status and glasses remaining
+      if (saleType === "bottle") {
+        await apiFetch(`/bottles/${targetBottleId}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            status: "consumed",
+            glassesRemaining: 0,
+            locationId: null,
+          }),
+        });
+      } else {
+        let currentGlasses = 6;
+        if (openBottle && (openBottle.id === targetBottleId || openBottle.bottleId === targetBottleId)) {
+          currentGlasses = openBottle.glassesRemaining ?? 6;
+        } else {
+          try {
+            const b = await apiFetch(`/bottles/${targetBottleId}`);
+            if (b && b.glassesRemaining !== undefined && b.glassesRemaining !== null) {
+              currentGlasses = b.glassesRemaining;
+            }
+          } catch (e) {
+            console.error("Could not fetch bottle for glasses update", e);
+          }
+        }
 
-      // Update customer spend if selected
-      if (selectedCustomer?.id) {
-        await updateDoc(doc(db, "customers", selectedCustomer.id), {
-          totalSpend: increment(totalAmount),
-          totalOrders: increment(1),
-          lastPurchaseDate: serverTimestamp(),
-          updatedAt: serverTimestamp(),
+        const newGlassesRemaining = Math.max(0, currentGlasses - glassesDeducted);
+        const newStatus = newGlassesRemaining === 0 ? "consumed" : "open";
+
+        await apiFetch(`/bottles/${targetBottleId}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            status: newStatus,
+            glassesRemaining: newGlassesRemaining,
+            ...(newStatus === "consumed" ? { locationId: null } : {}),
+          }),
         });
       }
 
-      await updateDoc(bottleRef, {
-        status: "consumed",
-        soldAt: serverTimestamp(),
-        locationRef: null,
-        updatedAt: serverTimestamp(),
-      });
-
       // PAR Alert logic
-      if (profile?.role === "store" && profile?.locationId && selectedWine) {
+      if (isStore && profile?.locationId && selectedWine) {
         const storeId = profile.locationId;
-        const settingsSnap = await getDocs(
-          query(
-            collection(db, "store_wine_settings"),
-            where("storeId", "==", storeId),
-            where("masterWineId", "==", selectedWine.id)
-          )
-        );
+        try {
+          const settingsData = await apiFetch(`/stock-settings?storeId=${storeId}&masterWineId=${selectedWine.id}`);
+          const settingsList: any[] = settingsData.settings || settingsData;
 
-        if (!settingsSnap.empty) {
-          const setting = settingsSnap.docs[0].data();
-          if (
-            !setting.discontinued &&
-            setting.parLevel !== undefined &&
-            setting.safetyStock !== undefined
-          ) {
-            const countSnap = await getCountFromServer(
-              query(
-                collection(db, "inventory_bottles"),
-                where("storeRef", "==", doc(db, "stores", storeId)),
-                where("masterWineRef", "==", doc(db, "master_wines", selectedWine.id)),
-                where("status", "in", ["received", "shelved"])
-              )
-            );
-            const stockCount = countSnap.data().count;
+          if (settingsList.length > 0) {
+            const setting = settingsList[0];
+            if (
+              !setting.discontinued &&
+              setting.parLevel !== undefined &&
+              setting.safetyStock !== undefined
+            ) {
+              const bottlesData = await apiFetch(`/bottles?storeId=${storeId}&masterWineId=${selectedWine.id}&status=received,shelved,open`);
+              const fetchedBottles: any[] = bottlesData.bottles || bottlesData;
 
-            if (stockCount <= setting.parLevel) {
-              const pendingRequestsSnap = await getDocs(
-                query(
-                  collection(db, "wine_requests"),
-                  where("storeId", "==", storeId),
-                  where("status", "==", "pending")
-                )
-              );
+              const stockCount = fetchedBottles.reduce((acc, b) => {
+                if (b.status === "open" && b.glassesRemaining != null) {
+                  return acc + (b.glassesRemaining / 6);
+                }
+                return acc + 1;
+              }, 0);
 
-              let hasPending = false;
-              pendingRequestsSnap.docs.forEach((reqDoc) => {
-                reqDoc.data().items?.forEach((item: any) => {
-                  if (item.masterWineId === selectedWine.id) hasPending = true;
-                });
-              });
+              if (stockCount <= setting.parLevel) {
+                const requestsData = await apiFetch(`/wine-requests?storeId=${storeId}&status=pending`);
+                const pendingRequests: any[] = Array.isArray(requestsData)
+                  ? requestsData
+                  : requestsData.wineRequests || [];
 
-              if (!hasPending) {
-                const requestedQty = Math.max(0, setting.safetyStock - stockCount);
-                if (requestedQty > 0) {
-                  await addDoc(collection(db, "wine_requests"), {
-                    storeId,
-                    targetStoreId: "warehouse",
-                    createdBy: profile.email || "System",
-                    requesterId: profile.id || "system",
-                    status: "pending",
-                    items: [
-                      {
-                        masterWineId: selectedWine.id,
-                        wineName: selectedWine.name,
-                        vintage: selectedWine.vintage || "",
-                        sku: selectedWine.sku || "",
-                        format: selectedWine.format || "",
-                        producer: selectedWine.producer || "",
-                        qty: requestedQty,
-                        price: selectedWine.price || 0,
-                        pulledQty: 0,
-                      },
-                    ],
-                    totalAmount: (selectedWine.price || 0) * requestedQty,
-                    createdAt: serverTimestamp(),
-                    updatedAt: serverTimestamp(),
+                let hasPending = false;
+                pendingRequests.forEach((req: any) => {
+                  const items = Array.isArray(req.items)
+                    ? req.items
+                    : typeof req.items === "string"
+                      ? JSON.parse(req.items)
+                      : [];
+                  items.forEach((item: any) => {
+                    if (item.masterWineId === selectedWine.id) hasPending = true;
                   });
+                });
+
+                if (!hasPending) {
+                  const requestedQty = Math.ceil(Math.max(0, setting.safetyStock - stockCount));
+                  if (requestedQty > 0) {
+                    await apiFetch("/wine-requests", {
+                      method: "POST",
+                      body: JSON.stringify({
+                        storeId,
+                        targetStoreId: "warehouse",
+                        createdBy: profile.email || "System",
+                        requesterId: profile.id || "system",
+                        status: "pending",
+                        items: [
+                          {
+                            masterWineId: selectedWine.id,
+                            wineName: selectedWine.name,
+                            vintage: selectedWine.vintage || "",
+                            sku: selectedWine.sku || "",
+                            format: selectedWine.format || "",
+                            producer: selectedWine.producer || "",
+                            qty: requestedQty,
+                            price: selectedWine.price || 0,
+                            pulledQty: 0,
+                          },
+                        ],
+                        totalAmount: (selectedWine.price || 0) * requestedQty,
+                      }),
+                    });
+
+                    setParAlertInfo({
+                      wineName: selectedWine.name,
+                      requestedQty,
+                      stockCount: Math.round(stockCount * 10) / 10,
+                    });
+                  }
                 }
               }
             }
           }
+        } catch (e) {
+          console.error("Error checking PAR alert in sell screen:", e);
         }
       }
 
@@ -456,10 +517,42 @@ export default function SellScreen() {
   };
   const renderSearch = () => (
     <View style={styles.content}>
-      <Text style={[styles.headerText, { color: theme.text }]}>Sell a Bottle</Text>
-      <Text style={[styles.subText, { color: theme.textSecondary, marginBottom: 24 }]}>
-        Search for the wine you want to sell.
-      </Text>
+      <Text style={[styles.headerText, { color: theme.text }]}>Select Wine</Text>
+
+      {/* Portion Indicator Badge */}
+      <View style={{
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        marginBottom: 20,
+        backgroundColor: theme.primary + "12",
+        paddingHorizontal: 14,
+        paddingVertical: 10,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: theme.primary + "30",
+      }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <Text style={{ fontSize: 20 }}>
+            {saleType === "glass" ? "🍷" : saleType === "carafe" ? "🫗" : "🍾"}
+          </Text>
+          <View>
+            <Text style={{ fontSize: 10, fontWeight: "800", color: theme.primary, textTransform: "uppercase", letterSpacing: 0.5 }}>
+              Selling Portion
+            </Text>
+            <Text style={{ fontSize: 14, fontWeight: "700", color: theme.text }}>
+              {saleType === "glass" ? "Glass (1/6 Bottle)" : saleType === "carafe" ? "Carafe (2/6 Bottle)" : "Whole Bottle"}
+            </Text>
+          </View>
+        </View>
+        <TouchableOpacity
+          onPress={() => setStep("portion")}
+          style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: theme.primary }}
+        >
+          <Text style={{ fontSize: 12, fontWeight: "700", color: "#fff" }}>Change</Text>
+        </TouchableOpacity>
+      </View>
+
       <View style={[styles.searchBox, { backgroundColor: theme.card, borderColor: theme.border }]}>
         <Search size={20} color={theme.textSecondary} />
         <TextInput
@@ -468,7 +561,6 @@ export default function SellScreen() {
           placeholderTextColor={theme.textSecondary}
           value={searchQuery}
           onChangeText={setSearchQuery}
-          autoFocus
         />
         {searchQuery.length > 0 && (
           <TouchableOpacity onPress={() => setSearchQuery("")}>
@@ -482,25 +574,89 @@ export default function SellScreen() {
         keyExtractor={(w) => w.id}
         onEndReached={() => setDisplayLimit((prev) => prev + 20)}
         onEndReachedThreshold={0.5}
-        renderItem={({ item: w }) => (
-          <TouchableOpacity
-            style={[styles.wineRow, { borderBottomColor: theme.border }]}
-            onPress={() => handleSelectWine(w)}
-          >
-            <View style={styles.wineIconContainer}>
-              <Wine size={20} color={theme.primary} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.wineName, { color: theme.text }]}>{w.name}</Text>
-              <Text style={[styles.wineSub, { color: theme.textSecondary }]}>
-                {w.vintage}
-                {w.producer ? ` • ${w.producer}` : ""}
-                {w.format ? ` • ${w.format}` : ""}
-              </Text>
-            </View>
-          </TouchableOpacity>
-        )}
+        renderItem={({ item: w }) => {
+          const openBtl = openBottlesMap[w.id];
+          return (
+            <TouchableOpacity
+              style={[styles.wineRow, { borderBottomColor: theme.border }]}
+              onPress={() => handleSelectWine(w)}
+            >
+              <View style={styles.wineIconContainer}>
+                <Wine size={20} color={theme.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.wineName, { color: theme.text }]}>{w.name}</Text>
+                <Text style={[styles.wineSub, { color: theme.textSecondary }]}>
+                  {w.vintage}
+                  {w.producer ? ` • ${w.producer}` : ""}
+                  {w.format ? ` • ${w.format}` : ""}
+                </Text>
+                {openBtl && (
+                  <View style={{ marginTop: 4, alignSelf: "flex-start", backgroundColor: "#3b82f615", borderColor: "#3b82f640", borderWidth: 1, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 }}>
+                    <Text style={{ fontSize: 11, fontWeight: "700", color: "#2563eb" }}>
+                      🍷 Open bottle ({openBtl.glassesRemaining ?? 6}/6 glasses left)
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </TouchableOpacity>
+          );
+        }}
       />
+    </View>
+  );
+
+  const renderPortion = () => (
+    <View style={styles.content}>
+      <Text style={[styles.headerText, { color: theme.text, marginBottom: 8 }]}>What are you selling?</Text>
+      <Text style={[styles.subText, { color: theme.textSecondary, marginBottom: 24 }]}>
+        Select the serving portion to begin.
+      </Text>
+
+      <View style={{ gap: 14, marginTop: 10 }}>
+        <TouchableOpacity
+          style={[styles.verifyOptionBtn, { backgroundColor: theme.card, borderColor: theme.border, padding: 18 }]}
+          onPress={() => handleSelectPortion("bottle")}
+        >
+          <View style={[styles.verifyIconBox, { backgroundColor: theme.primary + "20", width: 50, height: 50, borderRadius: 25 }]}>
+            <Text style={{ fontSize: 24 }}>🍾</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.verifyOptionTitle, { color: theme.text, fontSize: 17 }]}>Whole Bottle</Text>
+            <Text style={[styles.verifyOptionDesc, { color: theme.textSecondary, fontSize: 13 }]}>Sell a full bottle (1.0 bottle)</Text>
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.verifyOptionBtn, { backgroundColor: theme.card, borderColor: theme.border, padding: 18 }]}
+          onPress={() => handleSelectPortion("glass")}
+        >
+          <View style={[styles.verifyIconBox, { backgroundColor: theme.primary + "20", width: 50, height: 50, borderRadius: 25 }]}>
+            <Text style={{ fontSize: 24 }}>🍷</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.verifyOptionTitle, { color: theme.text, fontSize: 17 }]}>Glass (1/6 Bottle)</Text>
+            <Text style={[styles.verifyOptionDesc, { color: theme.textSecondary, fontSize: 13 }]}>
+              Pour 1 glass (applies to 75cl bottles)
+            </Text>
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.verifyOptionBtn, { backgroundColor: theme.card, borderColor: theme.border, padding: 18 }]}
+          onPress={() => handleSelectPortion("carafe")}
+        >
+          <View style={[styles.verifyIconBox, { backgroundColor: theme.primary + "20", width: 50, height: 50, borderRadius: 25 }]}>
+            <Text style={{ fontSize: 24 }}>🫗</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.verifyOptionTitle, { color: theme.text, fontSize: 17 }]}>Carafe (2/6 Bottle)</Text>
+            <Text style={[styles.verifyOptionDesc, { color: theme.textSecondary, fontSize: 13 }]}>
+              Pour 2 glasses / carafe (applies to 75cl bottles)
+            </Text>
+          </View>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 
@@ -508,7 +664,7 @@ export default function SellScreen() {
     <View style={styles.content}>
       <Text style={[styles.headerText, { color: theme.text, marginBottom: 24 }]}>Locate Bottles</Text>
       {renderSelectedWineSummary()}
-      
+
       {isFetchingLocations ? (
         <ActivityIndicator size="large" color={theme.primary} style={{ marginTop: 40 }} />
       ) : bottlesList.length === 0 ? (
@@ -537,48 +693,29 @@ export default function SellScreen() {
             ))}
           </View>
           <View style={{ flex: 1 }} />
-          <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: theme.primary }]} onPress={() => setStep("verify")}>
-            <Text style={styles.primaryBtnText}>Proceed to Verify</Text>
-          </TouchableOpacity>
+          <View style={{ gap: 10 }}>
+            <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: theme.primary }]} onPress={() => setStep("verify")}>
+              <Text style={styles.primaryBtnText}>Proceed to Verify (Scan QR / AI)</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.primaryBtn,
+                { backgroundColor: theme.card, borderColor: theme.border, borderWidth: 1 },
+              ]}
+              onPress={() => handleBottleSelected()}
+            >
+              <Text style={[styles.primaryBtnText, { color: theme.text }]}>Skip Verification & Sell Bottle</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       )}
     </View>
   );
 
   const renderVerify = () => {
-    if (!permission) return null;
-    if (!permission.granted) {
-      return (
-        <View style={[styles.content, { alignItems: "center", justifyContent: "center" }]}>
-          <View style={[styles.wineIconContainer, { width: 80, height: 80, borderRadius: 40, backgroundColor: theme.primary + "1A", marginBottom: 24 }]}>
-            <Camera size={40} color={theme.primary} />
-          </View>
-          <Text style={[styles.headerText, { color: theme.text, textAlign: "center", fontSize: 24 }]}>Camera Access Needed</Text>
-          <Text style={[styles.subText, { color: theme.textSecondary, textAlign: "center", marginBottom: 32 }]}>
-            We need camera access to scan QR codes and verify wine labels.
-          </Text>
-          <TouchableOpacity 
-            style={[styles.primaryBtn, { backgroundColor: theme.primary }]} 
-            onPress={async () => {
-              if (permission && !permission.canAskAgain) {
-                Alert.alert(
-                  "Permission Denied",
-                  "Please enable camera permissions in your device settings to continue.",
-                  [
-                    { text: "Cancel", style: "cancel" },
-                    { text: "Open Settings", onPress: () => Linking.openSettings() }
-                  ]
-                );
-              } else {
-                await requestPermission();
-              }
-            }}
-          >
-            <Text style={styles.primaryBtnText}>Grant Permission</Text>
-          </TouchableOpacity>
-        </View>
-      );
-    }
+    const hasCameraPermission = Boolean(permission && permission.granted);
+
     return (
       <View style={styles.content}>
         <Text style={[styles.headerText, { color: theme.text, marginBottom: 24 }]}>Verify Bottle</Text>
@@ -588,28 +725,76 @@ export default function SellScreen() {
         </Text>
 
         {isCameraActive ? (
-          <View style={styles.qrCameraContainer}>
-            <CameraView 
-              style={{ flex: 1 }} 
-              facing="back"
-              onBarcodeScanned={handleQRScanned}
-            />
-            <TouchableOpacity 
-              style={styles.closeCameraBtn}
-              onPress={() => setIsCameraActive(false)}
-            >
-              <X size={24} color="#fff" />
-            </TouchableOpacity>
-            <View style={styles.qrOverlay}>
-              <View style={styles.qrTarget} />
-              <Text style={styles.qrHint}>Scan QR Code on Bottle</Text>
+          !hasCameraPermission ? (
+            <View style={{ alignItems: "center", justifyContent: "center", paddingVertical: 20 }}>
+              <View style={[styles.wineIconContainer, { width: 64, height: 64, borderRadius: 32, backgroundColor: theme.primary + "1A", marginBottom: 16 }]}>
+                <Camera size={32} color={theme.primary} />
+              </View>
+              <Text style={[styles.headerText, { color: theme.text, textAlign: "center", fontSize: 20 }]}>Camera Access Needed</Text>
+              <Text style={[styles.subText, { color: theme.textSecondary, textAlign: "center", marginBottom: 20 }]}>
+                We need camera access to scan QR codes.
+              </Text>
+              <TouchableOpacity
+                style={[styles.primaryBtn, { backgroundColor: theme.primary }]}
+                onPress={async () => {
+                  if (permission && !permission.canAskAgain) {
+                    Alert.alert(
+                      "Permission Denied",
+                      "Please enable camera permissions in your device settings to continue.",
+                      [
+                        { text: "Cancel", style: "cancel" },
+                        { text: "Open Settings", onPress: () => Linking.openSettings() }
+                      ]
+                    );
+                  } else {
+                    await requestPermission();
+                  }
+                }}
+              >
+                <Text style={styles.primaryBtnText}>Grant Camera Permission</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{ marginTop: 12, padding: 10 }}
+                onPress={() => setIsCameraActive(false)}
+              >
+                <Text style={{ color: theme.textSecondary, fontSize: 13, fontWeight: "600" }}>Cancel Scan</Text>
+              </TouchableOpacity>
             </View>
-          </View>
+          ) : (
+            <View style={styles.qrCameraContainer}>
+              <CameraView
+                style={{ flex: 1 }}
+                facing="back"
+                onBarcodeScanned={handleQRScanned}
+              />
+              <TouchableOpacity
+                style={styles.closeCameraBtn}
+                onPress={() => setIsCameraActive(false)}
+              >
+                <X size={24} color="#fff" />
+              </TouchableOpacity>
+              <View style={styles.qrOverlay}>
+                <View style={styles.qrTarget} />
+                <Text style={styles.qrHint}>Scan QR Code on Bottle</Text>
+              </View>
+            </View>
+          )
         ) : (
           <View style={styles.verifyOptions}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[styles.verifyOptionBtn, { backgroundColor: theme.card, borderColor: theme.border }]}
-              onPress={() => setIsCameraActive(true)}
+              onPress={async () => {
+                if (!hasCameraPermission) {
+                  const res = await requestPermission();
+                  if (res?.granted) {
+                    setIsCameraActive(true);
+                  } else {
+                    setIsCameraActive(true);
+                  }
+                } else {
+                  setIsCameraActive(true);
+                }
+              }}
             >
               <View style={[styles.verifyIconBox, { backgroundColor: theme.primary + "20" }]}>
                 <Scan size={24} color={theme.primary} />
@@ -620,7 +805,7 @@ export default function SellScreen() {
               </View>
             </TouchableOpacity>
 
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[styles.verifyOptionBtn, { backgroundColor: theme.card, borderColor: theme.border }]}
               onPress={() => setIsLabelModalOpen(true)}
             >
@@ -633,14 +818,13 @@ export default function SellScreen() {
               </View>
             </TouchableOpacity>
 
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[styles.verifyOptionBtn, { backgroundColor: theme.card, borderColor: theme.border }]}
               onPress={() => {
-                const uniqueLocs = new Set(bottlesList.map(b => b.locationName));
-                if (uniqueLocs.size <= 1 && bottlesList.length > 0) {
+                if (bottlesList.length > 0) {
                   handleBottleSelected(bottlesList[0].bottleId);
-                } else if (uniqueLocs.size > 1) {
-                  setIsPickerModalOpen(true);
+                } else {
+                  Alert.alert("No Bottle", "No bottle available to select.");
                 }
               }}
             >
@@ -648,14 +832,14 @@ export default function SellScreen() {
                 <CheckCircle2 size={24} color={theme.primary} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.verifyOptionTitle, { color: theme.text }]}>No QR Code?</Text>
-                <Text style={[styles.verifyOptionDesc, { color: theme.textSecondary }]}>Bypass scan and auto-select an available bottle.</Text>
+                <Text style={[styles.verifyOptionTitle, { color: theme.text }]}>Quick Select / Skip Scan</Text>
+                <Text style={[styles.verifyOptionDesc, { color: theme.textSecondary }]}>Auto-select available bottle and proceed to price & sale.</Text>
               </View>
             </TouchableOpacity>
           </View>
         )}
 
-        <LabelScanModal 
+        <LabelScanModal
           visible={isLabelModalOpen}
           onClose={() => setIsLabelModalOpen(false)}
           onBottleSelected={handleBottleSelected}
@@ -670,7 +854,7 @@ export default function SellScreen() {
           onClose={() => setIsPickerModalOpen(false)}
           onBottleSelected={handleBottleSelected}
           bottles={bottlesList}
-          title="Select Storage Unit"
+          title="Bottle Retrieved from?"
           theme={theme}
         />
       </View>
@@ -681,6 +865,87 @@ export default function SellScreen() {
     <ScrollView style={styles.content}>
       <Text style={[styles.headerText, { color: theme.text, marginBottom: 24 }]}>Finalize Sale</Text>
       {renderSelectedWineSummary()}
+
+      {selectedWine?.format === "75cl" && (
+        <View style={styles.sellSection}>
+          <View style={styles.sellSectionHeader}>
+            <Wine size={15} color={theme.primary} />
+            <Text style={[styles.sellSectionTitle, { color: theme.text }]}>Serving Portion</Text>
+          </View>
+          <View style={{ flexDirection: "row", gap: 8, marginTop: 8 }}>
+            <TouchableOpacity
+              onPress={() => setSaleType("bottle")}
+              style={{
+                flex: 1,
+                paddingVertical: 12,
+                borderRadius: 12,
+                alignItems: "center",
+                borderWidth: 1.5,
+                borderColor: saleType === "bottle" ? theme.primary : theme.border,
+                backgroundColor: saleType === "bottle" ? theme.primary + "15" : theme.card,
+              }}
+            >
+              <Text style={{ fontSize: 18 }}>🍾</Text>
+              <Text style={{ fontSize: 13, fontWeight: "700", color: saleType === "bottle" ? theme.primary : theme.text, marginTop: 4 }}>
+                Bottle
+              </Text>
+              <Text style={{ fontSize: 10, color: theme.textSecondary }}>1.0 bottle</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => setSaleType("glass")}
+              style={{
+                flex: 1,
+                paddingVertical: 12,
+                borderRadius: 12,
+                alignItems: "center",
+                borderWidth: 1.5,
+                borderColor: saleType === "glass" ? theme.primary : theme.border,
+                backgroundColor: saleType === "glass" ? theme.primary + "15" : theme.card,
+              }}
+            >
+              <Text style={{ fontSize: 18 }}>🍷</Text>
+              <Text style={{ fontSize: 13, fontWeight: "700", color: saleType === "glass" ? theme.primary : theme.text, marginTop: 4 }}>
+                Glass
+              </Text>
+              <Text style={{ fontSize: 10, color: theme.textSecondary }}>1/6 bottle</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => setSaleType("carafe")}
+              style={{
+                flex: 1,
+                paddingVertical: 12,
+                borderRadius: 12,
+                alignItems: "center",
+                borderWidth: 1.5,
+                borderColor: saleType === "carafe" ? theme.primary : theme.border,
+                backgroundColor: saleType === "carafe" ? theme.primary + "15" : theme.card,
+              }}
+            >
+              <Text style={{ fontSize: 18 }}>🫗</Text>
+              <Text style={{ fontSize: 13, fontWeight: "700", color: saleType === "carafe" ? theme.primary : theme.text, marginTop: 4 }}>
+                Carafe
+              </Text>
+              <Text style={{ fontSize: 10, color: theme.textSecondary }}>2/6 bottle</Text>
+            </TouchableOpacity>
+          </View>
+
+          {saleType !== "bottle" && (
+            <View style={{ marginTop: 12, padding: 12, backgroundColor: theme.primary + "10", borderRadius: 10, borderWidth: 1, borderColor: theme.primary + "30" }}>
+              {openBottle ? (
+                <Text style={{ fontSize: 12, color: theme.primary, fontWeight: "600" }}>
+                  🍷 Pouring from open bottle ({openBottle.bottleId || openBottle.readableId} — {openBottle.glassesRemaining ?? 6} glasses remaining)
+                </Text>
+              ) : (
+                <Text style={{ fontSize: 12, color: theme.primary, fontWeight: "600" }}>
+                  🍾 Auto-selected bottle ({selectedBottleId ? (bottlesList.find(b => b.bottleId === selectedBottleId)?.readableId || selectedBottleId) : "initial bottle"}) to open for this pour.
+                </Text>
+              )}
+            </View>
+          )}
+        </View>
+      )}
 
       <View style={styles.sellSection}>
         <View style={styles.sellSectionHeader}>
@@ -714,7 +979,7 @@ export default function SellScreen() {
             </View>
           )}
         </View>
-        
+
         <View style={[styles.priceInputWrapper, { backgroundColor: theme.card, borderColor: priceError ? theme.danger : theme.border }]}>
           <Text style={[styles.currencySymbol, { color: theme.textSecondary }]}>₱</Text>
           <TextInput
@@ -768,8 +1033,8 @@ export default function SellScreen() {
         )}
       </View>
 
-      <TouchableOpacity 
-        style={[styles.primaryBtn, { backgroundColor: theme.primary, marginTop: 24, opacity: isProcessing ? 0.7 : 1 }]} 
+      <TouchableOpacity
+        style={[styles.primaryBtn, { backgroundColor: theme.primary, marginTop: 24, opacity: isProcessing ? 0.7 : 1 }]}
         onPress={handleMarkAsSold}
         disabled={isProcessing}
       >
@@ -790,6 +1055,21 @@ export default function SellScreen() {
     </ScrollView>
   );
 
+  const handleSellAnother = () => {
+    setSelectedWine(null);
+    setSelectedBottleId(null);
+    setOpenBottle(null);
+    setSaleType("bottle");
+    setBottlesList([]);
+    setSearchQuery("");
+    setSalePrice("");
+    setPriceError(null);
+    setSelectedCustomer(null);
+    setParAlertInfo(null);
+    fetchMasterWines();
+    setStep("search");
+  };
+
   const renderSuccess = () => {
     const isIncluded = storeVatMode === "included";
     const numericBase = parseFloat(salePrice) || 0;
@@ -799,17 +1079,57 @@ export default function SellScreen() {
     return (
       <View style={[styles.content, { alignItems: "center", justifyContent: "center" }]}>
         <CheckCircle2 size={80} color={theme.primary} />
-        <Text style={[styles.headerText, { color: theme.text, marginTop: 24 }]}>Bottle Sold!</Text>
-        <Text style={[styles.subText, { color: theme.textSecondary, textAlign: "center", marginBottom: 32 }]}>
-          The bottle has been marked as sold and removed from active inventory.
+        <Text style={[styles.headerText, { color: theme.text, marginTop: 24 }]}>
+          {saleType === "glass" ? "Glass Sold! 🍷" : saleType === "carafe" ? "Carafe Sold! 🫗" : "Bottle Sold! 🍾"}
         </Text>
-        
+        <Text style={[styles.subText, { color: theme.textSecondary, textAlign: "center", marginBottom: 24 }]}>
+          {saleType === "glass"
+            ? "1 glass (1/6 bottle) has been recorded."
+            : saleType === "carafe"
+              ? "1 carafe (2/6 bottle) has been recorded."
+              : "The bottle has been marked as sold."}
+        </Text>
+
+        {parAlertInfo && (
+          <View style={{
+            flexDirection: "row",
+            alignItems: "center",
+            backgroundColor: "#fff7ed",
+            borderColor: "#ea580c",
+            borderWidth: 1.5,
+            borderRadius: 16,
+            padding: 14,
+            marginBottom: 20,
+            width: "100%",
+            gap: 12,
+          }}>
+            <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: "rgba(234, 88, 12, 0.15)", alignItems: "center", justifyContent: "center" }}>
+              <AlertCircle size={20} color="#ea580c" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 12, fontWeight: "900", color: "#c2410c", textTransform: "uppercase", letterSpacing: 0.5 }}>
+                PAR Alert — Restock Requested
+              </Text>
+              <Text style={{ fontSize: 11, fontWeight: "600", color: "#9a3412", marginTop: 2 }}>
+                Stock hit PAR level ({parAlertInfo.stockCount} btl left). Auto-requested {parAlertInfo.requestedQty} bottle(s) of {parAlertInfo.wineName} from warehouse.
+              </Text>
+            </View>
+            <TouchableOpacity onPress={() => setParAlertInfo(null)} style={{ padding: 4 }}>
+              <X size={18} color="#ea580c" />
+            </TouchableOpacity>
+          </View>
+        )}
+
         <View style={[styles.successCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
           <Text style={[styles.wineName, { color: theme.text, textAlign: "center" }]}>{selectedWine?.name}</Text>
-          <Text style={[styles.wineSub, { color: theme.textSecondary, textAlign: "center", marginTop: 8 }]}>
-            Bottle ID: {selectedBottleId?.slice(0, 8).toUpperCase()}
-          </Text>
-          
+          <View style={{ flexDirection: "row", justifyContent: "center", marginTop: 6, gap: 6 }}>
+            <View style={{ backgroundColor: theme.primary + "1A", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 }}>
+              <Text style={{ fontSize: 11, fontWeight: "700", color: theme.primary }}>
+                {saleType === "glass" ? "🍷 Glass (1/6)" : saleType === "carafe" ? "🫗 Carafe (2/6)" : "🍾 Whole Bottle"}
+              </Text>
+            </View>
+          </View>
+
           <View style={[styles.saleSummaryRow, { borderTopColor: theme.border }]}>
             <View style={styles.saleSummaryItem}>
               <Text style={[styles.saleSummaryLabel, { color: theme.textSecondary }]}>BASE</Text>
@@ -828,12 +1148,21 @@ export default function SellScreen() {
           </View>
         </View>
 
-        <TouchableOpacity 
-          style={[styles.primaryBtn, { backgroundColor: theme.primary, width: "100%", marginTop: 32 }]} 
-          onPress={() => router.replace("/(tabs)/home")}
-        >
-          <Text style={styles.primaryBtnText}>Back to Dashboard</Text>
-        </TouchableOpacity>
+        <View style={{ width: "100%", gap: 12, marginTop: 32 }}>
+          <TouchableOpacity
+            style={[styles.primaryBtn, { backgroundColor: theme.primary, width: "100%" }]}
+            onPress={handleSellAnother}
+          >
+            <Text style={styles.primaryBtnText}>Sell Another Bottle</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.primaryBtn, { backgroundColor: theme.card, borderWidth: 1, borderColor: theme.border, width: "100%" }]}
+            onPress={() => router.replace("/(tabs)/home")}
+          >
+            <Text style={[styles.primaryBtnText, { color: theme.text }]}>Back to Dashboard</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   };
@@ -843,11 +1172,13 @@ export default function SellScreen() {
       <Stack.Screen options={{ headerShown: false }} />
       <View style={[styles.header, { borderBottomColor: theme.border }]}>
         {step !== "success" && (
-          <TouchableOpacity 
+          <TouchableOpacity
             onPress={() => {
-              if (step === "locate") setStep("search");
+              if (step === "portion") router.back();
+              else if (step === "search") setStep("portion");
+              else if (step === "locate") setStep("search");
               else if (step === "verify") setStep("locate");
-              else if (step === "sell") setStep("verify");
+              else if (step === "sell") setStep(saleType !== "bottle" && openBottle ? "search" : "verify");
               else router.back();
             }}
             style={styles.backBtn}
@@ -856,8 +1187,9 @@ export default function SellScreen() {
           </TouchableOpacity>
         )}
       </View>
-      
+
       {step === "search" && renderSearch()}
+      {step === "portion" && renderPortion()}
       {step === "locate" && renderLocate()}
       {step === "verify" && renderVerify()}
       {step === "sell" && renderSell()}

@@ -1,21 +1,8 @@
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
-import { db } from "@/lib/firebase";
+import { apiFetch } from "@/lib/api";
 import { MasterWine, StockStatus, StoreWineSetting } from "@/types";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import {
-  addDoc,
-  collection,
-  doc,
-  getCountFromServer,
-  getDoc,
-  getDocs,
-  query,
-  serverTimestamp,
-  setDoc,
-  where,
-  writeBatch,
-} from "firebase/firestore";
 import {
   AlertTriangle,
   BarChart3,
@@ -59,6 +46,8 @@ const theme = Colors.store;
 interface WineEntry {
   masterWine: MasterWine;
   stockCount: number;
+  fullBottlesCount: number;
+  openGlassesCount: number;
   setting: StoreWineSetting | null;
   status: StockStatus;
   requestedQty: number;
@@ -83,10 +72,10 @@ function computeStatus(
     status = "overstock";
   } else if (stockCount <= setting.parLevel) {
     status = "par_alert";
-    requestedQty = setting.safetyStock - stockCount;
+    requestedQty = Math.ceil(setting.safetyStock - stockCount);
   } else if (stockCount < setting.safetyStock) {
     status = "under_safety";
-    requestedQty = setting.safetyStock - stockCount;
+    requestedQty = Math.ceil(setting.safetyStock - stockCount);
   }
 
   if (hasPendingRequest) {
@@ -140,7 +129,7 @@ const STATUS_CONFIG: Record<
 };
 
 export default function StoreMasterListScreen() {
-  const { profile } = useAuth();
+  const { profile, loading: authLoading } = useAuth();
   const router = useRouter();
   const storeId = profile?.locationId ?? "";
 
@@ -170,6 +159,8 @@ export default function StoreMasterListScreen() {
   const [sheetPar, setSheetPar] = useState("");
   const [sheetSafety, setSheetSafety] = useState("");
   const [sheetSellingPrice, setSheetSellingPrice] = useState("");
+  const [sheetGlassPrice, setSheetGlassPrice] = useState("");
+  const [sheetCarafePrice, setSheetCarafePrice] = useState("");
   const [sheetDiscontinued, setSheetDiscontinued] = useState(false);
   const [sheetWineCategory, setSheetWineCategory] = useState<"fast" | "fine" | "reserve" | "none">("none");
   const [sheetVatMode, setSheetVatMode] = useState<"included" | "excluded">("excluded");
@@ -182,10 +173,9 @@ export default function StoreMasterListScreen() {
   useEffect(() => {
     const fetchMasterWines = async () => {
       try {
-        const snap = await getDocs(collection(db, "master_wines"));
-        setMasterWinesList(
-          snap.docs.map((d) => ({ id: d.id, ...d.data() }) as MasterWine),
-        );
+        const data = await apiFetch("/wines");
+        const wines: MasterWine[] = data.wines || data;
+        setMasterWinesList(wines);
       } catch (err) {
         console.error("Failed to fetch master wines:", err);
       }
@@ -206,120 +196,126 @@ export default function StoreMasterListScreen() {
   }, [masterWinesList, wineSearchTerm]);
 
   const fetchData = useCallback(async () => {
-    if (!storeId) return;
+    if (authLoading) return;
+    if (!storeId) {
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
     try {
-      const [bottlesSnap, settingsSnap] = await Promise.all([
-        getDocs(
-          query(
-            collection(db, "inventory_bottles"),
-            where("storeRef", "==", doc(db, "stores", storeId)),
-          ),
-        ),
-        getDocs(
-          query(
-            collection(db, "store_wine_settings"),
-            where("storeId", "==", storeId),
-          ),
-        ),
-      ]);
+      const fetchBottles = apiFetch(`/bottles?storeId=${storeId}`).catch((err) => {
+        console.error("Error fetching bottles:", err);
+        return [];
+      });
 
-      const wineRefMap = new Map<string, any>();
+      const fetchSettings = apiFetch(`/stock-settings?storeId=${storeId}`).catch((err) => {
+        console.error("Error fetching settings:", err);
+        return [];
+      });
+
+      const fetchMasterWinesDocs = apiFetch("/wines").catch((err) => {
+        console.error("Error fetching master wines:", err);
+        return [];
+      });
+
+      const fetchPendingRequests = apiFetch(`/wine-requests?storeId=${storeId}&status=pending,converted,outbound,receiving`).catch((err) => {
+        console.error("Error fetching pending requests:", err);
+        return [];
+      });
+
+      const [bottlesRes, settingsRes, masterWinesRes, pendingRequestsRes] =
+        await Promise.all([
+          fetchBottles,
+          fetchSettings,
+          fetchMasterWinesDocs,
+          fetchPendingRequests,
+        ]);
+
+      const wineIdsSet = new Set<string>();
+      const stockCountMap = new Map<string, number>();
+      const fullBottlesMap = new Map<string, number>();
+      const openGlassesMap = new Map<string, number>();
       const settingsMap = new Map<string, StoreWineSetting>();
+      const masterWinesMap = new Map<string, MasterWine>();
 
-      bottlesSnap.docs.forEach((d) => {
-        const ref = d.data().masterWineRef;
-        if (ref && !wineRefMap.has(ref.id)) {
-          wineRefMap.set(ref.id, ref);
+      const bottlesList: any[] = bottlesRes.bottles || bottlesRes || [];
+      const settingsList: any[] = settingsRes.settings || settingsRes || [];
+      const masterWinesListRes: any[] = masterWinesRes.wines || masterWinesRes || [];
+      const pendingRequestsList: any[] = pendingRequestsRes.wineRequests || pendingRequestsRes || [];
+
+      bottlesList.forEach((data: any) => {
+        const refId = data.masterWineId || data.masterWineRef?.id;
+        if (refId) {
+          wineIdsSet.add(refId);
+          if (data.status === "received" || data.status === "shelved") {
+            stockCountMap.set(refId, (stockCountMap.get(refId) || 0) + 1);
+            fullBottlesMap.set(refId, (fullBottlesMap.get(refId) || 0) + 1);
+          } else if (data.status === "open") {
+            const glasses = data.glassesRemaining ?? 6;
+            const fraction = glasses / 6;
+            stockCountMap.set(refId, (stockCountMap.get(refId) || 0) + fraction);
+            openGlassesMap.set(refId, (openGlassesMap.get(refId) || 0) + glasses);
+          }
         }
       });
 
-      settingsSnap.docs.forEach((d) => {
-        const settingData = d.data();
-        settingsMap.set(settingData.masterWineId, {
-          id: d.id,
-          ...settingData,
-        } as StoreWineSetting);
-
-        if (
-          settingData.masterWineId &&
-          !wineRefMap.has(settingData.masterWineId)
-        ) {
-          wineRefMap.set(
-            settingData.masterWineId,
-            doc(db, "master_wines", settingData.masterWineId),
-          );
+      settingsList.forEach((settingData: any) => {
+        if (settingData.masterWineId) {
+          settingsMap.set(settingData.masterWineId, settingData as StoreWineSetting);
+          wineIdsSet.add(settingData.masterWineId);
         }
       });
 
-      const pendingRequestsSnap = await getDocs(
-        query(
-          collection(db, "wine_requests"),
-          where("storeId", "==", storeId),
-          where("status", "in", [
-            "pending",
-            "converted",
-            "outbound",
-            "receiving",
-          ]),
-        ),
-      );
+      masterWinesListRes.forEach((w: any) => {
+        masterWinesMap.set(w.id, w as MasterWine);
+      });
+
       const pendingWineRequestMap = new Map<
         string,
         { id: string; status: string }
       >();
-      pendingRequestsSnap.docs.forEach((reqDoc) => {
-        const request = reqDoc.data();
+      pendingRequestsList.forEach((request: any) => {
         request.items?.forEach((item: { masterWineId: string }) => {
           if (item.masterWineId) {
             pendingWineRequestMap.set(item.masterWineId, {
-              id: reqDoc.id,
+              id: request.id,
               status: request.status,
             });
           }
         });
       });
 
-      const results: WineEntry[] = await Promise.all(
-        Array.from(wineRefMap.entries()).map(async ([wineId, wineRef]) => {
-          const [wineSnap, countSnap] = await Promise.all([
-            getDoc(wineRef),
-            getCountFromServer(
-              query(
-                collection(db, "inventory_bottles"),
-                where("storeRef", "==", doc(db, "stores", storeId)),
-                where("masterWineRef", "==", wineRef),
-                where("status", "in", ["received", "shelved"]),
-              ),
-            ),
-          ]);
+      const results: WineEntry[] = Array.from(wineIdsSet).map((wineId) => {
+        const masterWine: MasterWine = masterWinesMap.get(wineId) ?? {
+          id: wineId,
+          name: "Unknown Wine",
+          vintage: "",
+          price: 0,
+        };
+        const rawStock = stockCountMap.get(wineId) || 0;
+        const stockCount = Math.round(rawStock * 100) / 100;
+        const fullBottlesCount = fullBottlesMap.get(wineId) || 0;
+        const openGlassesCount = openGlassesMap.get(wineId) || 0;
+        const setting = settingsMap.get(wineId) ?? null;
+        const activeRequest = pendingWineRequestMap.get(wineId);
 
-          const masterWine: MasterWine = wineSnap.exists()
-            ? ({
-              id: wineSnap.id,
-              ...(wineSnap.data() as object),
-            } as MasterWine)
-            : { id: wineId, name: "Unknown Wine", vintage: "", price: 0 };
+        const { status, requestedQty } = computeStatus(
+          stockCount,
+          setting,
+          !!activeRequest,
+        );
 
-          const stockCount = countSnap.data().count;
-          const setting = settingsMap.get(wineId) ?? null;
-          const activeRequest = pendingWineRequestMap.get(wineId);
-
-          const { status, requestedQty } = computeStatus(
-            stockCount,
-            setting,
-            !!activeRequest,
-          );
-
-          return {
-            masterWine,
-            stockCount,
-            setting,
-            status,
-            requestedQty,
-            activeRequest,
-          };
-        }),
-      );
+        return {
+          masterWine,
+          stockCount,
+          fullBottlesCount,
+          openGlassesCount,
+          setting,
+          status,
+          requestedQty,
+          activeRequest,
+        };
+      });
 
       const order: StockStatus[] = [
         "stockout",
@@ -335,13 +331,14 @@ export default function StoreMasterListScreen() {
       );
       validResults.sort((a, b) => order.indexOf(a.status) - order.indexOf(b.status));
       setEntries(validResults);
-    } catch (err) {
+    } catch (err: any) {
       console.error("MasterList fetch error:", err);
+      Alert.alert("Fetch Error", err?.message || String(err));
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [storeId]);
+  }, [storeId, authLoading]);
 
   useEffect(() => {
     fetchData();
@@ -357,6 +354,8 @@ export default function StoreMasterListScreen() {
     setSheetPar(entry.setting?.parLevel?.toString() ?? "");
     setSheetSafety(entry.setting?.safetyStock?.toString() ?? "");
     setSheetSellingPrice(entry.setting?.sellingPrice?.toString() ?? "");
+    setSheetGlassPrice(entry.setting?.glassPrice?.toString() ?? "");
+    setSheetCarafePrice(entry.setting?.carafePrice?.toString() ?? "");
     setSheetDiscontinued(entry.setting?.discontinued ?? false);
 
     let cat: "fast" | "fine" | "reserve" | "none" = "none";
@@ -383,33 +382,29 @@ export default function StoreMasterListScreen() {
     }
     setSaving(true);
     try {
-      const docId = `${storeId}_${selected.masterWine.id}`;
-      const updateData = {
-        storeId,
-        masterWineId: selected.masterWine.id,
-        parLevel: par,
-        safetyStock: safety,
-        sellingPrice: sheetSellingPrice ? parseFloat(sheetSellingPrice) : null,
-        discontinued: sheetDiscontinued,
-        wineCategory: sheetWineCategory === "none" ? null : sheetWineCategory,
-        vatMode: sheetVatMode,
-        updatedAt: serverTimestamp(),
-        createdAt: selected.setting?.createdAt ?? serverTimestamp(),
-      };
-      const batch = writeBatch(db);
-      
-      // Update store_wine_settings
-      batch.set(doc(db, "store_wine_settings", docId), updateData);
-      
-      // Sync wineCategory to master_wines
-      const masterWineRef = doc(db, "master_wines", selected.masterWine.id);
-      batch.update(masterWineRef, {
-        wineCategory: sheetWineCategory === "none" ? null : sheetWineCategory,
-        updatedAt: serverTimestamp(),
+      await apiFetch("/stock-settings", {
+        method: "POST",
+        body: JSON.stringify({
+          storeId,
+          masterWineId: selected.masterWine.id,
+          parLevel: par,
+          safetyStock: safety,
+          sellingPrice: sheetSellingPrice ? parseFloat(sheetSellingPrice) : null,
+          glassPrice: sheetGlassPrice ? parseFloat(sheetGlassPrice) : null,
+          carafePrice: sheetCarafePrice ? parseFloat(sheetCarafePrice) : null,
+          discontinued: sheetDiscontinued,
+          wineCategory: sheetWineCategory === "none" ? null : sheetWineCategory,
+          vatMode: sheetVatMode,
+        }),
       });
-      
-      await batch.commit();
-      
+
+      await apiFetch(`/wines/${selected.masterWine.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          wineCategory: sheetWineCategory === "none" ? null : sheetWineCategory,
+        }),
+      });
+
       closeSheet();
       fetchData();
     } catch (err) {
@@ -435,29 +430,30 @@ export default function StoreMasterListScreen() {
           onPress: async () => {
             setRequesting(true);
             try {
-              await addDoc(collection(db, "wine_requests"), {
-                storeId,
-                targetStoreId: "warehouse",
-                createdBy: profile.email,
-                requesterId: profile.id,
-                status: "pending",
-                items: [
-                  {
-                    masterWineId: selected.masterWine.id,
-                    wineName: selected.masterWine.name,
-                    vintage: selected.masterWine.vintage,
-                    sku: selected.masterWine.sku ?? "",
-                    format: selected.masterWine.format,
-                    producer: selected.masterWine.producer,
-                    qty,
-                    price: selected.masterWine.price,
-                    pulledQty: 0,
-                    ingressedQty: 0,
-                  },
-                ],
-                totalAmount: selected.masterWine.price * qty,
-                createdAt: serverTimestamp(),
-                updatedAt: serverTimestamp(),
+              await apiFetch("/wine-requests", {
+                method: "POST",
+                body: JSON.stringify({
+                  storeId,
+                  targetStoreId: "warehouse",
+                  createdBy: profile.email,
+                  requesterId: profile.id,
+                  status: "pending",
+                  items: [
+                    {
+                      masterWineId: selected.masterWine.id,
+                      wineName: selected.masterWine.name,
+                      vintage: selected.masterWine.vintage,
+                      sku: selected.masterWine.sku ?? "",
+                      format: selected.masterWine.format,
+                      producer: selected.masterWine.producer,
+                      qty,
+                      price: selected.masterWine.price,
+                      pulledQty: 0,
+                      ingressedQty: 0,
+                    },
+                  ],
+                  totalAmount: selected.masterWine.price * qty,
+                }),
               });
               Alert.alert(
                 "Submitted!",
@@ -501,16 +497,17 @@ export default function StoreMasterListScreen() {
         0,
       );
 
-      await addDoc(collection(db, "wine_requests"), {
-        storeId,
-        targetStoreId: "warehouse",
-        createdBy: profile.email,
-        requesterId: profile.id,
-        status: "pending",
-        items: requestItems,
-        totalAmount,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
+      await apiFetch("/wine-requests", {
+        method: "POST",
+        body: JSON.stringify({
+          storeId,
+          targetStoreId: "warehouse",
+          createdBy: profile.email,
+          requesterId: profile.id,
+          status: "pending",
+          items: requestItems,
+          totalAmount,
+        }),
       });
 
       setIsBatchConfirmVisible(false);
@@ -638,8 +635,17 @@ export default function StoreMasterListScreen() {
             <View style={styles.barStatsRow}>
               <View style={styles.stockHeaderRow}>
                 <Package size={16} color={theme.textSecondary} />
-                <Text style={styles.stockPrimaryValue}>{item.stockCount}</Text>
+                <Text style={styles.stockPrimaryValue}>
+                  {item.stockCount % 1 === 0 ? item.stockCount : item.stockCount.toFixed(2)}
+                </Text>
                 <Text style={styles.stockPrimaryLabel}>IN STOCK</Text>
+                {item.openGlassesCount > 0 && (
+                  <View style={{ backgroundColor: "#3b82f615", borderColor: "#3b82f640", borderWidth: 1, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, marginLeft: 6 }}>
+                    <Text style={{ fontSize: 10, fontWeight: "700", color: "#2563eb" }}>
+                      🍷 {item.openGlassesCount}/6 glasses open
+                    </Text>
+                  </View>
+                )}
               </View>
 
               {item.requestedQty > 0 && (
@@ -682,8 +688,17 @@ export default function StoreMasterListScreen() {
         ) : (
           <View style={styles.unconfiguredStockRow}>
             <Package size={14} color={theme.textSecondary} />
-            <Text style={styles.stockPrimaryValue}>{item.stockCount}</Text>
+            <Text style={styles.stockPrimaryValue}>
+              {item.stockCount % 1 === 0 ? item.stockCount : item.stockCount.toFixed(2)}
+            </Text>
             <Text style={styles.stockPrimaryLabel}>IN STOCK (UNSET)</Text>
+            {item.openGlassesCount > 0 && (
+              <View style={{ backgroundColor: "#3b82f615", borderColor: "#3b82f640", borderWidth: 1, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, marginLeft: 6 }}>
+                <Text style={{ fontSize: 10, fontWeight: "700", color: "#2563eb" }}>
+                  🍷 {item.openGlassesCount}/6 glasses open
+                </Text>
+              </View>
+            )}
           </View>
         )}
 
@@ -1076,9 +1091,13 @@ export default function StoreMasterListScreen() {
             <View style={styles.stockRow}>
               <View style={styles.stockPill}>
                 <Text style={styles.stockCount}>
-                  {selected?.stockCount ?? 0}
+                  {selected?.stockCount !== undefined ? (selected.stockCount % 1 === 0 ? selected.stockCount : selected.stockCount.toFixed(2)) : 0}
                 </Text>
-                <Text style={styles.stockLabel}>bottles in store</Text>
+                <Text style={styles.stockLabel}>
+                  {selected?.openGlassesCount && selected.openGlassesCount > 0
+                    ? `bottles (${selected.fullBottlesCount} full + ${selected.openGlassesCount}/6 glasses)`
+                    : "bottles in store"}
+                </Text>
               </View>
               {selected && (
                 <View
@@ -1142,25 +1161,14 @@ export default function StoreMasterListScreen() {
                 </View>
                 <View style={styles.divider} />
 
-                {/* Selling Price */}
-                <View style={styles.settingRow}>
-                  <View style={styles.settingTextContainer}>
-                    <Text style={styles.fieldLabel}>SELLING PRICE</Text>
-                    <Text style={styles.fieldHint}>
-                      The retail price of this wine at this store.
-                    </Text>
-                  </View>
-                  <View style={{ alignItems: "flex-end", gap: 8 }}>
-                    <View style={styles.priceInputContainer}>
-                      <Text style={styles.currencyPrefix}>₱</Text>
-                      <TextInput
-                        style={[styles.input, styles.inputPrice]}
-                        value={sheetSellingPrice}
-                        onChangeText={setSheetSellingPrice}
-                        keyboardType="decimal-pad"
-                        placeholder="0.00"
-                        placeholderTextColor="#94a3b8"
-                      />
+                {/* Selling Prices (Bottle, Glass, Carafe) */}
+                <View style={[styles.settingRow, { flexDirection: "column", alignItems: "stretch", gap: 12 }]}>
+                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                    <View style={styles.settingTextContainer}>
+                      <Text style={styles.fieldLabel}>PRICING & VAT</Text>
+                      <Text style={styles.fieldHint}>
+                        Set retail prices per bottle, glass (1/6), and carafe (2/6).
+                      </Text>
                     </View>
                     <View style={{ flexDirection: "row", backgroundColor: Colors.store.primary + "1A", borderRadius: 8, padding: 2 }}>
                       <TouchableOpacity
@@ -1197,6 +1205,54 @@ export default function StoreMasterListScreen() {
                       </TouchableOpacity>
                     </View>
                   </View>
+
+                  {/* Bottle Price */}
+                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                    <Text style={{ fontSize: 13, fontWeight: "600", color: theme.text }}>🍾 Bottle Price</Text>
+                    <View style={styles.priceInputContainer}>
+                      <Text style={styles.currencyPrefix}>₱</Text>
+                      <TextInput
+                        style={[styles.input, styles.inputPrice]}
+                        value={sheetSellingPrice}
+                        onChangeText={setSheetSellingPrice}
+                        keyboardType="decimal-pad"
+                        placeholder="0.00"
+                        placeholderTextColor="#94a3b8"
+                      />
+                    </View>
+                  </View>
+
+                  {/* Glass Price */}
+                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                    <Text style={{ fontSize: 13, fontWeight: "600", color: theme.text }}>🍷 Glass Price (1/6)</Text>
+                    <View style={styles.priceInputContainer}>
+                      <Text style={styles.currencyPrefix}>₱</Text>
+                      <TextInput
+                        style={[styles.input, styles.inputPrice]}
+                        value={sheetGlassPrice}
+                        onChangeText={setSheetGlassPrice}
+                        keyboardType="decimal-pad"
+                        placeholder="0.00"
+                        placeholderTextColor="#94a3b8"
+                      />
+                    </View>
+                  </View>
+
+                  {/* Carafe Price */}
+                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                    <Text style={{ fontSize: 13, fontWeight: "600", color: theme.text }}>🫗 Carafe Price (2/6)</Text>
+                    <View style={styles.priceInputContainer}>
+                      <Text style={styles.currencyPrefix}>₱</Text>
+                      <TextInput
+                        style={[styles.input, styles.inputPrice]}
+                        value={sheetCarafePrice}
+                        onChangeText={setSheetCarafePrice}
+                        keyboardType="decimal-pad"
+                        placeholder="0.00"
+                        placeholderTextColor="#94a3b8"
+                      />
+                    </View>
+                  </View>
                 </View>
               </View>
 
@@ -1206,11 +1262,13 @@ export default function StoreMasterListScreen() {
                   <Text style={styles.formulaLabel}>REQUEST FORMULA</Text>
                   <Text style={styles.formulaText}>
                     Safety Stock ({sheetSafety}) − Current (
-                    {selected?.stockCount ?? 0}) ={" "}
+                    {selected?.stockCount !== undefined ? (selected.stockCount % 1 === 0 ? selected.stockCount : selected.stockCount.toFixed(2)) : 0}) ={" "}
                     <Text style={{ color: theme.primary, fontWeight: "900" }}>
-                      {Math.max(
-                        0,
-                        parseInt(sheetSafety, 10) - (selected?.stockCount ?? 0),
+                      {Math.ceil(
+                        Math.max(
+                          0,
+                          parseInt(sheetSafety, 10) - (selected?.stockCount ?? 0),
+                        )
                       )}{" "}
                       bottles
                     </Text>

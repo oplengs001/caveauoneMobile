@@ -1,26 +1,19 @@
 import React, { useEffect } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
-import { onAuthStateChanged } from 'firebase/auth';
-import { auth } from '../lib/firebase';
+import { getToken } from '@/lib/auth';
 
 export default function Index() {
   const router = useRouter();
 
   useEffect(() => {
-    // Listen for Firebase Auth state changes
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        // User is signed in, redirect to dashboard
+    getToken().then((token) => {
+      if (token) {
         router.replace('/(tabs)/home');
       } else {
-        // No user signed in, redirect to login
         router.replace('/login');
       }
     });
-
-    // Cleanup subscription on unmount
-    return () => unsubscribe();
   }, [router]);
 
   return (

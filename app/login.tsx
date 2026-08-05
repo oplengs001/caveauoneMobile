@@ -1,5 +1,6 @@
+import { useAuth } from "@/context/AuthContext";
+import { saveToken } from "@/lib/auth";
 import { useRouter } from "expo-router";
-import { signInWithEmailAndPassword } from "firebase/auth";
 import { Lock, LogIn, Mail, ShieldCheck, Warehouse } from "lucide-react-native";
 import React, { useState } from "react";
 import {
@@ -13,12 +14,14 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { auth } from "../lib/firebase";
+
+const BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || "https://pre-caveauone.vercel.app";
 
 export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const { refreshProfile } = useAuth();
   const router = useRouter();
 
   const handleLogin = async (loginEmail?: string, loginPassword?: string) => {
@@ -34,12 +37,24 @@ export default function LoginScreen() {
     }
     setLoading(true);
     try {
-      if (finalEmail === "test@test.com" && finalPassword === "password") {
-        router.replace("/(tabs)/home");
+      const res = await fetch(`${BASE_URL}/api/v2/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: finalEmail, password: finalPassword }),
+      });
+      if (!res.ok) {
+        let msg = "Invalid credentials. Please contact your supervisor.";
+        try {
+          const json = await res.json();
+          if (json.error) msg = json.error;
+        } catch { /* ignore */ }
+        Alert.alert("Access Denied", msg);
         return;
       }
 
-      await signInWithEmailAndPassword(auth, finalEmail, finalPassword);
+      const { token } = await res.json();
+      await saveToken(token);
+      await refreshProfile();
       router.replace("/(tabs)/home");
     } catch (error: any) {
       Alert.alert(
@@ -139,9 +154,15 @@ export default function LoginScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.testButton}
-              onPress={() => quickLogin("kong@gmail.com", "123456")}
+              onPress={() => quickLogin("gstore@gmail.com", "123456")}
             >
               <Text style={styles.testButtonText}>Login as Store</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.testButton}
+              onPress={() => quickLogin("gstaff@gmail.com", "123456")}
+            >
+              <Text style={styles.testButtonText}>Login as Staff</Text>
             </TouchableOpacity>
           </View>
         </View>

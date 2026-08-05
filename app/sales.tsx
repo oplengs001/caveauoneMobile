@@ -1,19 +1,19 @@
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
-import { db } from "@/lib/firebase";
+import { apiFetch } from "@/lib/api";
 import { calculateDashboardSalesMetrics } from "@/lib/utils/salesMath";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { collection, count, getAggregateFromServer, getDocs, orderBy, query, sum, where } from "firebase/firestore";
 import {
   Banknote,
   Calendar,
   ChevronLeft,
   Package,
   Receipt,
+  RotateCcw,
   Sliders,
   TrendingUp,
 } from "lucide-react-native";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -33,8 +33,14 @@ interface Sale {
   vintage?: string;
   format?: string;
   bottleId: string;
+  readableId?: string;
   price: number; // Selling price (Base)
+  totalAmount?: number;
   masterWinePrice?: number; // Added to calculate profit (Cost)
+  saleType?: string;
+  masterWine?: {
+    price?: number;
+  };
   soldAt: {
     toDate: () => Date;
   };
@@ -44,15 +50,19 @@ interface Sale {
 type PeriodType = "all" | "today" | "week" | "month" | "lastMonth" | "custom";
 
 const formatDate = (date: Date | undefined) => {
-  if (!date) return "";
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "numeric",
-    hour12: true,
-  }).format(date);
+  if (!date || isNaN(date.getTime())) return "N/A";
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "numeric",
+      hour12: true,
+    }).format(date);
+  } catch (e) {
+    return "N/A";
+  }
 };
 
 const formatCurrency = (amount: number) => {
@@ -67,13 +77,22 @@ const formatCurrency = (amount: number) => {
 export default function SalesScreen() {
   const router = useRouter();
   const { profile } = useAuth();
-  const theme = profile?.role === "store" ? Colors.store : Colors.warehouse;
+  const theme = profile?.role === "admin" ? Colors.admin : profile?.role === "store" ? Colors.store : Colors.warehouse;
 
-  // Catch the period parameter passed from the HomeScreen
-  const { period: passedPeriod } = useLocalSearchParams();
+  // Catch the period and store parameters
+  const { period: passedPeriod, storeId: passedStoreId, storeName: passedStoreName } = useLocalSearchParams<{
+    period?: string;
+    storeId?: string;
+    storeName?: string;
+  }>();
+
+  const activeStoreId = (passedStoreId as string) || profile?.locationId || null;
+  const activeStoreName = (passedStoreName as string) || null;
 
   const [sales, setSales] = useState<Sale[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isClearingCache, setIsClearingCache] = useState(false);
+  const [cacheToast, setCacheToast] = useState<string | null>(null);
   const [isFilterModalVisible, setFilterModalVisible] = useState(false);
 
   // Aggregate state
@@ -81,7 +100,9 @@ export default function SalesScreen() {
     totalBaseSales: 0,
     totalGrossSales: 0,
     totalCost: 0,
-    totalBottles: 0
+    totalBottles: 0,
+    categoryCounts: { fast: 0, fine: 0, reserve: 0, standard: 0 },
+    portionCounts: { bottle: 0, glass: 0, carafe: 0 },
   });
 
   // Initialize the state with the passed parameter, or default to "all"
@@ -92,108 +113,126 @@ export default function SalesScreen() {
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
 
-  const buildBaseQuery = useCallback(() => {
-    let startDate: Date | null = null;
-    let endDate: Date | null = null;
-    const now = new Date();
-
-    if (period === "today") {
-      startDate = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate(),
-      );
-    } else if (period === "week") {
-      startDate = new Date();
-      startDate.setDate(startDate.getDate() - startDate.getDay());
-      startDate.setHours(0, 0, 0, 0);
-    } else if (period === "month") {
-      startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-    } else if (period === "lastMonth") {
-      startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      endDate = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        0,
-        23,
-        59,
-        59,
-        999,
-      );
-    } else if (period === "custom") {
-      startDate = customStart ? new Date(customStart) : null;
-      if (startDate) startDate.setHours(0, 0, 0, 0);
-
-      endDate = customEnd ? new Date(customEnd) : null;
-      if (endDate) endDate.setHours(23, 59, 59, 999);
-    }
-
-    const baseConstraints = [where("storeId", "==", profile?.locationId)];
-    let salesQuery;
-
-    if (period === "all" || (!startDate && period === "custom")) {
-      salesQuery = query(
-        collection(db, "sales"),
-        ...baseConstraints,
-        orderBy("soldAt", "desc"),
-      );
-    } else if (startDate && endDate) {
-      salesQuery = query(
-        collection(db, "sales"),
-        ...baseConstraints,
-        where("soldAt", ">=", startDate),
-        where("soldAt", "<=", endDate),
-        orderBy("soldAt", "desc"),
-      );
-    } else {
-      salesQuery = query(
-        collection(db, "sales"),
-        ...baseConstraints,
-        where("soldAt", ">=", startDate),
-        orderBy("soldAt", "desc"),
-      );
-    }
-    return salesQuery;
-  }, [period, customStart, customEnd, profile]);
-
-  const fetchSales = async () => {
-    if (!profile?.locationId) {
-      setLoading(false);
-      return;
-    }
+  const fetchSales = async (forceNoCache = false) => {
     if (period === "custom" && !customStart) return;
 
-    setLoading(true);
-    try {
-      const baseQuery = buildBaseQuery();
+    if (forceNoCache) {
+      setIsClearingCache(true);
+    } else {
+      setLoading(true);
+    }
 
-      // Fetch Aggregates first
-      const aggregateSnapshot = await getAggregateFromServer(baseQuery, {
-        totalBaseSales: sum("price"),
-        totalGrossSales: sum("totalAmount"),
-        totalCost: sum("masterWinePrice"),
-        totalBottles: count()
+    try {
+      let startDate: Date | null = null;
+      let endDate: Date | null = null;
+      const now = new Date();
+
+      if (period === "today") {
+        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      } else if (period === "week") {
+        startDate = new Date();
+        startDate.setDate(startDate.getDate() - startDate.getDay());
+        startDate.setHours(0, 0, 0, 0);
+      } else if (period === "month") {
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+      } else if (period === "lastMonth") {
+        startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        endDate = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+      } else if (period === "custom") {
+        startDate = customStart ? new Date(customStart) : null;
+        if (startDate) startDate.setHours(0, 0, 0, 0);
+        endDate = customEnd ? new Date(customEnd) : null;
+        if (endDate) endDate.setHours(23, 59, 59, 999);
+      }
+
+      const params = new URLSearchParams();
+      if (activeStoreId) params.set("storeId", activeStoreId);
+      if (startDate) params.set("from", startDate.toISOString());
+      if (endDate) params.set("to", endDate.toISOString());
+      if (forceNoCache) params.set("_t", Date.now().toString());
+
+      const data = await apiFetch(`/sales?${params}`);
+      const rawList = Array.isArray(data) ? data : Array.isArray(data.sales) ? data.sales : [];
+      let salesData: Sale[] = rawList.map((s: any) => {
+        const rawDate = s.soldAt || s.createdAt || s.created_at || s.date;
+        const d = rawDate ? new Date(rawDate) : new Date();
+        const validDate = isNaN(d.getTime()) ? new Date() : d;
+        const rId = s.readableId || (s.bottleId && s.bottleId.startsWith("WB-") ? s.bottleId : null) || s.bottle?.readableId || s.bottleId;
+        return {
+          ...s,
+          readableId: rId,
+          soldAt: {
+            toDate: () => validDate,
+          },
+        };
       });
+
+      const isStaffUser = profile?.role === "store_staff";
+      if (isStaffUser && profile) {
+        salesData = salesData.filter(
+          (s: any) =>
+            s.soldById === profile.id ||
+            (s.soldByEmail && profile.email && s.soldByEmail.toLowerCase() === profile.email.toLowerCase())
+        );
+      }
+
+      const totalBase = salesData.reduce((sum, s: any) => sum + Number(s.price || 0), 0);
+      const totalGross = salesData.reduce((sum, s: any) => sum + Number(s.totalAmount || s.price || 0), 0);
+
+      let totalCost = 0;
+      let totalVolume = 0;
+      const catCounts = { fast: 0, fine: 0, reserve: 0, standard: 0 };
+      const portionCounts = { bottle: 0, glass: 0, carafe: 0 };
+
+      salesData.forEach((s: any) => {
+        const rawCost = Number(s.masterWinePrice || s.masterWine?.price || 0);
+        const st = (s.saleType || "bottle").toLowerCase();
+        if (st === "glass") {
+          totalCost += rawCost / 6;
+          totalVolume += 1 / 6;
+          portionCounts.glass += 1;
+        } else if (st === "carafe") {
+          totalCost += (rawCost * 2) / 6;
+          totalVolume += 2 / 6;
+          portionCounts.carafe += 1;
+        } else {
+          totalCost += rawCost;
+          totalVolume += Number(s.quantity || 1);
+          portionCounts.bottle += 1;
+        }
+
+        const cat = (s.wineCategory || s.masterWine?.wineCategory || "standard").toLowerCase();
+        if (cat in catCounts) {
+          catCounts[cat as keyof typeof catCounts] += 1;
+        } else {
+          catCounts.standard += 1;
+        }
+      });
+      const roundedBottles = Math.round(totalVolume * 100) / 100;
 
       setAggregates({
-        totalBaseSales: aggregateSnapshot.data().totalBaseSales || 0,
-        totalGrossSales: aggregateSnapshot.data().totalGrossSales || 0,
-        totalCost: aggregateSnapshot.data().totalCost || 0,
-        totalBottles: aggregateSnapshot.data().totalBottles || 0
+        totalBaseSales: totalBase,
+        totalGrossSales: totalGross,
+        totalCost: totalCost,
+        totalBottles: roundedBottles,
+        categoryCounts: catCounts,
+        portionCounts: portionCounts,
       });
-
-      const querySnapshot = await getDocs(baseQuery);
-      const salesData = querySnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as Sale[];
 
       setSales(salesData);
     } catch (error) {
       console.error("Error fetching sales:", error);
     } finally {
       setLoading(false);
+      setIsClearingCache(false);
     }
+  };
+
+  const handleClearCache = async () => {
+    setCacheToast(null);
+    await fetchSales(true);
+    setCacheToast("Cache cleared! Fresh sales loaded.");
+    setTimeout(() => setCacheToast(null), 3000);
   };
 
   useEffect(() => {
@@ -214,115 +253,135 @@ export default function SalesScreen() {
     return period.charAt(0).toUpperCase() + period.slice(1);
   };
 
+  const isStaffUser = profile?.role === "store_staff";
+
   const renderDashboardSummary = () => (
     <View style={styles.summaryContainer}>
       <Text style={[styles.sectionTitle, { color: theme.text }]}>
-        {getPeriodLabel()} Summary
+        {getPeriodLabel()} Summary {isStaffUser ? "(My Sales)" : ""}
       </Text>
 
-      {/* Row 1: Revenue Cards */}
-      <View style={styles.metricsRow}>
-        {/* Gross Revenue */}
-        <View
-          style={[
-            styles.metricCard,
-            { backgroundColor: theme.card, borderColor: theme.border },
-          ]}
-        >
-          <TrendingUp size={20} color={theme.primary} style={styles.metricIcon} />
-          <Text style={[styles.metricLabel, { color: theme.textSecondary }]}>
-            Gross Rev
-          </Text>
-          <Text style={[styles.metricValue, { color: theme.text }]} numberOfLines={1} adjustsFontSizeToFit>
-            {formatCurrency(grossSales)}
-          </Text>
-          <Text style={[styles.metricSubText, { color: theme.textSecondary }]}>
-            Inc. 12% VAT
-          </Text>
-        </View>
+      {isStaffUser ? (
+        <>
+          {/* Staff Summary Card */}
+          <View style={[styles.metricCard, { backgroundColor: theme.primary + "15", borderColor: theme.primary + "30", marginBottom: 16, padding: 16 }]}>
+            <Package size={24} color={theme.primary} style={styles.metricIcon} />
+            <Text style={[styles.metricLabel, { color: theme.primary, fontWeight: "800", letterSpacing: 0.5 }]}>
+              MY BOTTLES SOLD
+            </Text>
+            <Text style={[styles.metricValue, { color: theme.primary, fontSize: 32, marginVertical: 4 }]}>
+              {totalBottles}
+            </Text>
+            <Text style={[styles.metricSubText, { color: theme.textSecondary }]}>
+              {sales.length} transactions by {profile?.displayName || profile?.email?.split("@")[0] || "Logged-in Account"}
+            </Text>
+          </View>
+        </>
+      ) : (
+        <>
+          {/* Row 1: Revenue Cards */}
+          <View style={styles.metricsRow}>
+            {/* Gross Revenue */}
+            <View
+              style={[
+                styles.metricCard,
+                { backgroundColor: theme.card, borderColor: theme.border },
+              ]}
+            >
+              <TrendingUp size={20} color={theme.primary} style={styles.metricIcon} />
+              <Text style={[styles.metricLabel, { color: theme.textSecondary }]}>
+                Gross Rev
+              </Text>
+              <Text style={[styles.metricValue, { color: theme.text }]} numberOfLines={1} adjustsFontSizeToFit>
+                {formatCurrency(grossSales)}
+              </Text>
+              <Text style={[styles.metricSubText, { color: theme.textSecondary }]}>
+                Inc. 12% VAT
+              </Text>
+            </View>
 
-        {/* Net Revenue */}
-        <View
-          style={[
-            styles.metricCard,
-            { backgroundColor: theme.card, borderColor: theme.border },
-          ]}
-        >
-          <Receipt size={20} color={theme.primary} style={styles.metricIcon} />
-          <Text style={[styles.metricLabel, { color: theme.textSecondary }]}>
-            Net Revenue
-          </Text>
-          <Text style={[styles.metricValue, { color: theme.text }]} numberOfLines={1} adjustsFontSizeToFit>
-            {formatCurrency(totalBaseSales)}
-          </Text>
-          <Text style={[styles.metricSubText, { color: theme.textSecondary }]}>
-            + {formatCurrency(vatAmount)} VAT
-          </Text>
-        </View>
+            {/* Net Revenue */}
+            <View
+              style={[
+                styles.metricCard,
+                { backgroundColor: theme.card, borderColor: theme.border },
+              ]}
+            >
+              <Receipt size={20} color={theme.primary} style={styles.metricIcon} />
+              <Text style={[styles.metricLabel, { color: theme.textSecondary }]}>
+                Net Revenue
+              </Text>
+              <Text style={[styles.metricValue, { color: theme.text }]} numberOfLines={1} adjustsFontSizeToFit>
+                {formatCurrency(totalBaseSales)}
+              </Text>
+              <Text style={[styles.metricSubText, { color: theme.textSecondary }]}>
+                + {formatCurrency(vatAmount)} VAT
+              </Text>
+            </View>
 
-        {/* Bottles Sold */}
-        <View
-          style={[
-            styles.metricCard,
-            { backgroundColor: theme.card, borderColor: theme.border },
-          ]}
-        >
-          <Package size={20} color={theme.primary} style={styles.metricIcon} />
-          <Text style={[styles.metricLabel, { color: theme.textSecondary }]}>
-            Bottles
-          </Text>
-          <Text style={[styles.metricValue, { color: "#f59e0b" }]} numberOfLines={1} adjustsFontSizeToFit>
-            {totalBottles}
-          </Text>
-          <Text style={[styles.metricSubText, { color: theme.textSecondary }]}>
-            Total Sold
-          </Text>
-        </View>
-      </View>
+            {/* Bottles Sold */}
+            <View
+              style={[
+                styles.metricCard,
+                { backgroundColor: theme.card, borderColor: theme.border },
+              ]}
+            >
+              <Package size={20} color={theme.primary} style={styles.metricIcon} />
+              <Text style={[styles.metricLabel, { color: theme.textSecondary }]}>
+                Bottles
+              </Text>
+              <Text style={[styles.metricValue, { color: "#f59e0b" }]} numberOfLines={1} adjustsFontSizeToFit>
+                {totalBottles}
+              </Text>
+              <Text style={[styles.metricSubText, { color: theme.textSecondary }]}>
+                Total Sold
+              </Text>
+            </View>
+          </View>
 
-      {/* Row 2: Profit Card (Full Width) */}
-      <View
-        style={[
-          styles.metricCard,
-          {
-            backgroundColor: netProfit >= 0 ? (Colors.store.success + "15" || "#10b98115") : (Colors.store.danger + "15" || "#ef444415"),
-            borderColor: netProfit >= 0 ? (Colors.store.success + "40" || "#10b98140") : (Colors.store.danger + "40" || "#ef444440"),
-            marginBottom: 12,
-          },
-        ]}
-      >
-        <Banknote size={24} color={netProfit >= 0 ? (Colors.store.success || "#10b981") : (Colors.store.danger || "#ef4444")} style={styles.metricIcon} />
-        <Text
-          style={[
-            styles.metricLabel,
-            { color: theme.textSecondary, marginBottom: 8 },
-          ]}
-        >
-          Net Profit
-        </Text>
-        <Text
-          style={[
-            styles.metricValue,
-            {
-              color:
-                netProfit >= 0
-                  ? Colors.store.success || "#10b981"
-                  : Colors.store.danger || "#ef4444",
-              fontSize: 32,
-            },
-          ]}
-          numberOfLines={1}
-          adjustsFontSizeToFit
-        >
-          {netProfit >= 0 ? "+" : ""}
-          {formatCurrency(netProfit)}
-        </Text>
-        <Text style={[styles.metricSubText, { color: theme.textSecondary, marginTop: 8 }]}>
-          Total Purchase Cost: {formatCurrency(totalCost)}
-        </Text>
-      </View>
-
-
+          {/* Row 2: Profit Card (Full Width) */}
+          <View
+            style={[
+              styles.metricCard,
+              {
+                backgroundColor: netProfit >= 0 ? (Colors.store.success + "15" || "#10b98115") : (Colors.store.danger + "15" || "#ef444415"),
+                borderColor: netProfit >= 0 ? (Colors.store.success + "40" || "#10b98140") : (Colors.store.danger + "40" || "#ef444440"),
+                marginBottom: 12,
+              },
+            ]}
+          >
+            <Banknote size={24} color={netProfit >= 0 ? (Colors.store.success || "#10b981") : (Colors.store.danger || "#ef4444")} style={styles.metricIcon} />
+            <Text
+              style={[
+                styles.metricLabel,
+                { color: theme.textSecondary, marginBottom: 8 },
+              ]}
+            >
+              Net Profit
+            </Text>
+            <Text
+              style={[
+                styles.metricValue,
+                {
+                  color:
+                    netProfit >= 0
+                      ? Colors.store.success || "#10b981"
+                      : Colors.store.danger || "#ef4444",
+                  fontSize: 32,
+                },
+              ]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+            >
+              {netProfit >= 0 ? "+" : ""}
+              {formatCurrency(netProfit)}
+            </Text>
+            <Text style={[styles.metricSubText, { color: theme.textSecondary, marginTop: 8 }]}>
+              Total Purchase Cost: {formatCurrency(totalCost)}
+            </Text>
+          </View>
+        </>
+      )}
 
       <Text
         style={[
@@ -336,11 +395,14 @@ export default function SalesScreen() {
   );
 
   const renderItem = ({ item }: { item: Sale }) => {
-    const itemVat = item.price * 0.12;
-    const itemTotal = item.price + itemVat;
+    const price = Number(item.price || 0);
+    const itemTotal = Number(item.totalAmount || price * 1.12);
 
-    const cost = item.masterWinePrice || 0;
-    const itemProfit = item.price - cost;
+    const rawCost = Number(item.masterWinePrice || item.masterWine?.price || 0);
+    const saleType = (item.saleType || "bottle").toLowerCase();
+    const cost = saleType === "glass" ? rawCost / 6 : saleType === "carafe" ? (rawCost * 2) / 6 : rawCost;
+
+    const itemProfit = price - cost;
     const isProfitable = itemProfit >= 0;
 
     return (
@@ -360,9 +422,9 @@ export default function SalesScreen() {
 
           <View style={styles.metaRow}>
             <Text style={[styles.bottleIdText, { color: theme.textSecondary }]}>
-              ID: {item.bottleId}
+              ID: {item.readableId || item.bottleId}
             </Text>
-            {cost > 0 && (
+            {!isStaffUser && cost > 0 && (
               <View
                 style={[
                   styles.profitBadge,
@@ -391,14 +453,25 @@ export default function SalesScreen() {
             {formatDate(item.soldAt?.toDate())}
           </Text>
         </View>
-        <View style={styles.priceContainer}>
-          <Text style={[styles.price, { color: theme.primary }]}>
-            {formatCurrency(itemTotal)}
-          </Text>
-          <Text style={[styles.vatText, { color: theme.textSecondary }]}>
-            inc. VAT
-          </Text>
-        </View>
+
+        {isStaffUser ? (
+          <View style={styles.priceContainer}>
+            <View style={{ backgroundColor: theme.primary + "15", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 }}>
+              <Text style={{ fontSize: 12, fontWeight: "800", color: theme.primary }}>
+                {saleType === "glass" ? "🍷 Glass" : saleType === "carafe" ? "🫗 Carafe" : "🍾 Bottle"}
+              </Text>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.priceContainer}>
+            <Text style={[styles.price, { color: theme.primary }]}>
+              {formatCurrency(itemTotal)}
+            </Text>
+            <Text style={[styles.vatText, { color: theme.textSecondary }]}>
+              inc. VAT
+            </Text>
+          </View>
+        )}
       </View>
     );
   };
@@ -424,16 +497,35 @@ export default function SalesScreen() {
         >
           <ChevronLeft size={24} color={theme.primary} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: theme.text }]}>
-          Sales Report
+        <Text style={[styles.headerTitle, { color: theme.text }]} numberOfLines={1}>
+          {activeStoreName ? `${activeStoreName} Sales` : "Sales Report"}
         </Text>
-        <TouchableOpacity
-          style={styles.filterIcon}
-          onPress={() => setFilterModalVisible(true)}
-        >
-          <Sliders size={24} color={theme.textSecondary} />
-        </TouchableOpacity>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <TouchableOpacity
+            style={[styles.filterIcon, { backgroundColor: theme.primary + "15", paddingHorizontal: 10, borderRadius: 10, height: 38, flexDirection: "row", alignItems: "center", gap: 4 }]}
+            onPress={handleClearCache}
+            disabled={isClearingCache}
+          >
+            <RotateCcw size={16} color={theme.primary} />
+            <Text style={{ fontSize: 11, fontWeight: "700", color: theme.primary }}>
+              {isClearingCache ? "Clearing..." : "Clear Cache"}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.filterIcon}
+            onPress={() => setFilterModalVisible(true)}
+          >
+            <Sliders size={22} color={theme.textSecondary} />
+          </TouchableOpacity>
+        </View>
       </View>
+
+      {cacheToast && (
+        <View style={{ backgroundColor: "#dcfce7", borderColor: "#86efac", borderWidth: 1, padding: 10, marginHorizontal: 16, marginTop: 8, borderRadius: 10, flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <RotateCcw size={14} color="#15803d" />
+          <Text style={{ fontSize: 12, fontWeight: "700", color: "#15803d" }}>{cacheToast}</Text>
+        </View>
+      )}
 
       {loading ? (
         <View style={styles.centerContainer}>

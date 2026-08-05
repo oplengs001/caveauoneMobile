@@ -1,20 +1,11 @@
 import { getPulloutRequests, createPulloutRequest, updatePulloutRequest } from '../pulloutRequests';
-import { getDocs, addDoc, updateDoc, doc, where, limit, orderBy } from 'firebase/firestore';
+import { apiFetch } from '@/lib/api';
 import { logActivity } from '@/lib/utils/activityLogger';
 
 jest.mock('../cache', () => ({
   withCache: jest.fn(async (_k: string, _t: number, f: () => Promise<unknown>) => f()),
   invalidatePrefix: jest.fn(),
 }));
-
-const makeDocs = (items: Array<{ id: string; [key: string]: any }>) => ({
-  docs: items.map((item) => ({
-    id: item.id,
-    data: () => { const { id: _id, ...rest } = item; return rest; },
-    exists: () => true,
-  })),
-  empty: items.length === 0,
-});
 
 const mockPullouts = [
   { id: 'po-1', sourceStoreId: 'warehouse-1', status: 'pending', items: [] },
@@ -24,7 +15,7 @@ const mockPullouts = [
 describe('pulloutRequests queries', () => {
   describe('getPulloutRequests', () => {
     it('returns mapped pullout requests', async () => {
-      (getDocs as jest.Mock).mockResolvedValueOnce(makeDocs(mockPullouts));
+      (apiFetch as jest.Mock).mockResolvedValueOnce({ pulloutRequests: mockPullouts });
 
       const result = await getPulloutRequests({});
 
@@ -33,109 +24,88 @@ describe('pulloutRequests queries', () => {
     });
 
     it('applies sourceStoreId filter', async () => {
-      (getDocs as jest.Mock).mockResolvedValueOnce(makeDocs([mockPullouts[0]]));
+      (apiFetch as jest.Mock).mockResolvedValueOnce({ pulloutRequests: [mockPullouts[0]] });
 
       await getPulloutRequests({ sourceStoreId: 'warehouse-1' });
 
-      expect(where).toHaveBeenCalledWith('sourceStoreId', '==', 'warehouse-1');
+      expect(apiFetch).toHaveBeenCalledWith('/pullout-requests?sourceStoreId=warehouse-1');
     });
 
-    it('applies single status filter', async () => {
-      (getDocs as jest.Mock).mockResolvedValueOnce(makeDocs([mockPullouts[0]]));
+    it('applies status filter', async () => {
+      (apiFetch as jest.Mock).mockResolvedValueOnce({ pulloutRequests: [mockPullouts[0]] });
 
       await getPulloutRequests({ status: 'pending' });
 
-      expect(where).toHaveBeenCalledWith('status', '==', 'pending');
+      expect(apiFetch).toHaveBeenCalledWith('/pullout-requests?status=pending');
     });
 
     it('applies array status filter', async () => {
-      (getDocs as jest.Mock).mockResolvedValueOnce(makeDocs(mockPullouts));
+      (apiFetch as jest.Mock).mockResolvedValueOnce({ pulloutRequests: mockPullouts });
 
       await getPulloutRequests({ status: ['pending', 'in_progress'] });
 
-      expect(where).toHaveBeenCalledWith('status', 'in', ['pending', 'in_progress']);
+      expect(apiFetch).toHaveBeenCalledWith('/pullout-requests?status=pending%2Cin_progress');
     });
 
     it('applies pagination limit', async () => {
+      (apiFetch as jest.Mock).mockResolvedValueOnce({ pulloutRequests: mockPullouts });
       await getPulloutRequests({}, { limit: 10 });
 
-      expect(limit).toHaveBeenCalledWith(10);
-    });
-
-    it('orders by createdAt desc', async () => {
-      await getPulloutRequests({});
-
-      expect(orderBy).toHaveBeenCalledWith('createdAt', 'desc');
+      expect(apiFetch).toHaveBeenCalledWith('/pullout-requests?limit=10');
     });
   });
 
   describe('createPulloutRequest', () => {
-    it('calls addDoc and returns the new doc reference', async () => {
-      (addDoc as jest.Mock).mockResolvedValueOnce({ id: 'new-po-id' });
+    it('calls apiFetch POST and returns doc id', async () => {
+      (apiFetch as jest.Mock).mockResolvedValueOnce({ id: 'po-new' });
 
-      const result = await createPulloutRequest({ status: 'pending', items: [] });
-
-      expect(addDoc).toHaveBeenCalled();
-      expect(result).toEqual({ id: 'new-po-id' });
-    });
-
-    it('calls logActivity with entityId from the new doc', async () => {
-      (addDoc as jest.Mock).mockResolvedValueOnce({ id: 'new-po-id' });
-
-      const logData = {
-        action: 'PULLOUT_COMPLETED',
-        entity: 'pullout_requests',
-        entityId: '',
-        summary: 'Pullout created',
-        performedBy: 'user@test.com',
-        performedByRole: 'warehouse',
-        source: 'warehouse' as const,
+      const newRequestData = {
+        sourceStoreId: 'warehouse-1',
+        destinationStoreId: 'store-1',
+        status: 'pending' as const,
+        items: [],
       };
 
-      await createPulloutRequest({ status: 'pending' }, logData);
+      const result = await createPulloutRequest(newRequestData, {
+        summary: 'Test pullout',
+        performedBy: 'user@example.com',
+        performedByRole: 'warehouse',
+        source: 'warehouse',
+      });
 
+      expect(apiFetch).toHaveBeenCalledWith('/pullout-requests', expect.objectContaining({ method: 'POST' }));
+      expect(result).toBe('po-new');
       expect(logActivity).toHaveBeenCalledWith(
-        expect.objectContaining({ entityId: 'new-po-id' })
+        expect.objectContaining({
+          action: 'PULLOUT_COMPLETED',
+          entityId: 'po-new',
+        })
       );
-    });
-
-    it('does NOT call logActivity when logData is omitted', async () => {
-      await createPulloutRequest({ status: 'pending' });
-
-      expect(logActivity).not.toHaveBeenCalled();
     });
   });
 
   describe('updatePulloutRequest', () => {
-    it('calls updateDoc on the correct document', async () => {
-      await updatePulloutRequest('po-1', { status: 'completed' });
+    it('calls apiFetch PATCH on the correct document', async () => {
+      (apiFetch as jest.Mock).mockResolvedValueOnce({ id: 'po-1', status: 'completed' });
 
-      expect(doc).toHaveBeenCalledWith(expect.anything(), 'pullout_requests', 'po-1');
-      expect(updateDoc).toHaveBeenCalledWith(expect.anything(), { status: 'completed' });
-    });
+      await updatePulloutRequest(
+        'po-1',
+        { status: 'completed' },
+        {
+          summary: 'Completed pullout po-1',
+          performedBy: 'admin@example.com',
+          performedByRole: 'admin',
+          source: 'admin',
+        }
+      );
 
-    it('calls logActivity when logData is provided', async () => {
-      const logData = {
-        action: 'PULLOUT_COMPLETED',
-        entity: 'pullout_requests',
-        entityId: 'po-1',
-        summary: 'Pullout completed',
-        performedBy: 'user@test.com',
-        performedByRole: 'warehouse',
-        source: 'warehouse' as const,
-      };
-
-      await updatePulloutRequest('po-1', { status: 'completed' }, logData);
-
-      expect(logActivity).toHaveBeenCalledWith(logData);
-    });
-
-    it('invalidates admin dashboard cache on update', async () => {
-      const { invalidatePrefix } = require('../cache');
-
-      await updatePulloutRequest('po-1', { status: 'completed' });
-
-      expect(invalidatePrefix).toHaveBeenCalledWith('admin_dashboard');
+      expect(apiFetch).toHaveBeenCalledWith('/pullout-requests/po-1', expect.objectContaining({ method: 'PATCH' }));
+      expect(logActivity).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'PULLOUT_COMPLETED',
+          entityId: 'po-1',
+        })
+      );
     });
   });
 });

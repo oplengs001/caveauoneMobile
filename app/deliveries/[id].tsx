@@ -1,11 +1,12 @@
 import { Colors } from "@/constants/theme";
-import { db } from "@/lib/firebase";
+import { apiFetch } from "@/lib/api";
+import { formatDate } from "@/lib/utils/format";
 import { InventoryBottle, Delivery } from "@/types";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { doc, getDoc, serverTimestamp, updateDoc } from "firebase/firestore";
 import {
   ArrowLeft,
+  Ban,
   CheckCircle2,
   Clock,
   Package,
@@ -57,14 +58,8 @@ export default function DeliveryDetail() {
     if (!id) return;
     setLoading(true);
     try {
-      const snap = await getDoc(doc(db, "deliveries", id as string));
-      if (snap.exists()) {
-        setDelivery({
-          id: snap.id,
-          ...snap.data(),
-          createdAt: snap.data().createdAt?.toDate() || new Date(),
-        } as Delivery);
-      }
+      const data = await apiFetch(`/deliveries/${id}`);
+      setDelivery(data as Delivery);
     } catch (err) {
       console.error("Failed to fetch delivery:", err);
     } finally {
@@ -78,18 +73,18 @@ export default function DeliveryDetail() {
     setScanning(false);
 
     try {
-      const bottleRef = doc(db, "inventory_bottles", data);
-      const bottleSnap = await getDoc(bottleRef);
-
-      if (!bottleSnap.exists()) {
+      // Fetch bottle details from REST API
+      let bottleData: InventoryBottle;
+      try {
+        bottleData = await apiFetch(`/bottles/${data}`);
+      } catch {
         Alert.alert("Not Found", `No bottle found with ID: ${data}`, [
           { text: "OK", onPress: () => setScanning(true) },
         ]);
         return;
       }
 
-      const bottleData = bottleSnap.data() as InventoryBottle;
-      if (bottleData.storeRef?.id === delivery.storeId) {
+      if (bottleData.storeId === delivery.storeId) {
         Alert.alert(
           "Already Received",
           "This bottle has already been received at this store.",
@@ -97,7 +92,7 @@ export default function DeliveryDetail() {
         );
         return;
       }
-      if (bottleData.outboundLocationRef?.id !== delivery.storeId) {
+      if (bottleData.outboundStoreId !== delivery.storeId) {
         Alert.alert(
           "Wrong Store",
           "This bottle is not designated for your location.",
@@ -115,7 +110,7 @@ export default function DeliveryDetail() {
         return;
       }
 
-      const masterWineId = bottleData.masterWineRef.id;
+      const masterWineId = bottleData.masterWineId;
       const itemIndex = delivery.items.findIndex(
         (i) => i.masterWineId === masterWineId,
       );
@@ -140,12 +135,15 @@ export default function DeliveryDetail() {
         return;
       }
 
-      await updateDoc(bottleRef, {
-        status: "received",
-        storeRef: doc(db, "stores", delivery.storeId),
-        locationRef: null,
-        outboundLocationRef: null,
-        updatedAt: serverTimestamp(),
+      // Update bottle status via REST API
+      await apiFetch(`/bottles/${data}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          status: "received",
+          storeId: delivery.storeId,
+          locationId: null,
+          outboundStoreId: null,
+        }),
       });
 
       const newItems = [...delivery.items];
@@ -153,13 +151,15 @@ export default function DeliveryDetail() {
         ...item,
         ingressedQty: (item.ingressedQty || 0) + 1,
       };
-      const allReceived = newItems.every((i) => (i.ingressedQty || 0) >= i.qty);
+      const allReceived = newItems.every((i) => (i.ingressedQty || 0) + (i.skippedQty || 0) >= i.qty);
       const newStatus = allReceived ? "ingress_complete" : "receiving";
 
-      await updateDoc(doc(db, "deliveries", delivery.id), {
-        items: newItems,
-        status: newStatus,
-        updatedAt: serverTimestamp(),
+      await apiFetch(`/deliveries/${delivery.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          items: newItems,
+          status: newStatus,
+        }),
       });
 
       const scannedBottleId = data;
@@ -203,6 +203,102 @@ export default function DeliveryDetail() {
       ]);
     } finally {
       isProcessing.current = false;
+    }
+  };
+
+  const handleManualReceive = (itemIndex: number) => {
+    if (!delivery || isProcessing.current) return;
+    const item = delivery.items[itemIndex];
+    const ingressedQty = item.ingressedQty || 0;
+    const targetQty = item.qty;
+
+    if (ingressedQty >= targetQty) {
+      Alert.alert("Fully Received", "All units of this wine have already been received.");
+      return;
+    }
+
+    const remaining = targetQty - ingressedQty;
+
+    Alert.alert(
+      "Manual Receive (Skip QR)",
+      `Receive 1 unit of ${item.wineName} manually without scanning QR?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Receive 1 Unit",
+          onPress: () => processManualReceive(itemIndex, 1),
+        },
+        ...(remaining > 1
+          ? [
+              {
+                text: `Receive All Remaining (${remaining})`,
+                onPress: () => processManualReceive(itemIndex, remaining),
+              },
+            ]
+          : []),
+      ]
+    );
+  };
+
+  const processManualReceive = async (itemIndex: number, count: number) => {
+    if (!delivery) return;
+    setLoading(true);
+    try {
+      const item = delivery.items[itemIndex];
+      const currentIngressed = item.ingressedQty || 0;
+      const remainingNeeded = Math.max(0, item.qty - currentIngressed);
+      const receiveToAdd = Math.min(count, remainingNeeded);
+
+      if (receiveToAdd <= 0) return;
+
+      // Update matching outbound bottles in backend if available
+      try {
+        const bottles = await apiFetch(
+          `/bottles?masterWineId=${item.masterWineId}&status=outbound&limit=${receiveToAdd}`
+        );
+        const matchingBottles = Array.isArray(bottles) ? bottles : (bottles.bottles || []);
+        for (const b of matchingBottles) {
+          await apiFetch(`/bottles/${b.id}`, {
+            method: "PATCH",
+            body: JSON.stringify({
+              status: "received",
+              storeId: delivery.storeId,
+              locationId: null,
+              outboundStoreId: null,
+            }),
+          });
+        }
+      } catch (err) {
+        console.warn("Manual receive bottle status update error:", err);
+      }
+
+      const newItems = [...delivery.items];
+      newItems[itemIndex] = {
+        ...item,
+        ingressedQty: currentIngressed + receiveToAdd,
+      };
+      const allReceived = newItems.every((i) => (i.ingressedQty || 0) >= i.qty);
+      const newStatus = allReceived ? "ingress_complete" : "receiving";
+
+      await apiFetch(`/deliveries/${delivery.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          items: newItems,
+          status: newStatus,
+        }),
+      });
+
+      Alert.alert(
+        "✓ Received Manually",
+        `Received ${receiveToAdd} unit(s) of ${item.wineName} without QR scan.`
+      );
+
+      fetchDelivery();
+    } catch (error) {
+      console.error("Error receiving manually:", error);
+      Alert.alert("Error", "Failed to receive item manually.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -354,7 +450,7 @@ export default function DeliveryDetail() {
             <Text
               style={[styles.statusDate, { color: statusConfig.color + "AA" }]}
             >
-              {delivery.createdAt.toLocaleDateString("en-US", {
+              {formatDate(delivery.createdAt, {
                 weekday: "long",
                 month: "long",
                 day: "numeric",
@@ -421,15 +517,28 @@ export default function DeliveryDetail() {
                 )}
               </View>
 
-              {/* Pulled qty indicator */}
+              {/* Received qty indicator & Manual Receive Action (Skip QR) */}
               {(delivery.status === "dispatched" ||
                 delivery.status === "receiving" ||
                 delivery.status === "ingress_complete") && (
-                <View style={styles.progressContainer}>
-                  <Text style={styles.progressText}>
-                    {wine.ingressedQty || 0} / {wine.qty}
-                  </Text>
-                  <Text style={styles.progressLabel}>RECEIVED</Text>
+                <View style={{ alignItems: "flex-end", gap: 6 }}>
+                  <View style={styles.progressContainer}>
+                    <Text style={styles.progressText}>
+                      {wine.ingressedQty || 0} / {wine.qty}
+                    </Text>
+                    <Text style={styles.progressLabel}>RECEIVED</Text>
+                  </View>
+
+                  {(wine.ingressedQty || 0) < wine.qty &&
+                    (delivery.status === "dispatched" || delivery.status === "receiving") && (
+                    <TouchableOpacity
+                      onPress={() => handleManualReceive(idx)}
+                      style={styles.manualReceiveBtn}
+                    >
+                      <PackageCheck size={12} color="#10b981" strokeWidth={2.5} />
+                      <Text style={styles.manualReceiveText}>Manual Receive</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               )}
             </View>
@@ -593,4 +702,18 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   cancelScanText: { color: "#fff", fontSize: 16, fontWeight: "700" },
+  manualReceiveBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "rgba(16, 185, 129, 0.12)",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  manualReceiveText: {
+    color: "#10b981",
+    fontSize: 11,
+    fontWeight: "800",
+  },
 });

@@ -1,17 +1,12 @@
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
-import { db } from "@/lib/firebase";
+import { apiFetch } from "@/lib/api";
 import { getReceivedAndShelvedBottles } from "@/lib/queries/inventoryBottles";
 import { getMasterWines } from "@/lib/queries/masterWines";
 import { getStores } from "@/lib/queries/stores";
 import { logActivity } from "@/lib/utils/activityLogger";
 import { MasterWine } from "@/types";
 import { Stack, useRouter } from "expo-router";
-import {
-  addDoc,
-  collection,
-  serverTimestamp,
-} from "firebase/firestore";
 
 
 import {
@@ -98,12 +93,15 @@ export default function CreateWineRequest() {
         });
 
         bottlesData.forEach((b: any) => {
+          const bWineId = b.masterWineId || b.masterWineRef?.id || b.masterWine?.id;
+          const bStoreId = b.storeId || b.storeRef?.id || b.store?.id;
+
           if (
-            b.masterWineRef?.id === wine.id &&
-            b.storeRef?.id &&
-            b.storeRef.id !== profile?.locationId
+            bWineId === wine.id &&
+            bStoreId &&
+            bStoreId !== profile?.locationId
           ) {
-            stockByLoc[b.storeRef.id] = (stockByLoc[b.storeRef.id] || 0) + 1;
+            stockByLoc[bStoreId] = (stockByLoc[bStoreId] || 0) + 1;
             totalStock++;
           }
         });
@@ -292,8 +290,6 @@ export default function CreateWineRequest() {
         (sum, item) => sum + (item.wine.price || 0) * item.qty,
         0,
       ),
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
     };
   };
 
@@ -319,7 +315,12 @@ export default function CreateWineRequest() {
       });
 
       const createdDocs = await Promise.all(
-        requests.map((req) => addDoc(collection(db, "wine_requests"), req)),
+        requests.map((req) =>
+          apiFetch("/wine-requests", {
+            method: "POST",
+            body: JSON.stringify(req),
+          })
+        ),
       );
 
       // Log each created request at operation level
