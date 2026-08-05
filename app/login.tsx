@@ -1,5 +1,6 @@
 import { useAuth } from "@/context/AuthContext";
 import { saveToken } from "@/lib/auth";
+import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { useRouter } from "expo-router";
 import { Lock, LogIn, Mail, ShieldCheck, Warehouse } from "lucide-react-native";
 import React, { useState } from "react";
@@ -22,6 +23,7 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const { refreshProfile } = useAuth();
+  const { expoPushToken } = usePushNotifications();
   const router = useRouter();
 
   const handleLogin = async (loginEmail?: string, loginPassword?: string) => {
@@ -40,7 +42,11 @@ export default function LoginScreen() {
       const res = await fetch(`${BASE_URL}/api/v2/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: finalEmail, password: finalPassword }),
+        body: JSON.stringify({
+          email: finalEmail,
+          password: finalPassword,
+          pushToken: expoPushToken?.data,
+        }),
       });
       if (!res.ok) {
         let msg = "Invalid credentials. Please contact your supervisor.";

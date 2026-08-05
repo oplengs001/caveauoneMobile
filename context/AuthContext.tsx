@@ -1,5 +1,6 @@
 import { apiFetch } from '@/lib/api';
 import { clearToken, getToken } from '@/lib/auth';
+import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { AppUser } from '@/types';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 
@@ -21,6 +22,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<any | null>(null);
   const [profile, setProfile] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const { expoPushToken } = usePushNotifications();
 
   const refreshProfile = async (): Promise<AppUser | null> => {
     try {
@@ -35,6 +37,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const userData = (data?.user || data) as AppUser;
       setUser(userData);
       setProfile(userData);
+
+      if (expoPushToken?.data) {
+        apiFetch('/auth/me', {
+          method: 'POST',
+          body: JSON.stringify({ pushToken: expoPushToken.data }),
+        }).catch((err) => console.error('Error syncing push token:', err));
+      }
+
       return userData;
     } catch (err) {
       console.error('Auth refresh error:', err);
@@ -81,6 +91,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     bootstrap();
     return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    if (user && expoPushToken?.data) {
+      apiFetch('/auth/me', {
+        method: 'POST',
+        body: JSON.stringify({ pushToken: expoPushToken.data }),
+      }).catch((err) => console.error('Error syncing push token:', err));
+    }
+  }, [user, expoPushToken?.data]);
 
   return (
     <AuthContext.Provider value={{ user, profile, loading, refreshProfile }}>
