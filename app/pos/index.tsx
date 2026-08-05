@@ -33,6 +33,7 @@ interface FastWineItem {
   vintage?: string;
   producer?: string;
   format?: string;
+  sku?: string;
   price?: number; // Base cost price
   sellingPrice?: number | null;
   glassPrice?: number | null;
@@ -144,6 +145,7 @@ export default function POSScreen() {
             vintage: mw.vintage,
             producer: mw.producer,
             format: mw.format,
+            sku: mw.sku,
             price: mw.price,
             sellingPrice: setting?.sellingPrice ?? null,
             glassPrice: setting?.glassPrice ?? null,
@@ -302,31 +304,69 @@ export default function POSScreen() {
       // 3. PAR Alert Check
       if (storeId) {
         try {
-          const [settingsRes, countRes] = await Promise.all([
+          const [settingsRes, countRes, pendingReqRes] = await Promise.all([
             apiFetch(`/stock-settings?storeId=${storeId}&masterWineId=${activeWine.id}`),
             apiFetch(`/bottles?storeId=${storeId}&masterWineId=${activeWine.id}&status=shelved,received&countOnly=true`),
+            apiFetch(`/wine-requests?storeId=${storeId}&status=pending`).catch(() => []),
           ]);
           const settingList: any[] = settingsRes.settings || settingsRes;
           const currentSetting = settingList[0];
           const stockCount = countRes.count ?? 0;
 
           if (currentSetting && currentSetting.parLevel > 0 && stockCount <= currentSetting.parLevel) {
-            const requestedQty = Math.max(1, currentSetting.safetyStock - stockCount);
-            await apiFetch("/wine-requests", {
-              method: "POST",
-              body: JSON.stringify({
-                storeId,
-                masterWineId: activeWine.id,
+            // Check if there is already a pending request for this wine
+            const pendingRequests = Array.isArray(pendingReqRes)
+              ? pendingReqRes
+              : pendingReqRes?.wineRequests || [];
+            let hasPending = false;
+            pendingRequests.forEach((req: any) => {
+              const items = Array.isArray(req.items)
+                ? req.items
+                : typeof req.items === "string"
+                ? JSON.parse(req.items)
+                : [];
+              items.forEach((item: any) => {
+                if (item.masterWineId === activeWine.id) hasPending = true;
+              });
+            });
+
+            if (!hasPending) {
+              const requestedQty = Math.max(1, currentSetting.safetyStock - stockCount);
+              const unitPrice = activeWine.price || 0;
+
+              await apiFetch("/wine-requests", {
+                method: "POST",
+                body: JSON.stringify({
+                  storeId,
+                  targetStoreId: "warehouse",
+                  createdBy: profile?.email || "System",
+                  requesterId: profile?.id || "system",
+                  status: "pending",
+                  items: [
+                    {
+                      masterWineId: activeWine.id,
+                      wineName: activeWine.name,
+                      vintage: activeWine.vintage || "",
+                      sku: activeWine.sku || "",
+                      format: activeWine.format || "",
+                      producer: activeWine.producer || "",
+                      qty: requestedQty,
+                      price: unitPrice,
+                      pulledQty: 0,
+                      ingressedQty: 0,
+                    },
+                  ],
+                  totalAmount: unitPrice * requestedQty,
+                  urgency: "high",
+                  notes: `[POS AUTO-REQUEST] PAR alert trigger (${stockCount} left <= PAR ${currentSetting.parLevel})`,
+                }),
+              });
+              setParAlertInfo({
+                wineName: activeWine.name,
+                stockCount,
                 requestedQty,
-                urgency: "high",
-                notes: `[POS AUTO-REQUEST] PAR alert trigger (${stockCount} left <= PAR ${currentSetting.parLevel})`,
-              }),
-            });
-            setParAlertInfo({
-              wineName: activeWine.name,
-              stockCount,
-              requestedQty,
-            });
+              });
+            }
           }
         } catch (e) {
           console.error("[POS Mode] PAR Alert error:", e);

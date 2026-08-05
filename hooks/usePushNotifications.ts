@@ -18,15 +18,6 @@ Notifications.setNotificationHandler({
   }),
 });
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,   // Determines if banner shows in foreground (deprecated in newer SDKs, but still works)
-    shouldShowBanner: true,  // Use this for newer SDKs to show the banner
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
-
 
 export interface PushNotificationState {
   expoPushToken?: Notifications.ExpoPushToken;
