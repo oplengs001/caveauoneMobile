@@ -3,16 +3,20 @@ import { saveToken } from "@/lib/auth";
 
 import { useRouter } from "expo-router";
 import { Lock, LogIn, Mail, ShieldCheck, Warehouse } from "lucide-react-native";
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
+  SafeAreaView,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View,
 } from "react-native";
 
@@ -25,6 +29,7 @@ export default function LoginScreen() {
   const { refreshProfile } = useAuth();
   const router = useRouter();
 
+  const passwordInputRef = useRef<TextInput>(null);
 
   const handleLogin = async (loginEmail?: string, loginPassword?: string) => {
     const finalEmail = loginEmail || email;
@@ -71,113 +76,133 @@ export default function LoginScreen() {
     }
   };
 
-  const quickLogin = (email: string, pass: string) => {
-    setEmail(email);
-    setPassword(pass);
-    handleLogin(email, pass);
+  const quickLogin = (emailStr: string, passStr: string) => {
+    setEmail(emailStr);
+    setPassword(passStr);
+    handleLogin(emailStr, passStr);
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-    >
-      <View style={styles.content}>
-        <View style={styles.brandContainer}>
-          <View style={styles.logoBox}>
-            <Warehouse size={48} color="#6366f1" strokeWidth={1.5} />
-          </View>
-          <Text style={styles.brandName}>
-            CAVEAU<Text style={styles.brandBold}>ONE</Text>
-          </Text>
-          <Text style={styles.subBrand}>WAREHOUSE MANAGEMENT</Text>
-        </View>
-
-        <View style={styles.formContainer}>
-          <View style={styles.inputGroup}>
-            <View style={styles.labelRow}>
-              <Mail size={12} color="#64748b" />
-              <Text style={styles.label}>EMAIL ADDRESS</Text>
-            </View>
-            <View style={styles.inputWrapper}>
-              <TextInput
-                style={styles.input}
-                placeholder="worker@caveauone.com"
-                placeholderTextColor="#334155"
-                value={email}
-                onChangeText={setEmail}
-                autoCapitalize="none"
-                keyboardType="email-address"
-              />
-            </View>
-          </View>
-
-          <View style={styles.inputGroup}>
-            <View style={styles.labelRow}>
-              <Lock size={12} color="#64748b" />
-              <Text style={styles.label}>SECURITY KEY</Text>
-            </View>
-            <View style={styles.inputWrapper}>
-              <TextInput
-                style={styles.input}
-                placeholder="••••••••"
-                placeholderTextColor="#334155"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry
-              />
-            </View>
-          </View>
-
-          <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={() => handleLogin()}
-            disabled={loading}
+    <SafeAreaView style={styles.container}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
+      >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
           >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <>
-                <Text style={styles.buttonText}>AUTHORIZE ACCESS</Text>
-                <LogIn size={20} color="#fff" strokeWidth={2.5} />
-              </>
-            )}
-          </TouchableOpacity>
+            <View style={styles.brandContainer}>
+              <View style={styles.logoBox}>
+                <Warehouse size={44} color="#6366f1" strokeWidth={1.5} />
+              </View>
+              <Text style={styles.brandName}>
+                CAVEAU<Text style={styles.brandBold}>ONE</Text>
+              </Text>
+              <Text style={styles.subBrand}>WAREHOUSE MANAGEMENT</Text>
+            </View>
 
-          <View style={styles.testButtonsContainer}>
-            <TouchableOpacity
-              style={styles.testButton}
-              onPress={() => quickLogin("gadmin@gmail.com", "123456")}
-            >
-              <Text style={styles.testButtonText}>Login as Admin</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.testButton}
-              onPress={() => quickLogin("gwarehouse@gmail.com", "123456")}
-            >
-              <Text style={styles.testButtonText}>Login as Warehouse</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.testButton}
-              onPress={() => quickLogin("gstore@gmail.com", "123456")}
-            >
-              <Text style={styles.testButtonText}>Login as Store</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.testButton}
-              onPress={() => quickLogin("gstaff@gmail.com", "123456")}
-            >
-              <Text style={styles.testButtonText}>Login as Staff</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+            <View style={styles.formContainer}>
+              <View style={styles.inputGroup}>
+                <View style={styles.labelRow}>
+                  <Mail size={12} color="#64748b" />
+                  <Text style={styles.label}>EMAIL ADDRESS</Text>
+                </View>
+                <View style={styles.inputWrapper}>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="worker@caveauone.com"
+                    placeholderTextColor="#475569"
+                    value={email}
+                    onChangeText={setEmail}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    keyboardType="email-address"
+                    returnKeyType="next"
+                    onSubmitEditing={() => passwordInputRef.current?.focus()}
+                  />
+                </View>
+              </View>
 
-        <View style={styles.footer}>
-          <ShieldCheck size={16} color="#334155" />
-          <Text style={styles.footerText}>SECURE TERMINAL ACCESS</Text>
-        </View>
-      </View>
-    </KeyboardAvoidingView>
+              <View style={styles.inputGroup}>
+                <View style={styles.labelRow}>
+                  <Lock size={12} color="#64748b" />
+                  <Text style={styles.label}>SECURITY KEY</Text>
+                </View>
+                <View style={styles.inputWrapper}>
+                  <TextInput
+                    ref={passwordInputRef}
+                    style={styles.input}
+                    placeholder="••••••••"
+                    placeholderTextColor="#475569"
+                    value={password}
+                    onChangeText={setPassword}
+                    secureTextEntry
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    returnKeyType="go"
+                    onSubmitEditing={() => handleLogin()}
+                  />
+                </View>
+              </View>
+
+              <TouchableOpacity
+                style={[styles.button, loading && styles.buttonDisabled]}
+                onPress={() => handleLogin()}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <>
+                    <Text style={styles.buttonText}>AUTHORIZE ACCESS</Text>
+                    <LogIn size={18} color="#fff" strokeWidth={2.5} />
+                  </>
+                )}
+              </TouchableOpacity>
+
+              <View style={styles.testButtonsContainer}>
+                <Text style={styles.quickLoginHeader}>QUICK TEST LOGIN:</Text>
+                <View style={styles.chipRow}>
+                  <TouchableOpacity
+                    style={styles.testButton}
+                    onPress={() => quickLogin("gadmin@gmail.com", "123456")}
+                  >
+                    <Text style={styles.testButtonText}>Admin</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.testButton}
+                    onPress={() => quickLogin("gwarehouse@gmail.com", "123456")}
+                  >
+                    <Text style={styles.testButtonText}>Warehouse</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.testButton}
+                    onPress={() => quickLogin("gstore@gmail.com", "123456")}
+                  >
+                    <Text style={styles.testButtonText}>Store</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.testButton}
+                    onPress={() => quickLogin("gstaff@gmail.com", "123456")}
+                  >
+                    <Text style={styles.testButtonText}>Staff</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.footer}>
+              <ShieldCheck size={14} color="#475569" />
+              <Text style={styles.footerText}>SECURE TERMINAL ACCESS</Text>
+            </View>
+          </ScrollView>
+        </TouchableWithoutFeedback>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
@@ -186,28 +211,29 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#0f172a",
   },
-  content: {
-    flex: 1,
+  scrollContent: {
+    flexGrow: 1,
     justifyContent: "center",
-    padding: 32,
+    paddingHorizontal: 28,
+    paddingVertical: 32,
   },
   brandContainer: {
     alignItems: "center",
-    marginBottom: 64,
+    marginBottom: 40,
   },
   logoBox: {
-    width: 80,
-    height: 80,
+    width: 76,
+    height: 76,
     backgroundColor: "#1e293b",
-    borderRadius: 24,
+    borderRadius: 22,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 20,
+    marginBottom: 16,
     borderWidth: 1,
     borderColor: "#334155",
   },
   brandName: {
-    fontSize: 28,
+    fontSize: 26,
     color: "#94a3b8",
     letterSpacing: 2,
     fontWeight: "300",
@@ -221,19 +247,19 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "900",
     letterSpacing: 4,
-    marginTop: 8,
+    marginTop: 6,
   },
   formContainer: {
     width: "100%",
   },
   inputGroup: {
-    marginBottom: 24,
+    marginBottom: 20,
   },
   labelRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    marginBottom: 10,
+    marginBottom: 8,
     paddingLeft: 4,
   },
   label: {
@@ -244,65 +270,63 @@ const styles = StyleSheet.create({
   },
   inputWrapper: {
     backgroundColor: "#1e293b",
-    borderRadius: 16,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: "#334155",
     overflow: "hidden",
   },
   input: {
     color: "#ffffff",
-    fontSize: 16,
-    padding: 20,
+    fontSize: 15,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
     fontWeight: "600",
   },
   button: {
     backgroundColor: "#4f46e5",
-    padding: 24,
-    borderRadius: 20,
-    marginTop: 16,
+    paddingVertical: 18,
+    borderRadius: 16,
+    marginTop: 12,
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
-    gap: 12,
+    gap: 10,
     shadowColor: "#4f46e5",
-    shadowOffset: { width: 0, height: 10 },
+    shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.3,
-    shadowRadius: 20,
-    elevation: 8,
+    shadowRadius: 12,
+    elevation: 6,
   },
   buttonDisabled: {
     opacity: 0.5,
   },
   buttonText: {
     color: "#ffffff",
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "900",
-    letterSpacing: 2,
-  },
-  footer: {
-    position: "absolute",
-    bottom: 40,
-    left: 0,
-    right: 0,
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    gap: 8,
-  },
-  footerText: {
-    color: "#334155",
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 2,
+    letterSpacing: 1.5,
   },
   testButtonsContainer: {
+    marginTop: 28,
+    alignItems: "center",
+  },
+  quickLoginHeader: {
+    color: "#475569",
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 1.5,
+    marginBottom: 10,
+  },
+  chipRow: {
     flexDirection: "row",
-    justifyContent: "space-around",
-    marginTop: 24,
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: 8,
   },
   testButton: {
-    padding: 10,
-    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
     backgroundColor: "#1e293b",
     borderWidth: 1,
     borderColor: "#334155",
@@ -311,5 +335,18 @@ const styles = StyleSheet.create({
     color: "#94a3b8",
     fontWeight: "700",
     fontSize: 12,
+  },
+  footer: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 36,
+  },
+  footerText: {
+    color: "#475569",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 2,
   },
 });
