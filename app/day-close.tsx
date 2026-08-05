@@ -1,47 +1,45 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  TextInput,
-  ActivityIndicator,
-  Alert,
-  SafeAreaView,
-  Modal,
-  FlatList,
-  Platform,
-} from "react-native";
-import { Stack, useRouter } from "expo-router";
+import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { apiFetch } from "@/lib/api";
-import { Colors } from "@/constants/theme";
+import { Stack, useRouter } from "expo-router";
 import {
+  AlertCircle,
   ArrowLeft,
+  Banknote,
   Calendar,
   CalendarCheck,
   CheckCircle2,
-  AlertTriangle,
+  ChevronLeft,
+  ChevronRight,
   Clock,
+  FileText,
   Plus,
   Trash2,
-  Wine,
-  Banknote,
-  FileText,
-  ChevronRight,
-  ChevronLeft,
-  Sparkles,
-  AlertCircle,
+  Wine
 } from "lucide-react-native";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Modal,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 const MONTHS = [
-  "January","February","March","April","May","June",
-  "July","August","September","October","November","December",
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
 ];
-const DAYS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 const parseDateStr = (str: string): Date => {
   if (!str) return new Date();
@@ -129,7 +127,7 @@ function CustomCalendar({ visible, selectedDate, onSelect, onClose, theme, openD
   };
 
   const isOpen = (day: number) => {
-    const ds = `${viewYear}-${String(viewMonth + 1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+    const ds = `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
     return openDateSet.has(ds);
   };
 
@@ -429,9 +427,41 @@ export default function DayCloseScreen() {
   const [discUnits, setDiscUnits] = useState<string>("1");
   const [itemNote, setItemNote] = useState<string>("");
 
+  // Open Bottles Reconciliation state
+  const [openBottles, setOpenBottles] = useState<any[]>([]);
+  const [loadingOpenBottles, setLoadingOpenBottles] = useState(false);
+  const [glassDiscardCounts, setGlassDiscardCounts] = useState<Record<string, number>>({});
+
+  // Sales Drill-down Modal State
+  const [showSalesModal, setShowSalesModal] = useState(false);
+  const [salesDrillDown, setSalesDrillDown] = useState<any[]>([]);
+  const [loadingSales, setLoadingSales] = useState(false);
+
   const isClosed = dayCloseData?.status === "submitted" || dayCloseData?.status === "acknowledged";
 
-  // ── Fetch unclosed days: past N days with sales but no submitted day-close ─
+  // ── Fetch open bottles with remaining glasses ─────────────────────────────
+  const fetchOpenBottles = useCallback(async () => {
+    if (!profile?.locationId) return;
+    setLoadingOpenBottles(true);
+    try {
+      const res = await apiFetch(`/bottles?storeId=${profile.locationId}&openGlassesOnly=true`);
+      const list = Array.isArray(res) ? res : res.bottles || [];
+      setOpenBottles(list);
+      const counts: Record<string, number> = {};
+      list.forEach((b: any) => {
+        counts[b.id] = 0;
+      });
+      setGlassDiscardCounts(counts);
+    } catch (err) {
+      console.error("Error fetching open bottles:", err);
+    } finally {
+      setLoadingOpenBottles(false);
+    }
+  }, [profile?.locationId]);
+
+  useEffect(() => {
+    fetchOpenBottles();
+  }, [fetchOpenBottles]);
   const fetchUnclosedDays = useCallback(async () => {
     if (!profile?.locationId) return;
     setLoadingUnclosed(true);
@@ -512,6 +542,53 @@ export default function DayCloseScreen() {
     }
   };
 
+  const handleDiscrepancyChoiceChange = (choice: "no" | "yes") => {
+    if (choice === "no" && flaggedItems.length > 0) {
+      Alert.alert(
+        "Discard Flagged Items?",
+        `Switching to 'No Discrepancies' will remove the ${flaggedItems.length} item(s) you have added.`,
+        [
+          { text: "Keep Items", style: "cancel" },
+          {
+            text: "Discard & Switch",
+            style: "destructive",
+            onPress: () => {
+              setFlaggedItems([]);
+              setHasDiscrepancyChoice("no");
+            },
+          },
+        ]
+      );
+    } else {
+      setHasDiscrepancyChoice(choice);
+      if (choice === "no") {
+        setFlaggedItems([]);
+      }
+    }
+  };
+
+  const handleCancelFlagging = () => {
+    handleDiscrepancyChoiceChange("no");
+  };
+
+  const fetchSalesDrillDown = async () => {
+    if (!profile?.locationId) return;
+    setLoadingSales(true);
+    setShowSalesModal(true);
+    try {
+      const fromISO = new Date(`${selectedDateStr}T00:00:00.000Z`).toISOString();
+      const toISO = new Date(`${selectedDateStr}T23:59:59.999Z`).toISOString();
+      const res = await apiFetch(`/sales?storeId=${profile.locationId}&from=${fromISO}&to=${toISO}&limit=200`);
+      const list = Array.isArray(res) ? res : Array.isArray(res.sales) ? res.sales : [];
+      setSalesDrillDown(list);
+    } catch (err) {
+      console.error("Error fetching sales drill down:", err);
+      Alert.alert("Error", "Failed to load detailed sales.");
+    } finally {
+      setLoadingSales(false);
+    }
+  };
+
   const handleAddFlaggedItem = () => {
     if (!selectedWine) {
       Alert.alert("Required", "Please select a wine first.");
@@ -529,7 +606,7 @@ export default function DayCloseScreen() {
       systemVolume: 0,
       discrepancyType: discType,
       discrepancyUnits: units,
-      notes: itemNote,
+      notes: itemNote.trim(),
     };
 
     setFlaggedItems((prev) => [...prev, newItem]);
@@ -563,11 +640,23 @@ export default function DayCloseScreen() {
           onPress: async () => {
             setSubmitting(true);
             try {
+              const glassAdjustments = Object.entries(glassDiscardCounts)
+                .filter(([_, count]) => count > 0)
+                .map(([bottleId, count]) => {
+                  const b = openBottles.find((item) => item.id === bottleId);
+                  return {
+                    bottleId,
+                    glassesDiscarded: count,
+                    wineName: b?.wineName || "Wine Bottle",
+                  };
+                });
+
               const payload = {
                 storeId: profile.locationId,
                 businessDate: selectedDateStr,
                 managerNotes,
                 flaggedItems: hasDiscrepancyChoice === "yes" ? flaggedItems : [],
+                glassAdjustments,
                 submittedById: profile.id,
                 submittedByName: profile.displayName || profile.email?.split("@")[0] || "Store Manager",
               };
@@ -580,7 +669,7 @@ export default function DayCloseScreen() {
               Alert.alert(
                 "Day Close Submitted! 🎉",
                 "Today's sales snapshot and report have been recorded and sent to Admin for review.",
-                [{ text: "OK", onPress: () => { fetchDayClose(); fetchUnclosedDays(); } }]
+                [{ text: "OK", onPress: () => { fetchDayClose(); fetchUnclosedDays(); fetchOpenBottles(); } }]
               );
             } catch (err: any) {
               console.error("Submit day close failed:", err);
@@ -741,24 +830,33 @@ export default function DayCloseScreen() {
                   {dayCloseData?.status === "acknowledged"
                     ? "Day Close Acknowledged by Admin ✓"
                     : dayCloseData?.status === "submitted"
-                    ? "Day Close Submitted to Admin ✓"
-                    : "Day Close Still Open"}
+                      ? "Day Close Submitted to Admin ✓"
+                      : "Day Close Still Open"}
                 </Text>
                 <Text style={styles.statusSubtitle}>
                   {isClosed
-                    ? `Closed by ${dayCloseData?.submittedByName || "Store Manager"} on ${
-                        dayCloseData?.submittedAt
-                          ? new Date(dayCloseData.submittedAt).toLocaleTimeString()
-                          : "today"
-                      }`
+                    ? `Closed by ${dayCloseData?.submittedByName || "Store Manager"} on ${dayCloseData?.submittedAt
+                      ? new Date(dayCloseData.submittedAt).toLocaleTimeString()
+                      : "today"
+                    }`
                     : "Review daily sales metrics below and submit when ready."}
                 </Text>
               </View>
             </View>
 
             {/* Sales Summary Card */}
-            <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
-              <Text style={[styles.cardTitle, { color: theme.text }]}>Sales Snapshot ({selectedDateStr})</Text>
+            <TouchableOpacity
+              style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}
+              onPress={fetchSalesDrillDown}
+              activeOpacity={0.8}
+            >
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                <Text style={[styles.cardTitle, { color: theme.text, marginBottom: 0 }]}>Sales Snapshot ({selectedDateStr})</Text>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                  <Text style={{ fontSize: 11, fontWeight: "700", color: theme.primary }}>Drill Down</Text>
+                  <ChevronRight size={14} color={theme.primary} />
+                </View>
+              </View>
 
               <View style={styles.metricsGrid}>
                 {/* Total Revenue */}
@@ -792,13 +890,128 @@ export default function DayCloseScreen() {
                   <Text style={styles.metricLabel}>Transactions</Text>
                 </View>
               </View>
-            </View>
+            </TouchableOpacity>
+
+            {/* ── Open Bottle Glass Reconciliation Section ────────────────────── */}
+            {!isClosed && (
+              <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    <Wine size={18} color={theme.primary} />
+                    <Text style={[styles.cardTitle, { color: theme.text, marginBottom: 0 }]}>Open Bottle Reconciliation</Text>
+                  </View>
+                  {openBottles.length > 0 && (
+                    <TouchableOpacity
+                      style={[styles.discardAllHeaderBtn, { backgroundColor: theme.primary + "15", borderColor: theme.primary + "30" }]}
+                      onPress={() => {
+                        const counts: Record<string, number> = {};
+                        openBottles.forEach((b) => {
+                          counts[b.id] = b.glassesRemaining ?? 6;
+                        });
+                        setGlassDiscardCounts(counts);
+                      }}
+                    >
+                      <Text style={[styles.discardAllHeaderText, { color: theme.primary }]}>Discard All ({openBottles.length})</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+                <Text style={styles.cardSubtitle}>
+                  Adjust open bottles to discard remaining glasses poured at closing.
+                </Text>
+
+                {loadingOpenBottles ? (
+                  <ActivityIndicator size="small" color={theme.primary} style={{ marginVertical: 12 }} />
+                ) : openBottles.length === 0 ? (
+                  <View style={{ paddingVertical: 12, alignItems: "center" }}>
+                    <Text style={{ fontSize: 12, color: "#64748b", fontWeight: "600" }}>
+                      ✓ No open bottles with remaining glasses at this store.
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={{ gap: 10, marginTop: 8 }}>
+                    {openBottles.map((b) => {
+                      const maxGlasses = b.glassesRemaining ?? 6;
+                      const discard = glassDiscardCounts[b.id] || 0;
+                      const remainingAfter = maxGlasses - discard;
+
+                      return (
+                        <View key={b.id} style={styles.glassReconcileRow}>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.glassWineName}>
+                              {b.wineName || b.masterWine?.name || "Open Bottle"}
+                            </Text>
+                            <Text style={styles.glassMeta}>
+                              ID: {b.bottleId || b.readableId || b.id.slice(0, 8)} • Currently: {maxGlasses} glass(es) left
+                            </Text>
+                            {discard > 0 && (
+                              <Text style={styles.glassFeedback}>
+                                Discarding {discard} → {remainingAfter} glass(es) remaining
+                                {remainingAfter === 0 ? " (bottle marked consumed)" : ""}
+                              </Text>
+                            )}
+                          </View>
+
+                          <View style={{ alignItems: "flex-end", gap: 6 }}>
+                            <View style={styles.stepperContainer}>
+                              <TouchableOpacity
+                                style={[styles.stepperBtn, discard <= 0 && { opacity: 0.4 }]}
+                                disabled={discard <= 0}
+                                onPress={() =>
+                                  setGlassDiscardCounts((prev) => ({
+                                    ...prev,
+                                    [b.id]: Math.max(0, (prev[b.id] || 0) - 1),
+                                  }))
+                                }
+                              >
+                                <Text style={styles.stepperText}>-</Text>
+                              </TouchableOpacity>
+
+                              <Text style={styles.stepperValue}>{discard}</Text>
+
+                              <TouchableOpacity
+                                style={[styles.stepperBtn, discard >= maxGlasses && { opacity: 0.4 }]}
+                                disabled={discard >= maxGlasses}
+                                onPress={() =>
+                                  setGlassDiscardCounts((prev) => ({
+                                    ...prev,
+                                    [b.id]: Math.min(maxGlasses, (prev[b.id] || 0) + 1),
+                                  }))
+                                }
+                              >
+                                <Text style={styles.stepperText}>+</Text>
+                              </TouchableOpacity>
+                            </View>
+
+                            <TouchableOpacity
+                              style={[
+                                styles.discardAllChip,
+                                discard === maxGlasses ? { backgroundColor: "#ef444415", borderColor: "#ef4444" } : { backgroundColor: "#f1f5f9" },
+                              ]}
+                              onPress={() =>
+                                setGlassDiscardCounts((prev) => ({
+                                  ...prev,
+                                  [b.id]: discard === maxGlasses ? 0 : maxGlasses,
+                                }))
+                              }
+                            >
+                              <Text style={[styles.discardAllChipText, discard === maxGlasses && { color: "#dc2626" }]}>
+                                {discard === maxGlasses ? "Reset" : "All"}
+                              </Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      );
+                    })}
+                  </View>
+                )}
+              </View>
+            )}
 
             {/* Discrepancy Reporting Section */}
             <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
               <Text style={[styles.cardTitle, { color: theme.text }]}>Inventory Discrepancies</Text>
               <Text style={styles.cardSubtitle}>
-                Flag broken bottles, tasting pours, or missing stock for this day.
+                Flag broken bottles, tasting pours, extra discarded glasses, or missing stock for this day.
               </Text>
 
               {!isClosed && (
@@ -811,7 +1024,7 @@ export default function DayCloseScreen() {
                         borderColor: theme.primary,
                       },
                     ]}
-                    onPress={() => setHasDiscrepancyChoice("no")}
+                    onPress={() => handleDiscrepancyChoiceChange("no")}
                   >
                     <Text
                       style={[
@@ -831,7 +1044,7 @@ export default function DayCloseScreen() {
                         borderColor: "#ef4444",
                       },
                     ]}
-                    onPress={() => setHasDiscrepancyChoice("yes")}
+                    onPress={() => handleDiscrepancyChoiceChange("yes")}
                   >
                     <Text
                       style={[
@@ -923,10 +1136,18 @@ export default function DayCloseScreen() {
                     </View>
                   </View>
 
-                  <TouchableOpacity style={styles.addButton} onPress={handleAddFlaggedItem}>
-                    <Plus size={18} color="#ffffff" />
-                    <Text style={styles.addButtonText}>Add Flagged Wine</Text>
-                  </TouchableOpacity>
+                  <View style={{ flexDirection: "row", gap: 10, marginTop: 8 }}>
+                    <TouchableOpacity style={[styles.addButton, { flex: 1 }]} onPress={handleAddFlaggedItem}>
+                      <Plus size={18} color="#ffffff" />
+                      <Text style={styles.addButtonText}>Add Flagged Wine</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.addButton, { backgroundColor: "#f1f5f9", borderWidth: 1, borderColor: "#cbd5e1" }]}
+                      onPress={handleCancelFlagging}
+                    >
+                      <Text style={{ color: "#64748b", fontSize: 13, fontWeight: "800" }}>Cancel Flagging</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               )}
             </View>
@@ -1012,6 +1233,66 @@ export default function DayCloseScreen() {
                 </TouchableOpacity>
               )}
             />
+          </View>
+        </View>
+      </Modal>
+
+      {/* Sales Drill Down Modal */}
+      <Modal visible={showSalesModal} animationType="slide" transparent onRequestClose={() => setShowSalesModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContainer, { backgroundColor: theme.card, height: "80%" }]}>
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={[styles.modalTitle, { color: theme.text }]}>Sales Drill Down</Text>
+                <Text style={{ fontSize: 12, color: "#64748b", fontWeight: "600" }}>
+                  {selectedDateStr} • {salesDrillDown.length} transaction(s)
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowSalesModal(false)}>
+                <Text style={{ fontSize: 18, fontWeight: "800", color: "#94a3b8" }}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {loadingSales ? (
+              <View style={{ padding: 40, alignItems: "center" }}>
+                <ActivityIndicator size="large" color={theme.primary} />
+                <Text style={{ marginTop: 12, color: "#64748b", fontSize: 13, fontWeight: "600" }}>Loading sales details...</Text>
+              </View>
+            ) : salesDrillDown.length === 0 ? (
+              <View style={{ padding: 40, alignItems: "center" }}>
+                <Wine size={32} color="#cbd5e1" />
+                <Text style={{ marginTop: 12, color: "#64748b", fontSize: 14, fontWeight: "700" }}>No sales recorded on this date</Text>
+              </View>
+            ) : (
+              <FlatList
+                data={salesDrillDown}
+                keyExtractor={(s) => s.id}
+                contentContainerStyle={{ gap: 10, paddingBottom: 20 }}
+                renderItem={({ item }) => (
+                  <View style={styles.saleDrillRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.saleDrillWineName}>{item.wineName || item.masterWine?.name || "Wine Sale"}</Text>
+                      <Text style={styles.saleDrillMeta}>
+                        {(item.saleType || "bottle").toUpperCase()} • Sold by: {item.soldByEmail || item.soldBy || "Staff"}
+                      </Text>
+                      {item.vatAmount ? (
+                        <Text style={styles.saleDrillVat}>
+                          Net: ₱{Number(item.price || 0).toFixed(2)} | VAT: ₱{Number(item.vatAmount || 0).toFixed(2)}
+                        </Text>
+                      ) : null}
+                    </View>
+                    <View style={{ alignItems: "flex-end" }}>
+                      <Text style={styles.saleDrillPrice}>
+                        ₱{Number(item.totalAmount || item.price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </Text>
+                      <Text style={styles.saleDrillTime}>
+                        {item.createdAt ? new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : ""}
+                      </Text>
+                    </View>
+                  </View>
+                )}
+              />
+            )}
           </View>
         </View>
       </Modal>
@@ -1406,5 +1687,117 @@ const styles = StyleSheet.create({
   wineRowSub: {
     fontSize: 11,
     color: "#64748b",
+  },
+  discardAllHeaderBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  discardAllHeaderText: {
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  discardAllChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+  },
+  discardAllChipText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#475569",
+  },
+  glassReconcileRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    gap: 10,
+  },
+  glassWineName: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#0f172a",
+  },
+  glassMeta: {
+    fontSize: 11,
+    color: "#64748b",
+    fontWeight: "600",
+    marginTop: 2,
+  },
+  glassFeedback: {
+    fontSize: 11,
+    color: "#b45309",
+    fontWeight: "700",
+    marginTop: 3,
+  },
+  stepperContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#ffffff",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    overflow: "hidden",
+  },
+  stepperBtn: {
+    width: 32,
+    height: 32,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#f1f5f9",
+  },
+  stepperText: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#334155",
+  },
+  stepperValue: {
+    width: 32,
+    textAlign: "center",
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#0f172a",
+  },
+  saleDrillRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  saleDrillWineName: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#0f172a",
+  },
+  saleDrillMeta: {
+    fontSize: 10,
+    color: "#64748b",
+    fontWeight: "600",
+    marginTop: 2,
+  },
+  saleDrillVat: {
+    fontSize: 10,
+    color: "#475569",
+    marginTop: 2,
+  },
+  saleDrillPrice: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#4c0519",
+  },
+  saleDrillTime: {
+    fontSize: 10,
+    color: "#94a3b8",
+    marginTop: 2,
   },
 });

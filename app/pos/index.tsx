@@ -1,20 +1,19 @@
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { apiFetch } from "@/lib/api";
-import { fetchStoreStaff, AppUser } from "@/lib/queries/users";
+import { AppUser, fetchStoreStaff } from "@/lib/queries/users";
 import { Stack, useRouter } from "expo-router";
 import {
   AlertCircle,
   CheckCircle2,
   ChevronLeft,
-  Grid,
   RotateCcw,
   Search,
   UserCheck,
   Wine,
-  Zap,
+  Zap
 } from "lucide-react-native";
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -79,6 +78,7 @@ export default function POSScreen() {
   // Selection & Sale State
   const [activeWine, setActiveWine] = useState<FastWineItem | null>(null);
   const [activePortion, setActivePortion] = useState<PortionType>("glass");
+  const [selectedVatMode, setSelectedVatMode] = useState<"included" | "excluded">("excluded");
   const [isProcessing, setIsProcessing] = useState(false);
   const [successToast, setSuccessToast] = useState<string | null>(null);
   const [parAlertInfo, setParAlertInfo] = useState<{
@@ -198,6 +198,8 @@ export default function POSScreen() {
   const handleSelectWinePortion = (wine: FastWineItem, portion: PortionType) => {
     setActiveWine(wine);
     setActivePortion(portion);
+    // Default VAT mode from the wine's store setting
+    setSelectedVatMode(wine.vatMode ?? "excluded");
   };
 
   // Submit Sale
@@ -214,16 +216,22 @@ export default function POSScreen() {
 
     try {
       const numericPrice = getPortionPrice(activeWine, activePortion);
-      const isIncluded = activeWine.vatMode === "included";
+      const isIncluded = selectedVatMode === "included";
 
-      let netPrice = numericPrice;
-      let vatAmount = numericPrice * VAT_RATE;
-      let totalAmount = numericPrice + vatAmount;
+      let netPrice: number;
+      let vatAmount: number;
+      let totalAmount: number;
 
       if (isIncluded) {
+        // Price already includes VAT — back-calculate net
         netPrice = numericPrice / (1 + VAT_RATE);
         vatAmount = numericPrice - netPrice;
         totalAmount = numericPrice;
+      } else {
+        // Price is ex-VAT — add VAT on top
+        netPrice = numericPrice;
+        vatAmount = numericPrice * VAT_RATE;
+        totalAmount = numericPrice + vatAmount;
       }
 
       let glassCount = 1.0;
@@ -258,7 +266,7 @@ export default function POSScreen() {
           price: netPrice,
           vatAmount,
           totalAmount,
-          vatMode: activeWine.vatMode,
+          vatMode: selectedVatMode,
           wineCategory: activeWine.wineCategory,
           masterWinePrice: activeWine.price || null,
           saleType: activePortion,
@@ -576,33 +584,82 @@ export default function POSScreen() {
       )}
 
       {/* ── Active Selection Confirmation Bar ───────────────────────────────── */}
-      {activeWine && (
-        <View style={[styles.checkoutBar, { backgroundColor: theme.card, borderTopColor: theme.border }]}>
-          <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 10, fontWeight: "800", color: theme.primary, textTransform: "uppercase", letterSpacing: 0.5 }}>
-              Active Sale • {selectedStaff?.displayName || selectedStaff?.email?.split("@")[0] || "Staff"}
-            </Text>
-            <Text style={{ fontSize: 14, fontWeight: "700", color: theme.text }} numberOfLines={1}>
-              {activeWine.name} ({activePortion === "glass" ? "🍷 Glass" : activePortion === "carafe" ? "🫗 Carafe" : "🍾 Bottle"})
-            </Text>
-            <Text style={{ fontSize: 16, fontWeight: "800", color: theme.primary, marginTop: 2 }}>
-              Total: {formatCurrency(getPortionPrice(activeWine, activePortion))}
-            </Text>
-          </View>
+      {activeWine && (() => {
+        const rawPrice = getPortionPrice(activeWine, activePortion);
+        const isInc = selectedVatMode === "included";
+        const netPrice = isInc ? rawPrice / (1 + VAT_RATE) : rawPrice;
+        const vatAmount = isInc ? rawPrice - netPrice : rawPrice * VAT_RATE;
+        const totalAmount = isInc ? rawPrice : rawPrice + vatAmount;
 
-          <TouchableOpacity
-            onPress={handleCompleteSale}
-            disabled={isProcessing}
-            style={[styles.completeSaleBtn, { backgroundColor: theme.primary }]}
-          >
-            {isProcessing ? (
-              <ActivityIndicator color="#fff" size="small" />
-            ) : (
-              <Text style={{ fontSize: 14, fontWeight: "800", color: "#fff" }}>COMPLETE SALE</Text>
-            )}
-          </TouchableOpacity>
-        </View>
-      )}
+        return (
+          <View style={[styles.checkoutBar, { backgroundColor: theme.card, borderTopColor: theme.border }]}>
+            <View style={{ flex: 1, gap: 4 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginRight: 12 }}>
+                <Text style={{ fontSize: 10, fontWeight: "800", color: theme.primary, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                  Active Sale • {selectedStaff?.displayName || selectedStaff?.email?.split("@")[0] || "Staff"}
+                </Text>
+
+                {/* VAT Mode Toggle Switch */}
+                <View style={{ flexDirection: "row", backgroundColor: theme.background, borderRadius: 8, padding: 2, borderWidth: 1, borderColor: theme.border }}>
+                  <TouchableOpacity
+                    onPress={() => setSelectedVatMode("included")}
+                    style={{
+                      paddingHorizontal: 8,
+                      paddingVertical: 3,
+                      borderRadius: 6,
+                      backgroundColor: selectedVatMode === "included" ? theme.primary : "transparent",
+                    }}
+                  >
+                    <Text style={{ fontSize: 9, fontWeight: "800", color: selectedVatMode === "included" ? "#fff" : theme.textSecondary }}>
+                      Inc. VAT
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={() => setSelectedVatMode("excluded")}
+                    style={{
+                      paddingHorizontal: 8,
+                      paddingVertical: 3,
+                      borderRadius: 6,
+                      backgroundColor: selectedVatMode === "excluded" ? theme.primary : "transparent",
+                    }}
+                  >
+                    <Text style={{ fontSize: 9, fontWeight: "800", color: selectedVatMode === "excluded" ? "#fff" : theme.textSecondary }}>
+                      Ex. VAT
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <Text style={{ fontSize: 13, fontWeight: "700", color: theme.text }} numberOfLines={1}>
+                {activeWine.name} ({activePortion === "glass" ? "🍷 Glass" : activePortion === "carafe" ? "🫗 Carafe" : "🍾 Bottle"})
+              </Text>
+
+              {/* Detailed Breakdown */}
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 2 }}>
+                <Text style={{ fontSize: 15, fontWeight: "900", color: theme.primary }}>
+                  Total: {formatCurrency(totalAmount)}
+                </Text>
+                <Text style={{ fontSize: 10, fontWeight: "600", color: theme.textSecondary }}>
+                  (Net: {formatCurrency(netPrice)} + VAT: {formatCurrency(vatAmount)})
+                </Text>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              onPress={handleCompleteSale}
+              disabled={isProcessing}
+              style={[styles.completeSaleBtn, { backgroundColor: theme.primary }]}
+            >
+              {isProcessing ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Text style={{ fontSize: 14, fontWeight: "800", color: "#fff" }}>COMPLETE SALE</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        );
+      })()}
     </SafeAreaView>
   );
 }
