@@ -6,13 +6,14 @@ import { Platform } from "react-native";
 
 import { router } from "expo-router";
 
+import { apiFetch } from "@/lib/api";
+import { getToken } from "@/lib/auth";
+
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
     shouldShowBanner: true,
-    shouldShowList: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
   }),
 });
 
@@ -33,10 +34,10 @@ export const usePushNotifications = (): PushNotificationState => {
 
     if (Platform.OS === "android") {
       await Notifications.setNotificationChannelAsync("default", {
-        name: "default",
+        name: "Default Notifications",
         importance: Notifications.AndroidImportance.MAX,
         vibrationPattern: [0, 250, 250, 250],
-        lightColor: "#FF231F7C",
+        lightColor: "#6366f1",
       });
     }
 
@@ -63,10 +64,8 @@ export const usePushNotifications = (): PushNotificationState => {
           projectId,
         });
         console.log("🟢 [PUSH TOKEN SUCCESS]:", token?.data);
-        console.log("Push Token Success", `Token: ${token?.data}`);
       } catch (error: any) {
         console.error("🔴 [PUSH TOKEN ERROR]: Failed to get push token:", error);
-        console.log("Push Token Error", error?.message || String(error));
       }
     } else {
       console.log("Push Notification", "Must use physical device for Push Notifications");
@@ -78,6 +77,16 @@ export const usePushNotifications = (): PushNotificationState => {
   useEffect(() => {
     registerForPushNotificationsAsync().then((token) => {
       setExpoPushToken(token);
+      if (token?.data) {
+        getToken().then((authToken) => {
+          if (authToken) {
+            apiFetch("/auth/me", {
+              method: "POST",
+              body: JSON.stringify({ pushToken: token.data }),
+            }).catch((err) => console.error("Error auto-syncing push token:", err));
+          }
+        }).catch(() => {});
+      }
     }).catch((err) => {
       console.log("Registration Error", String(err));
     });

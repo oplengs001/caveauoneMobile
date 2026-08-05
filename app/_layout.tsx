@@ -5,6 +5,7 @@ import 'react-native-reanimated';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { AuthProvider } from '@/context/AuthContext';
+import { usePushNotifications } from '@/hooks/usePushNotifications';
 import * as Updates from 'expo-updates';
 import { useEffect } from 'react';
 import { Alert } from 'react-native';
@@ -16,6 +17,7 @@ export const unstable_settings = {
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const { isUpdatePending } = Updates.useUpdates();
+  usePushNotifications();
 
   useEffect(() => {
     if (isUpdatePending) {
