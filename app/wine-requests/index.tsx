@@ -59,9 +59,9 @@ export default function WineRequestsIndex() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const fetchRequests = async () => {
+  const fetchRequests = async (isSilent = false) => {
     if (!profile?.email) return;
-    setLoading(true);
+    if (!isSilent) setLoading(true);
 
     try {
       const params = new URLSearchParams({ createdBy: profile.email });
@@ -87,13 +87,17 @@ export default function WineRequestsIndex() {
 
   useFocusEffect(
     useCallback(() => {
-      fetchRequests();
+      fetchRequests(false);
+      const interval = setInterval(() => {
+        fetchRequests(true);
+      }, 5000);
+      return () => clearInterval(interval);
     }, [profile?.email, activeFilter]),
   );
 
   const onRefresh = () => {
     setRefreshing(true);
-    fetchRequests();
+    fetchRequests(false);
   };
 
   const handleFilterChange = (filterId: string) => {
