@@ -1214,7 +1214,16 @@ export default function StoreMasterListScreen() {
                       <TextInput
                         style={[styles.input, styles.inputPrice]}
                         value={sheetSellingPrice}
-                        onChangeText={setSheetSellingPrice}
+                        onChangeText={(val) => {
+                          setSheetSellingPrice(val);
+                          if (sheetWineCategory === "fast" && val) {
+                            const p = parseFloat(val);
+                            if (!isNaN(p) && p > 0) {
+                              setSheetGlassPrice(Math.round(p / 6).toString());
+                              setSheetCarafePrice(Math.round(p / 3).toString());
+                            }
+                          }
+                        }}
                         keyboardType="decimal-pad"
                         placeholder="0.00"
                         placeholderTextColor="#94a3b8"
