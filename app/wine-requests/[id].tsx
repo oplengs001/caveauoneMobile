@@ -592,18 +592,12 @@ export default function WineRequestDetail() {
           label: "Pulling Out",
         };
       case "outbound":
+      case "receiving":
         return {
           color: "#3b82f6",
           bg: "#bfdbfe",
           icon: Truck,
-          label: "Outbound",
-        };
-      case "receiving":
-        return {
-          color: "#10b981",
-          bg: "#d1fae5",
-          icon: CheckCircle2,
-          label: "Receiving",
+          label: "Outbound (In-Transit)",
         };
       case "ingress_complete":
         return {

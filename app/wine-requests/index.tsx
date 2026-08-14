@@ -65,7 +65,13 @@ export default function WineRequestsIndex() {
 
     try {
       const params = new URLSearchParams({ createdBy: profile.email });
-      if (activeFilter !== "all") params.set("status", activeFilter);
+      if (activeFilter !== "all") {
+        if (activeFilter === "outbound") {
+          params.set("status", "outbound,receiving");
+        } else {
+          params.set("status", activeFilter);
+        }
+      }
       const [reqData, storesData] = await Promise.all([
         apiFetch(`/wine-requests?${params}`),
         apiFetch("/stores"),
@@ -201,6 +207,7 @@ export default function WineRequestsIndex() {
           step: 2,
         };
       case "outbound":
+      case "receiving":
         return {
           color: "#2563eb",
           bg: "#dbeafe",
