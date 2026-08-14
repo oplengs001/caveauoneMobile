@@ -92,10 +92,11 @@ export default function TaggingScreen() {
     ? bulkBottleIdsParam.split(",").filter(Boolean)
     : null;
   const isBulkMode = bulkBottleIds && bulkBottleIds.length > 1;
+  const effectiveInitialBottleId = initialBottleId || (bulkBottleIds && bulkBottleIds.length === 1 ? bulkBottleIds[0] : undefined);
 
   const [permission, requestPermission] = useCameraPermissions();
   const [state, setState] = useState<TaggingState>(
-    isBulkMode || initialBottleId ? "displaying" : "entry",
+    isBulkMode || effectiveInitialBottleId ? "displaying" : "entry",
   );
 
   // Entry States
@@ -206,10 +207,10 @@ export default function TaggingScreen() {
     fetchMasterWines();
     fetchLocations();
     fetchStoreVatMode();
-    if (initialBottleId && mode !== "sell") {
-      loadBottleData(initialBottleId as string);
+    if (effectiveInitialBottleId && mode !== "sell") {
+      loadBottleData(effectiveInitialBottleId as string);
     }
-  }, [initialBottleId, profile?.locationId, profile?.role]);
+  }, [effectiveInitialBottleId, profile?.locationId, profile?.role]);
 
   const fetchStoreVatMode = async (overrideStoreId?: string) => {
     const storeId = overrideStoreId || profile?.locationId;

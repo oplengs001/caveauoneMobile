@@ -621,7 +621,7 @@ export default function InventoryScreen() {
           >
             <Scan size={16} color="#fff" strokeWidth={2.5} />
             <Text style={[styles.headerActionText, { color: "#fff" }]}>
-              Scan to Update
+              Update Bottles
             </Text>
           </TouchableOpacity>
         </View>

@@ -236,22 +236,53 @@ export default function WineRequestDetail() {
       const scannedBottleId = data;
 
       if (allReceived) {
+        const allBottleIds =
+          batchBottles.length > 0
+            ? batchBottles.map((b) => b.bottleId)
+            : (pulloutRequest?.items?.flatMap((pi: any) => pi.pulledBottleIds || []) || [scannedBottleId]);
+
+        const uniqueBottleIds = Array.from(new Set(allBottleIds)).filter(Boolean);
+        const firstBottle = batchBottles.find((b) => b.bottleId === uniqueBottleIds[0]);
+        const isMultipleWines = batchBottles.some(
+          (b) => b.masterWineId !== firstBottle?.masterWineId,
+        );
+
         Alert.alert(
           "✓ All Items Received",
-          `${item.wineName} has been received.\n\nAll bottles in this request have been received! Would you like to tag a storage location?`,
+          `${item.wineName} has been received.\n\nAll bottles in this request have been received! Would you like to tag a storage location for the ${uniqueBottleIds.length} received bottle${uniqueBottleIds.length > 1 ? "s" : ""}?`,
           [
             {
-              text: "Tag Location",
+              text: `Tag Location${uniqueBottleIds.length > 1 ? `s (${uniqueBottleIds.length})` : ""}`,
               onPress: () => {
-                router.replace({
-                  pathname: "/tagging",
-                  params: {
-                    bottleId: scannedBottleId,
-                    mode: "tagging",
-                    source: "wine-request",
-                    fromRequestId: id,
-                  },
-                });
+                if (uniqueBottleIds.length > 1) {
+                  router.replace({
+                    pathname: "/tagging",
+                    params: {
+                      bottleIds: uniqueBottleIds.join(","),
+                      mode: "tagging",
+                      source: "wine-request",
+                      fromRequestId: id,
+                      wineName: isMultipleWines ? "Multiple Wines" : (firstBottle?.wineName || item.wineName),
+                      wineVintage: isMultipleWines ? "" : (firstBottle?.vintage || item.vintage || ""),
+                      wineProducer: isMultipleWines ? "" : (firstBottle?.producer || item.producer || ""),
+                      wineFormat: isMultipleWines ? "" : (firstBottle?.format || item.format || ""),
+                    },
+                  });
+                } else {
+                  router.replace({
+                    pathname: "/tagging",
+                    params: {
+                      bottleId: uniqueBottleIds[0] || scannedBottleId,
+                      mode: "tagging",
+                      source: "wine-request",
+                      fromRequestId: id,
+                      wineName: firstBottle?.wineName || item.wineName,
+                      wineVintage: firstBottle?.vintage || item.vintage || "",
+                      wineProducer: firstBottle?.producer || item.producer || "",
+                      wineFormat: firstBottle?.format || item.format || "",
+                    },
+                  });
+                }
               },
             },
             {
