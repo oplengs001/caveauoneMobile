@@ -3,6 +3,7 @@ import { useAuth } from "@/context/AuthContext";
 import { apiFetch } from "@/lib/api";
 import { clearToken } from "@/lib/auth";
 import { AppUser, fetchStoreStaff } from "@/lib/queries/users";
+import { BlurView } from "expo-blur";
 import { Stack, useRouter } from "expo-router";
 import {
   AlertCircle,
@@ -11,6 +12,7 @@ import {
   ChevronDown,
   ChevronRight,
   Droplets,
+  Info,
   LogOut,
   Minus,
   Plus,
@@ -124,8 +126,15 @@ export default function StoreStaffPOSTerminal() {
   // Primary Filters: Sales Type First + Wine Type Grouping
   const [salesTypeMode, setSalesTypeMode] = useState<PortionType>("glass");
   const [wineTypeFilter, setWineTypeFilter] = useState<string>("all");
-  const [isSalesTypeDropdownOpen, setIsSalesTypeDropdownOpen] = useState(false);
   const [isStaffPickerOpen, setIsStaffPickerOpen] = useState(false);
+
+  // Portion-picker gate modal — shown on every fresh mount
+  const [showPortionModal, setShowPortionModal] = useState(true);
+
+  const selectPortion = (portion: PortionType) => {
+    setSalesTypeMode(portion);
+    setShowPortionModal(false);
+  };
 
   // Cart / Current Order State (Count Focused)
   const [currentOrder, setCurrentOrder] = useState<OrderItem[]>([]);
@@ -178,18 +187,18 @@ export default function StoreStaffPOSTerminal() {
       const allWines: any[] = Array.isArray(winesData)
         ? winesData
         : Array.isArray(winesData.wines)
-        ? winesData.wines
-        : [];
+          ? winesData.wines
+          : [];
       const settingsList: any[] = Array.isArray(settingsData)
         ? settingsData
         : Array.isArray(settingsData.settings)
-        ? settingsData.settings
-        : [];
+          ? settingsData.settings
+          : [];
       const bottlesList: any[] = Array.isArray(bottlesData)
         ? bottlesData
         : Array.isArray(bottlesData.bottles)
-        ? bottlesData.bottles
-        : [];
+          ? bottlesData.bottles
+          : [];
 
       const settingsMap = new Map<string, any>();
       settingsList.forEach((s) => settingsMap.set(s.masterWineId, s));
@@ -473,8 +482,8 @@ export default function StoreStaffPOSTerminal() {
                 const items = Array.isArray(req.items)
                   ? req.items
                   : typeof req.items === "string"
-                  ? JSON.parse(req.items)
-                  : [];
+                    ? JSON.parse(req.items)
+                    : [];
                 items.forEach((it: any) => {
                   if (it.masterWineId === wine.id) hasPending = true;
                 });
@@ -566,11 +575,11 @@ export default function StoreStaffPOSTerminal() {
   // Sommelier & Maroon Color Theme helper
   const getWineTypeTheme = (wineType?: string) => {
     const t = (wineType || "").toLowerCase();
-    if (t.includes("white")) return { bg: "#fef3c7", accent: "#b45309", icon: "🥂", tag: "WHITE" };
-    if (t.includes("sparkling")) return { bg: "#fef9c3", accent: "#a16207", icon: "🍾", tag: "SPARKLING" };
-    if (t.includes("ros")) return { bg: "#ffe4e6", accent: "#be123c", icon: "🌸", tag: "ROSÉ" };
-    if (t.includes("sweet") || t.includes("dessert")) return { bg: "#fae8ff", accent: "#7e22ce", icon: "🍯", tag: "SWEET" };
-    return { bg: "#ffe4e6", accent: MAROON.primary, icon: "🍷", tag: "RED" };
+    if (t.includes("white")) return { bg: "#fef3c7", accent: "#b45309", color: "#d97706", tag: "WHITE" };
+    if (t.includes("sparkling")) return { bg: "#fef9c3", accent: "#a16207", color: "#ca8a04", tag: "SPARKLING" };
+    if (t.includes("ros")) return { bg: "#ffe4e6", accent: "#be123c", color: "#f43f5e", tag: "ROSÉ" };
+    if (t.includes("sweet") || t.includes("dessert")) return { bg: "#fae8ff", accent: "#7e22ce", color: "#a855f7", tag: "SWEET" };
+    return { bg: "#fff1f2", accent: MAROON.primary, color: MAROON.primary, tag: "RED" };
   };
 
   // Render Current Service / Dispense Queue Sidebar / Drawer
@@ -646,13 +655,13 @@ export default function StoreStaffPOSTerminal() {
             {currentOrder.map((item, idx) => {
               const typeTheme = getWineTypeTheme(item.wine.wineType);
               const portionTag =
-                item.portion === "glass" ? "🍷 1 Glass (1/6)" : item.portion === "carafe" ? "🫗 1 Carafe (2/6)" : "🍾 1 Bottle";
+                item.portion === "glass" ? "1 Glass (1/6)" : item.portion === "carafe" ? "1 Carafe (2/6)" : "1 Bottle";
 
               return (
                 <View key={`${item.wine.id}-${item.portion}-${idx}`} style={styles.orderItemCard}>
-                  {/* Thumbnail / Icon */}
+                  {/* Color-coded thumbnail dot */}
                   <View style={[styles.itemThumbnail, { backgroundColor: typeTheme.bg }]}>
-                    <Text style={{ fontSize: 20 }}>{typeTheme.icon}</Text>
+                    <View style={[styles.thumbnailDot, { backgroundColor: typeTheme.color }]} />
                   </View>
 
                   {/* Item Details */}
@@ -834,33 +843,118 @@ export default function StoreStaffPOSTerminal() {
 
         {/* ── 2. CENTER CATALOG AREA ─────────────────────────────────────────── */}
         <View style={styles.centerCatalog}>
-          {/* Header Row */}
-          <View style={styles.catalogHeader}>
-            <View style={{ flex: isTabletLandscape ? 1 : 0.45 }}>
-              <Text style={styles.catalogSubHeader}>Portion Mode</Text>
-
-              {/* Sales Type Dropdown Selector */}
+          {/* ── HIGH-VISIBILITY PORTION MODE SEGMENTED BAR ───────────────────── */}
+          <View style={styles.portionSegmentOuter}>
+            <Text style={styles.portionSectionLabel}>SELECT SERVING PORTION</Text>
+            <View style={styles.portionSegmentContainer}>
               <TouchableOpacity
-                onPress={() => setIsSalesTypeDropdownOpen(!isSalesTypeDropdownOpen)}
-                style={styles.salesTypeDropdownBtn}
+                onPress={() => setSalesTypeMode("glass")}
+                style={[
+                  styles.portionSegmentBtn,
+                  salesTypeMode === "glass" && styles.portionSegmentBtnActive,
+                ]}
+                activeOpacity={0.85}
               >
-                <Text style={styles.salesTypeDropdownTitle} numberOfLines={1}>
-                  {salesTypeMode === "glass"
-                    ? "By the Glass"
-                    : salesTypeMode === "carafe"
-                    ? "By the Carafe"
-                    : "Bottles"}
-                </Text>
-                <ChevronDown size={18} color={MAROON.primary} strokeWidth={2.5} />
+                <Text style={styles.portionSegmentIcon}>🍷</Text>
+                <View style={{ flex: 1 }}>
+                  <Text
+                    style={[
+                      styles.portionSegmentTitle,
+                      salesTypeMode === "glass" && styles.portionSegmentTitleActive,
+                    ]}
+                  >
+                    By the Glass
+                  </Text>
+                  <Text
+                    style={[
+                      styles.portionSegmentSub,
+                      salesTypeMode === "glass" && styles.portionSegmentSubActive,
+                    ]}
+                  >
+                    1/6 Pour · Open First
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => setSalesTypeMode("bottle")}
+                style={[
+                  styles.portionSegmentBtn,
+                  salesTypeMode === "bottle" && styles.portionSegmentBtnActive,
+                ]}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.portionSegmentIcon}>🍾</Text>
+                <View style={{ flex: 1 }}>
+                  <Text
+                    style={[
+                      styles.portionSegmentTitle,
+                      salesTypeMode === "bottle" && styles.portionSegmentTitleActive,
+                    ]}
+                  >
+                    Full Bottle
+                  </Text>
+                  <Text
+                    style={[
+                      styles.portionSegmentSub,
+                      salesTypeMode === "bottle" && styles.portionSegmentSubActive,
+                    ]}
+                  >
+                    Cellar Stock
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => setSalesTypeMode("carafe")}
+                style={[
+                  styles.portionSegmentBtn,
+                  salesTypeMode === "carafe" && styles.portionSegmentBtnActive,
+                ]}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.portionSegmentIcon}>🫗</Text>
+                <View style={{ flex: 1 }}>
+                  <Text
+                    style={[
+                      styles.portionSegmentTitle,
+                      salesTypeMode === "carafe" && styles.portionSegmentTitleActive,
+                    ]}
+                  >
+                    Carafe
+                  </Text>
+                  <Text
+                    style={[
+                      styles.portionSegmentSub,
+                      salesTypeMode === "carafe" && styles.portionSegmentSubActive,
+                    ]}
+                  >
+                    2/6 Decanter
+                  </Text>
+                </View>
               </TouchableOpacity>
             </View>
+          </View>
 
-            {/* Search Bar */}
+          {/* Active Mode Explanation Strip */}
+          <View style={styles.activeModeStrip}>
+            <Info size={14} color={MAROON.primary} />
+            <Text style={styles.activeModeStripText}>
+              {salesTypeMode === "glass"
+                ? "Glass Pour Mode Active: Tapping '+ Glass' pours 1/6 btl (open bottles prioritized first)."
+                : salesTypeMode === "carafe"
+                  ? "Carafe Mode Active: Tapping '+ Carafe' pours 2/6 btl into a serving decanter."
+                  : "Full Bottle Mode Active: Tapping '+ Bottle' dispenses 1 sealed bottle from cellar inventory."}
+            </Text>
+          </View>
+
+          {/* Search & Filter Bar */}
+          <View style={styles.searchRow}>
             <View style={styles.searchBox}>
               <Search size={18} color="#94a3b8" />
               <TextInput
                 style={styles.searchInput}
-                placeholder="Search wines..."
+                placeholder="Search wines by name, vintage, producer..."
                 placeholderTextColor="#94a3b8"
                 value={searchQuery}
                 onChangeText={setSearchQuery}
@@ -873,7 +967,6 @@ export default function StoreStaffPOSTerminal() {
               )}
             </View>
 
-            {/* Quick Scan Button (when in landscape) */}
             {isTabletLandscape && (
               <TouchableOpacity
                 onPress={() => router.push({ pathname: "/sell" })}
@@ -884,184 +977,7 @@ export default function StoreStaffPOSTerminal() {
             )}
           </View>
 
-          {/* Sales Type Dropdown Menu */}
-          {isSalesTypeDropdownOpen && (
-            <View style={styles.salesTypeDropdownMenu}>
-              <TouchableOpacity
-                onPress={() => {
-                  setSalesTypeMode("glass");
-                  setIsSalesTypeDropdownOpen(false);
-                }}
-                style={[
-                  styles.salesTypeOption,
-                  salesTypeMode === "glass" && { backgroundColor: MAROON.ultraLight },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.salesTypeOptionText,
-                    salesTypeMode === "glass" && { fontWeight: "900", color: MAROON.primary },
-                  ]}
-                >
-                  🍷 By the Glass (1/6 Pour · Open Bottles First)
-                </Text>
-                {salesTypeMode === "glass" && <Check size={16} color={MAROON.primary} />}
-              </TouchableOpacity>
 
-              <TouchableOpacity
-                onPress={() => {
-                  setSalesTypeMode("bottle");
-                  setIsSalesTypeDropdownOpen(false);
-                }}
-                style={[
-                  styles.salesTypeOption,
-                  salesTypeMode === "bottle" && { backgroundColor: MAROON.ultraLight },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.salesTypeOptionText,
-                    salesTypeMode === "bottle" && { fontWeight: "900", color: MAROON.primary },
-                  ]}
-                >
-                  🍾 Full Bottles (Cellar Stock)
-                </Text>
-                {salesTypeMode === "bottle" && <Check size={16} color={MAROON.primary} />}
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => {
-                  setSalesTypeMode("carafe");
-                  setIsSalesTypeDropdownOpen(false);
-                }}
-                style={[
-                  styles.salesTypeOption,
-                  salesTypeMode === "carafe" && { backgroundColor: MAROON.ultraLight },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.salesTypeOptionText,
-                    salesTypeMode === "carafe" && { fontWeight: "900", color: MAROON.accentGold },
-                  ]}
-                >
-                  🫗 By the Carafe (2/6 Decanter)
-                </Text>
-                {salesTypeMode === "carafe" && <Check size={16} color={MAROON.accentGold} />}
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {/* Horizontal Category Pills */}
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.categoryPillsScroll}
-          >
-            <TouchableOpacity
-              onPress={() => setWineTypeFilter("all")}
-              style={[
-                styles.categoryPill,
-                wineTypeFilter === "all" ? styles.categoryPillActive : styles.categoryPillInactive,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.categoryPillText,
-                  wineTypeFilter === "all" && styles.categoryPillTextActive,
-                ]}
-              >
-                All ({wineTypeCounts.all || 0})
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => setWineTypeFilter("Red Wine")}
-              style={[
-                styles.categoryPill,
-                wineTypeFilter === "Red Wine" ? styles.categoryPillActive : styles.categoryPillInactive,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.categoryPillText,
-                  wineTypeFilter === "Red Wine" && styles.categoryPillTextActive,
-                ]}
-              >
-                Red Wine ({wineTypeCounts["Red Wine"] || 0})
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => setWineTypeFilter("White Wine")}
-              style={[
-                styles.categoryPill,
-                wineTypeFilter === "White Wine" ? styles.categoryPillActive : styles.categoryPillInactive,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.categoryPillText,
-                  wineTypeFilter === "White Wine" && styles.categoryPillTextActive,
-                ]}
-              >
-                White Wine ({wineTypeCounts["White Wine"] || 0})
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => setWineTypeFilter("Sparkling")}
-              style={[
-                styles.categoryPill,
-                wineTypeFilter === "Sparkling" ? styles.categoryPillActive : styles.categoryPillInactive,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.categoryPillText,
-                  wineTypeFilter === "Sparkling" && styles.categoryPillTextActive,
-                ]}
-              >
-                Sparkling ({wineTypeCounts["Sparkling"] || 0})
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => setWineTypeFilter("Rosé")}
-              style={[
-                styles.categoryPill,
-                wineTypeFilter === "Rosé" ? styles.categoryPillActive : styles.categoryPillInactive,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.categoryPillText,
-                  wineTypeFilter === "Rosé" && styles.categoryPillTextActive,
-                ]}
-              >
-                Rosé ({wineTypeCounts["Rosé"] || 0})
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => setWineTypeFilter("Dessert & Fortified")}
-              style={[
-                styles.categoryPill,
-                wineTypeFilter === "Dessert & Fortified"
-                  ? styles.categoryPillActive
-                  : styles.categoryPillInactive,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.categoryPillText,
-                  wineTypeFilter === "Dessert & Fortified" && styles.categoryPillTextActive,
-                ]}
-              >
-                Dessert & Fortified ({wineTypeCounts["Dessert & Fortified"] || 0})
-              </Text>
-            </TouchableOpacity>
-          </ScrollView>
 
           {/* Oversized Cards Grid (Count Focused) */}
           {loading && !refreshing ? (
@@ -1104,8 +1020,24 @@ export default function StoreStaffPOSTerminal() {
                 const openGlasses = item.openBottle?.glassesRemaining ?? 0;
                 const isLow = item.stockCount <= 3;
 
+                const portionActionLabel =
+                  salesTypeMode === "glass"
+                    ? "Glass"
+                    : salesTypeMode === "carafe"
+                      ? "Carafe"
+                      : "Bottle";
+
+                // Fixed square card size
+                const cols = isTabletLandscape ? 3 : 2;
+                const catalogPad = 32; // 16px each side
+                const dockW = isTabletLandscape ? 68 : 0;
+                const panelW = isTabletLandscape ? 360 : 0;
+                const cardGap = 10;
+                const totalGap = cardGap * (cols + 1);
+                const cardSize = Math.floor((width - dockW - panelW - catalogPad - totalGap) / cols);
+
                 return (
-                  <View style={styles.oversizedCard}>
+                  <View style={[styles.oversizedCard, { width: cardSize }]}>
                     {/* Top Visual Box */}
                     <View style={[styles.cardVisualBox, { backgroundColor: typeTheme.bg }]}>
                       {/* Open Bottle Pill */}
@@ -1122,9 +1054,6 @@ export default function StoreStaffPOSTerminal() {
                           </Text>
                         </View>
                       )}
-
-                      {/* Large Center Wine Icon */}
-                      <Text style={{ fontSize: isTabletLandscape ? 52 : 44 }}>{typeTheme.icon}</Text>
 
                       {/* Vintage Badge */}
                       {item.vintage ? (
@@ -1144,7 +1073,7 @@ export default function StoreStaffPOSTerminal() {
                       </Text>
                     </View>
 
-                    {/* Card Bottom: Stock Count Badge + Maroon Plus Button */}
+                    {/* Card Bottom: Stock Count Badge + Explicit Action Button */}
                     <View style={styles.cardBottomRow}>
                       <View style={{ flex: 1, paddingRight: 6 }}>
                         {salesTypeMode === "glass" ? (
@@ -1188,13 +1117,14 @@ export default function StoreStaffPOSTerminal() {
                         )}
                       </View>
 
-                      {/* Add Button in Maroon */}
+                      {/* Explicit Action Button with Portion Label */}
                       <TouchableOpacity
                         onPress={() => addToOrder(item)}
-                        style={styles.cardPlusBtn}
+                        style={styles.cardActionBtn}
                         activeOpacity={0.8}
                       >
-                        <Plus size={20} color="#ffffff" strokeWidth={3} />
+                        <Plus size={15} color="#ffffff" strokeWidth={3} />
+                        <Text style={styles.cardActionBtnText}>{portionActionLabel}</Text>
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -1312,6 +1242,108 @@ export default function StoreStaffPOSTerminal() {
           </View>
         </View>
       </Modal>
+      {/* ── PORTION-PICKER GATE MODAL ────────────────────────────────────────── */}
+      <Modal
+        visible={showPortionModal}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => { }}
+      >
+        <View style={styles.gateOverlay}>
+          <BlurView intensity={80} tint="systemMaterialDark" style={StyleSheet.absoluteFill} />
+
+          {/* Card */}
+          <View style={styles.gateCard}>
+            {/* Header */}
+            <View style={styles.gateCardHeader}>
+              <View style={styles.gateLogoCircle}>
+                <Wine size={26} color="#ffffff" strokeWidth={2.5} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.gateTitle}>How are you serving?</Text>
+                <Text style={styles.gateSub}>
+                  Choose the serving portion to start this service session
+                </Text>
+              </View>
+            </View>
+
+            {/* Store Info Strip */}
+            <View style={styles.gateStoreStrip}>
+              <View style={styles.onlineDot} />
+              <Text style={styles.gateStoreText}>
+                {storeName} · {selectedStaff?.displayName || profile?.email?.split("@")[0] || "Staff"} on duty
+              </Text>
+            </View>
+
+            {/* Portion Options */}
+            <View style={styles.gateOptions}>
+              {/* Glass */}
+              <TouchableOpacity
+                onPress={() => selectPortion("glass")}
+                style={styles.gateOptionCard}
+                activeOpacity={0.82}
+              >
+                <View style={[styles.gateOptionIconBox, { backgroundColor: "#fff1f2" }]}>
+                  <Text style={styles.gateOptionEmoji}>🍷</Text>
+                </View>
+                <View style={styles.gateOptionBody}>
+                  <Text style={styles.gateOptionTitle}>By the Glass</Text>
+                  <Text style={styles.gateOptionDesc}>1/6 of a bottle per serve · Open bottles prioritised</Text>
+                </View>
+                <View style={[styles.gateOptionChevron, { backgroundColor: MAROON.ultraLight }]}>
+                  <ChevronRight size={18} color={MAROON.primary} strokeWidth={2.5} />
+                </View>
+              </TouchableOpacity>
+
+              {/* Carafe */}
+              <TouchableOpacity
+                onPress={() => selectPortion("carafe")}
+                style={styles.gateOptionCard}
+                activeOpacity={0.82}
+              >
+                <View style={[styles.gateOptionIconBox, { backgroundColor: "#fef3c7" }]}>
+                  <Text style={styles.gateOptionEmoji}>🫗</Text>
+                </View>
+                <View style={styles.gateOptionBody}>
+                  <Text style={styles.gateOptionTitle}>Carafe</Text>
+                  <Text style={styles.gateOptionDesc}>2/6 of a bottle per serve · Decanter pouring</Text>
+                </View>
+                <View style={[styles.gateOptionChevron, { backgroundColor: "#fffbeb" }]}>
+                  <ChevronRight size={18} color="#b45309" strokeWidth={2.5} />
+                </View>
+              </TouchableOpacity>
+
+              {/* Bottle */}
+              <TouchableOpacity
+                onPress={() => selectPortion("bottle")}
+                style={styles.gateOptionCard}
+                activeOpacity={0.82}
+              >
+                <View style={[styles.gateOptionIconBox, { backgroundColor: "#f0fdf4" }]}>
+                  <Text style={styles.gateOptionEmoji}>🍾</Text>
+                </View>
+                <View style={styles.gateOptionBody}>
+                  <Text style={styles.gateOptionTitle}>Full Bottle</Text>
+                  <Text style={styles.gateOptionDesc}>Sealed bottle from cellar · Full bottle dispense</Text>
+                </View>
+                <View style={[styles.gateOptionChevron, { backgroundColor: "#f0fdf4" }]}>
+                  <ChevronRight size={18} color="#16a34a" strokeWidth={2.5} />
+                </View>
+              </TouchableOpacity>
+            </View>
+
+            {/* Footer note */}
+            <View style={styles.gateFooterNote}>
+              <Info size={12} color="#94a3b8" />
+              <Text style={styles.gateFooterNoteText}>
+                You can switch the serving mode at any time from the portion selector in the terminal.
+              </Text>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
     </SafeAreaView>
   );
 }
@@ -1449,30 +1481,94 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 12,
   },
-  catalogHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
+
+  // ── HIGH VISIBILITY PORTION MODE SELECTOR ──
+  portionSegmentOuter: {
     marginBottom: 10,
   },
-  catalogSubHeader: {
-    fontSize: 11,
-    fontWeight: "800",
+  portionSectionLabel: {
+    fontSize: 10,
+    fontWeight: "900",
     color: MAROON.medium,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
+    letterSpacing: 0.8,
+    marginBottom: 6,
   },
-  salesTypeDropdownBtn: {
+  portionSegmentContainer: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  portionSegmentBtn: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    marginTop: 2,
+    backgroundColor: "#ffffff",
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    borderWidth: 1.5,
+    borderColor: "#e2e8f0",
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
   },
-  salesTypeDropdownTitle: {
-    fontSize: 20,
+  portionSegmentBtnActive: {
+    backgroundColor: MAROON.primary,
+    borderColor: MAROON.primary,
+    elevation: 4,
+    shadowColor: MAROON.primary,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+  },
+  portionSegmentIcon: {
+    fontSize: 22,
+  },
+  portionSegmentTitle: {
+    fontSize: 13,
     fontWeight: "900",
+    color: "#18181b",
+  },
+  portionSegmentTitleActive: {
+    color: "#ffffff",
+  },
+  portionSegmentSub: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#64748b",
+    marginTop: 1,
+  },
+  portionSegmentSubActive: {
+    color: "#fecdd3",
+  },
+
+  // Active Mode Strip
+  activeModeStrip: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: MAROON.ultraLight,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginBottom: 10,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: MAROON.border,
+  },
+  activeModeStripText: {
+    fontSize: 11,
+    fontWeight: "700",
     color: MAROON.primary,
-    letterSpacing: -0.5,
+    flex: 1,
+  },
+
+  // Search & Filter
+  searchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 10,
   },
   searchBox: {
     flex: 1,
@@ -1502,32 +1598,6 @@ const styles = StyleSheet.create({
     borderColor: "#e2e8f0",
     alignItems: "center",
     justifyContent: "center",
-  },
-  salesTypeDropdownMenu: {
-    backgroundColor: "#ffffff",
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: MAROON.border,
-    padding: 6,
-    marginBottom: 10,
-    elevation: 6,
-    shadowColor: MAROON.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-  },
-  salesTypeOption: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 10,
-  },
-  salesTypeOptionText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#18181b",
   },
 
   // Category Pills
@@ -1564,10 +1634,9 @@ const styles = StyleSheet.create({
     paddingBottom: 80,
   },
   oversizedCard: {
-    flex: 1,
     backgroundColor: "#ffffff",
-    borderRadius: 20,
-    padding: 12,
+    borderRadius: 16,
+    padding: 10,
     margin: 5,
     elevation: 2,
     shadowColor: "#000",
@@ -1578,10 +1647,8 @@ const styles = StyleSheet.create({
     borderColor: "#e2e8f0",
   },
   cardVisualBox: {
-    height: 110,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
+    height: 90,
+    borderRadius: 10,
     position: "relative",
     marginBottom: 10,
   },
@@ -1657,13 +1724,24 @@ const styles = StyleSheet.create({
     color: "#94a3b8",
     marginTop: 1,
   },
-  cardPlusBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: MAROON.primary,
+  cardActionBtn: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    backgroundColor: MAROON.primary,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 14,
+    gap: 3,
+    elevation: 2,
+    shadowColor: MAROON.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+  },
+  cardActionBtnText: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: "#ffffff",
   },
 
   // RIGHT PANEL (Landscape)
@@ -1786,6 +1864,11 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
+  },
+  thumbnailDot: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
   },
   orderItemName: {
     fontSize: 13,
@@ -2127,5 +2210,131 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "900",
     color: "#ffffff",
+  },
+
+  // ── PORTION GATE MODAL ──────────────────────────────────────────────────────
+  gateOverlay: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 20,
+    backgroundColor: "rgba(0, 0, 0, 0.55)",
+  },
+  gateCard: {
+    width: "100%",
+    maxWidth: 440,
+    backgroundColor: "#ffffff",
+    borderRadius: 28,
+    padding: 22,
+    elevation: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.35,
+    shadowRadius: 28,
+  },
+  gateCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    marginBottom: 12,
+  },
+  gateLogoCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 18,
+    backgroundColor: MAROON.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  gateTitle: {
+    fontSize: 20,
+    fontWeight: "900",
+    color: "#18181b",
+    letterSpacing: -0.4,
+  },
+  gateSub: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#71717a",
+    marginTop: 2,
+  },
+  gateStoreStrip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: MAROON.ultraLight,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: MAROON.border,
+  },
+  gateStoreText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: MAROON.primary,
+  },
+  gateOptions: {
+    gap: 10,
+    marginBottom: 16,
+  },
+  gateOptionCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fafafa",
+    borderRadius: 18,
+    padding: 14,
+    gap: 12,
+    borderWidth: 1.5,
+    borderColor: "#e2e8f0",
+  },
+  gateOptionIconBox: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  gateOptionEmoji: {
+    fontSize: 26,
+  },
+  gateOptionBody: {
+    flex: 1,
+  },
+  gateOptionTitle: {
+    fontSize: 15,
+    fontWeight: "900",
+    color: "#18181b",
+  },
+  gateOptionDesc: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#71717a",
+    marginTop: 2,
+    lineHeight: 15,
+  },
+  gateOptionChevron: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  gateFooterNote: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 6,
+    paddingTop: 4,
+  },
+  gateFooterNoteText: {
+    fontSize: 11,
+    color: "#94a3b8",
+    fontWeight: "600",
+    flex: 1,
+    lineHeight: 15,
   },
 });
