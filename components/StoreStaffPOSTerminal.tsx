@@ -3,13 +3,13 @@ import { useAuth } from "@/context/AuthContext";
 import { apiFetch } from "@/lib/api";
 import { clearToken } from "@/lib/auth";
 import { AppUser, fetchStoreStaff } from "@/lib/queries/users";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { Stack, useRouter } from "expo-router";
 import {
   AlertCircle,
   Check,
   CheckCircle2,
-  ChevronDown,
   ChevronRight,
   Droplets,
   Info,
@@ -23,7 +23,7 @@ import {
   SlidersHorizontal,
   Wine,
   X,
-  Zap,
+  Zap
 } from "lucide-react-native";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -392,68 +392,132 @@ export default function StoreStaffPOSTerminal() {
         const { wine, portion, quantity } = item;
 
         let glassCount = 1.0;
-        let glassesDeducted = 6;
+        let glassesDeductedPerUnit = 6;
         if (portion === "glass") {
           glassCount = 0.1667;
-          glassesDeducted = 1;
+          glassesDeductedPerUnit = 1;
         } else if (portion === "carafe") {
           glassCount = 0.3333;
-          glassesDeducted = 2;
+          glassesDeductedPerUnit = 2;
         }
 
-        for (let i = 0; i < quantity; i++) {
-          let targetBottleId = wine.availableBottleIds[0];
-          if (portion !== "bottle" && wine.openBottle) {
-            targetBottleId = wine.openBottle.id;
+        if (portion === "bottle") {
+          for (let i = 0; i < quantity; i++) {
+            const targetBottleId = wine.availableBottleIds[i] || wine.availableBottleIds[0];
+
+            // 1. Record Sale
+            await apiFetch("/sales", {
+              method: "POST",
+              body: JSON.stringify({
+                bottleId: targetBottleId || null,
+                masterWineId: wine.id,
+                wineName: wine.name,
+                vintage: wine.vintage,
+                producer: wine.producer,
+                format: wine.format,
+                storeId: storeId,
+                soldById: staffToAttribute.id,
+                soldByEmail: staffToAttribute.email,
+                price: wine.price || 0,
+                vatAmount: 0,
+                totalAmount: wine.price || 0,
+                vatMode: "included",
+                wineCategory: wine.wineCategory,
+                masterWinePrice: wine.price || null,
+                saleType: portion,
+                glassCount: 1.0,
+              }),
+            });
+
+            // 2. Update Bottle to consumed
+            if (targetBottleId) {
+              await apiFetch(`/bottles/${targetBottleId}`, {
+                method: "PATCH",
+                body: JSON.stringify({
+                  status: "consumed",
+                  glassesRemaining: 0,
+                  locationId: null,
+                }),
+              });
+            }
+          }
+        } else {
+          // Multiple glass or carafe dispense
+          let totalGlassesToDeduct = quantity * glassesDeductedPerUnit;
+          let activeOpenBottleId = wine.openBottle?.id || null;
+          let currentGlassesInActiveBottle = wine.openBottle ? wine.openBottle.glassesRemaining : 0;
+
+          // Pool of unopened cellar bottles to open if current bottle runs out
+          const availableUnopenedIds = [...wine.availableBottleIds.filter((bId) => bId !== activeOpenBottleId)];
+
+          // 1. Record sales for each portion ordered
+          for (let q = 0; q < quantity; q++) {
+            await apiFetch("/sales", {
+              method: "POST",
+              body: JSON.stringify({
+                bottleId: activeOpenBottleId || availableUnopenedIds[0] || null,
+                masterWineId: wine.id,
+                wineName: wine.name,
+                vintage: wine.vintage,
+                producer: wine.producer,
+                format: wine.format,
+                storeId: storeId,
+                soldById: staffToAttribute.id,
+                soldByEmail: staffToAttribute.email,
+                price: wine.price || 0,
+                vatAmount: 0,
+                totalAmount: wine.price || 0,
+                vatMode: "included",
+                wineCategory: wine.wineCategory,
+                masterWinePrice: wine.price || null,
+                saleType: portion,
+                glassCount,
+              }),
+            });
           }
 
-          // 1. Record Dispense/Sale
-          await apiFetch("/sales", {
-            method: "POST",
-            body: JSON.stringify({
-              bottleId: targetBottleId,
-              masterWineId: wine.id,
-              wineName: wine.name,
-              vintage: wine.vintage,
-              producer: wine.producer,
-              format: wine.format,
-              storeId: storeId,
-              soldById: staffToAttribute.id,
-              soldByEmail: staffToAttribute.email,
-              price: wine.price || 0,
-              vatAmount: 0,
-              totalAmount: wine.price || 0,
-              vatMode: "included",
-              wineCategory: wine.wineCategory,
-              masterWinePrice: wine.price || null,
-              saleType: portion,
-              glassCount,
-            }),
-          });
+          // 2. Deplete bottles sequentially across active open bottle and cellar bottles
+          while (totalGlassesToDeduct > 0) {
+            if (activeOpenBottleId && currentGlassesInActiveBottle > 0) {
+              const glassesFromThis = Math.min(totalGlassesToDeduct, currentGlassesInActiveBottle);
+              const remainingInThis = currentGlassesInActiveBottle - glassesFromThis;
+              const isNowConsumed = remainingInThis === 0;
 
-          // 2. Update Bottle Status & Glasses Remaining
-          if (portion === "bottle") {
-            await apiFetch(`/bottles/${targetBottleId}`, {
-              method: "PATCH",
-              body: JSON.stringify({
-                status: "consumed",
-                glassesRemaining: 0,
-                locationId: null,
-              }),
-            });
-          } else {
-            const currentGlasses = wine.openBottle?.glassesRemaining ?? 6;
-            const newGlassesRemaining = Math.max(0, currentGlasses - glassesDeducted);
-            const newStatus = newGlassesRemaining === 0 ? "consumed" : "open";
+              await apiFetch(`/bottles/${activeOpenBottleId}`, {
+                method: "PATCH",
+                body: JSON.stringify({
+                  status: isNowConsumed ? "consumed" : "open",
+                  glassesRemaining: remainingInThis,
+                  ...(isNowConsumed ? { locationId: null } : {}),
+                }),
+              });
 
-            await apiFetch(`/bottles/${targetBottleId}`, {
-              method: "PATCH",
-              body: JSON.stringify({
-                status: newStatus,
-                glassesRemaining: newGlassesRemaining,
-                ...(newStatus === "consumed" ? { locationId: null } : {}),
-              }),
-            });
+              totalGlassesToDeduct -= glassesFromThis;
+              currentGlassesInActiveBottle = remainingInThis;
+              if (isNowConsumed) {
+                activeOpenBottleId = null;
+              }
+            } else if (availableUnopenedIds.length > 0) {
+              const nextBottleId = availableUnopenedIds.shift()!;
+              const glassesFromThis = Math.min(totalGlassesToDeduct, 6);
+              const remainingInThis = 6 - glassesFromThis;
+              const isNowConsumed = remainingInThis === 0;
+
+              await apiFetch(`/bottles/${nextBottleId}`, {
+                method: "PATCH",
+                body: JSON.stringify({
+                  status: isNowConsumed ? "consumed" : "open",
+                  glassesRemaining: remainingInThis,
+                  ...(isNowConsumed ? { locationId: null } : {}),
+                }),
+              });
+
+              totalGlassesToDeduct -= glassesFromThis;
+              activeOpenBottleId = isNowConsumed ? null : nextBottleId;
+              currentGlassesInActiveBottle = remainingInThis;
+            } else {
+              break;
+            }
           }
         }
 
@@ -672,7 +736,11 @@ export default function StoreStaffPOSTerminal() {
             {currentOrder.map((item, idx) => {
               const typeTheme = getWineTypeTheme(item.wine.wineType);
               const portionTag =
-                item.portion === "glass" ? "1 Glass (1/6)" : item.portion === "carafe" ? "1 Carafe (2/6)" : "1 Bottle";
+                item.portion === "glass"
+                  ? "1 Glass (1/6 btl)"
+                  : item.portion === "carafe"
+                    ? "1 Carafe (2 gls · 2/6 btl)"
+                    : "1 Full Bottle";
 
               return (
                 <View key={`${item.wine.id}-${item.portion}-${idx}`} style={styles.orderItemCard}>
@@ -723,22 +791,28 @@ export default function StoreStaffPOSTerminal() {
       <View style={styles.orderFooter}>
         {/* Count Breakdown Table */}
         <View style={styles.countSummaryCard}>
-          <View style={styles.calcRow}>
-            <Text style={styles.calcLabel}>Glasses to Pour</Text>
-            <Text style={styles.calcValue}>{orderSummary.glassesCount} gls</Text>
-          </View>
+          {orderSummary.glassesCount > 0 && (
+            <View style={styles.calcRow}>
+              <Text style={styles.calcLabel}>Glasses to Pour</Text>
+              <Text style={styles.calcValue}>{orderSummary.glassesCount} gls</Text>
+            </View>
+          )}
 
           {orderSummary.carafesCount > 0 && (
             <View style={styles.calcRow}>
               <Text style={styles.calcLabel}>Carafes to Pour</Text>
-              <Text style={styles.calcValue}>{orderSummary.carafesCount} carafes</Text>
+              <Text style={styles.calcValue}>
+                {orderSummary.carafesCount} carafe{orderSummary.carafesCount !== 1 ? "s" : ""} ({orderSummary.carafesCount * 2} gls)
+              </Text>
             </View>
           )}
 
-          <View style={styles.calcRow}>
-            <Text style={styles.calcLabel}>Full Bottles</Text>
-            <Text style={styles.calcValue}>{orderSummary.bottlesCount} btls</Text>
-          </View>
+          {orderSummary.bottlesCount > 0 && (
+            <View style={styles.calcRow}>
+              <Text style={styles.calcLabel}>Full Bottles</Text>
+              <Text style={styles.calcValue}>{orderSummary.bottlesCount} btls</Text>
+            </View>
+          )}
 
           <View style={styles.calcDivider} />
 
@@ -872,7 +946,18 @@ export default function StoreStaffPOSTerminal() {
                 ]}
                 activeOpacity={0.85}
               >
-                <Text style={styles.portionSegmentIcon}>🍷</Text>
+                <View
+                  style={[
+                    styles.portionSegmentIconBox,
+                    salesTypeMode === "glass" && styles.portionSegmentIconBoxActive,
+                  ]}
+                >
+                  <MaterialCommunityIcons
+                    name="glass-wine"
+                    size={20}
+                    color={salesTypeMode === "glass" ? "#ffffff" : MAROON.primary}
+                  />
+                </View>
                 <View style={{ flex: 1 }}>
                   <Text
                     style={[
@@ -893,34 +978,6 @@ export default function StoreStaffPOSTerminal() {
                 </View>
               </TouchableOpacity>
 
-              <TouchableOpacity
-                onPress={() => setSalesTypeMode("bottle")}
-                style={[
-                  styles.portionSegmentBtn,
-                  salesTypeMode === "bottle" && styles.portionSegmentBtnActive,
-                ]}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.portionSegmentIcon}>🍾</Text>
-                <View style={{ flex: 1 }}>
-                  <Text
-                    style={[
-                      styles.portionSegmentTitle,
-                      salesTypeMode === "bottle" && styles.portionSegmentTitleActive,
-                    ]}
-                  >
-                    Full Bottle
-                  </Text>
-                  <Text
-                    style={[
-                      styles.portionSegmentSub,
-                      salesTypeMode === "bottle" && styles.portionSegmentSubActive,
-                    ]}
-                  >
-                    Cellar Stock
-                  </Text>
-                </View>
-              </TouchableOpacity>
 
               <TouchableOpacity
                 onPress={() => setSalesTypeMode("carafe")}
@@ -930,7 +987,18 @@ export default function StoreStaffPOSTerminal() {
                 ]}
                 activeOpacity={0.85}
               >
-                <Text style={styles.portionSegmentIcon}>🫗</Text>
+                <View
+                  style={[
+                    styles.portionSegmentIconBox,
+                    salesTypeMode === "carafe" && styles.portionSegmentIconBoxActive,
+                  ]}
+                >
+                  <MaterialCommunityIcons
+                    name="cup-water"
+                    size={20}
+                    color={salesTypeMode === "carafe" ? "#ffffff" : MAROON.primary}
+                  />
+                </View>
                 <View style={{ flex: 1 }}>
                   <Text
                     style={[
@@ -947,6 +1015,47 @@ export default function StoreStaffPOSTerminal() {
                     ]}
                   >
                     2/6 Decanter
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
+
+              <TouchableOpacity
+                onPress={() => setSalesTypeMode("bottle")}
+                style={[
+                  styles.portionSegmentBtn,
+                  salesTypeMode === "bottle" && styles.portionSegmentBtnActive,
+                ]}
+                activeOpacity={0.85}
+              >
+                <View
+                  style={[
+                    styles.portionSegmentIconBox,
+                    salesTypeMode === "bottle" && styles.portionSegmentIconBoxActive,
+                  ]}
+                >
+                  <MaterialCommunityIcons
+                    name="bottle-wine"
+                    size={20}
+                    color={salesTypeMode === "bottle" ? "#ffffff" : MAROON.primary}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text
+                    style={[
+                      styles.portionSegmentTitle,
+                      salesTypeMode === "bottle" && styles.portionSegmentTitleActive,
+                    ]}
+                  >
+                    Full Bottle
+                  </Text>
+                  <Text
+                    style={[
+                      styles.portionSegmentSub,
+                      salesTypeMode === "bottle" && styles.portionSegmentSubActive,
+                    ]}
+                  >
+                    Cellar Stock
                   </Text>
                 </View>
               </TouchableOpacity>
@@ -1122,17 +1231,11 @@ export default function StoreStaffPOSTerminal() {
                         </Text>
                       </View>
 
-                      {hasOpen && salesTypeMode === "glass" ? (
-                        <View style={styles.openBottlePill}>
-                          <Text style={styles.openBottlePillText}>
-                            🍾 {openGlasses}/6 gls
-                          </Text>
-                        </View>
-                      ) : item.vintage ? (
-                        <View style={styles.vintageTag}>
-                          <Text style={styles.vintageTagText}>{item.vintage}</Text>
-                        </View>
-                      ) : null}
+
+                      <View style={styles.vintageTag}>
+                        <Text style={styles.vintageTagText}>{item.vintage}</Text>
+                      </View>
+
                     </View>
 
                     {/* Card Content */}
@@ -1151,49 +1254,137 @@ export default function StoreStaffPOSTerminal() {
                         {salesTypeMode === "glass" ? (
                           hasOpen ? (
                             <View>
-                              <Text style={[styles.stockHighlightText, { color: MAROON.primary }]}>
-                                {openGlasses} gls left
-                              </Text>
-                              <Text style={styles.stockSubText}>
-                                {item.stockCount} btls in cellar
-                              </Text>
+                              <View style={styles.glassMeterContainer}>
+                                <View style={styles.glassMeterIcons}>
+                                  {[1, 2, 3, 4, 5, 6].map((glassIdx) => {
+                                    const isAvailable = glassIdx <= openGlasses;
+                                    return (
+                                      <MaterialCommunityIcons
+                                        key={glassIdx}
+                                        name="glass-wine"
+                                        size={12}
+                                        color={isAvailable ? MAROON.primary : "#cbd5e1"}
+                                        style={!isAvailable && { opacity: 0.35 }}
+                                      />
+                                    );
+                                  })}
+                                </View>
+                                <Text style={[styles.stockHighlightText, { color: MAROON.primary, fontSize: 11 }]}>
+                                  {openGlasses}/6
+                                </Text>
+                              </View>
+                              <View style={styles.stockSubIconRow}>
+                                <MaterialCommunityIcons name="bottle-wine-outline" size={12} color="#94a3b8" />
+                                <Text style={styles.stockSubText}>
+                                  {item.stockCount} in cellar
+                                </Text>
+                              </View>
                             </View>
                           ) : (
                             <View>
-                              <Text style={[styles.stockHighlightText, { color: isLow ? MAROON.accentGold : "#18181b" }]}>
-                                {item.stockCount} btls
-                              </Text>
-                              <Text style={styles.stockSubText}>
-                                6 glasses / bottle
-                              </Text>
+                              <View style={styles.stockIconRow}>
+                                <MaterialCommunityIcons
+                                  name="bottle-wine"
+                                  size={14}
+                                  color={isLow ? MAROON.accentGold : "#18181b"}
+                                />
+                                <Text style={[styles.stockHighlightText, { color: isLow ? MAROON.accentGold : "#18181b" }]}>
+                                  {item.stockCount} btls
+                                </Text>
+                              </View>
+                              <View style={styles.stockSubIconRow}>
+                                <MaterialCommunityIcons name="glass-wine" size={11} color="#94a3b8" />
+                                <Text style={styles.stockSubText}>
+                                  6 gls / bottle
+                                </Text>
+                              </View>
                             </View>
                           )
                         ) : salesTypeMode === "carafe" ? (
-                          <View>
-                            <Text style={[styles.stockHighlightText, { color: isLow ? MAROON.accentGold : "#18181b" }]}>
-                              {item.stockCount} btls
-                            </Text>
-                            <Text style={styles.stockSubText}>
-                              3 carafes / bottle
-                            </Text>
-                          </View>
+                          hasOpen ? (
+                            <View>
+                              <View style={styles.glassMeterContainer}>
+                                <View style={styles.glassMeterIcons}>
+                                  {[1, 2, 3, 4, 5, 6].map((glassIdx) => {
+                                    const isAvailable = glassIdx <= openGlasses;
+                                    return (
+                                      <MaterialCommunityIcons
+                                        key={glassIdx}
+                                        name="glass-wine"
+                                        size={12}
+                                        color={isAvailable ? MAROON.primary : "#cbd5e1"}
+                                        style={!isAvailable && { opacity: 0.35 }}
+                                      />
+                                    );
+                                  })}
+                                </View>
+                                <Text style={[styles.stockHighlightText, { color: MAROON.primary, fontSize: 11 }]}>
+                                  {openGlasses}/6 gls
+                                </Text>
+                              </View>
+                              <View style={styles.stockSubIconRow}>
+                                <MaterialCommunityIcons name="bottle-wine-outline" size={12} color="#94a3b8" />
+                                <Text style={styles.stockSubText}>
+                                  {item.stockCount} in cellar
+                                </Text>
+                              </View>
+                            </View>
+                          ) : (
+                            <View>
+                              <View style={styles.stockIconRow}>
+                                <MaterialCommunityIcons
+                                  name="bottle-wine"
+                                  size={14}
+                                  color={isLow ? MAROON.accentGold : "#18181b"}
+                                />
+                                <Text style={[styles.stockHighlightText, { color: isLow ? MAROON.accentGold : "#18181b" }]}>
+                                  {item.stockCount} btls
+                                </Text>
+                              </View>
+                              <View style={styles.stockSubIconRow}>
+                                <MaterialCommunityIcons name="cup-water" size={11} color="#94a3b8" />
+                                <Text style={styles.stockSubText}>
+                                  3 carafes (6 gls) / btl
+                                </Text>
+                              </View>
+                            </View>
+                          )
                         ) : (
                           <View>
-                            <Text style={[styles.stockHighlightText, { color: isLow ? MAROON.accentGold : "#18181b" }]}>
-                              {item.stockCount} btls
-                            </Text>
-                            <Text style={styles.stockSubText}>
-                              {isLow ? "⚠️ Low stock" : "available"}
-                            </Text>
+                            <View style={styles.stockIconRow}>
+                              <MaterialCommunityIcons
+                                name="bottle-wine"
+                                size={14}
+                                color={isLow ? MAROON.accentGold : "#18181b"}
+                              />
+                              <Text style={[styles.stockHighlightText, { color: isLow ? MAROON.accentGold : "#18181b" }]}>
+                                {item.stockCount} btls
+                              </Text>
+                            </View>
+                            <View style={styles.stockSubIconRow}>
+                              {isLow ? (
+                                <>
+                                  <AlertCircle size={10} color={MAROON.accentGold} />
+                                  <Text style={[styles.stockSubText, { color: MAROON.accentGold, fontWeight: "700" }]}>
+                                    Low stock
+                                  </Text>
+                                </>
+                              ) : (
+                                <>
+                                  <MaterialCommunityIcons name="archive-outline" size={11} color="#94a3b8" />
+                                  <Text style={styles.stockSubText}>
+                                    available
+                                  </Text>
+                                </>
+                              )}
+                            </View>
                           </View>
                         )}
                       </View>
 
                       {/* Explicit Action Button with Portion Label */}
-                      <View
-                        style={styles.cardActionBtn}
-                      >
-                        <Plus size={15} color="#ffffff" strokeWidth={3} />
+                      <View style={styles.cardActionBtn}>
+                        <Plus size={14} color="#ffffff" strokeWidth={3} />
                         <Text style={styles.cardActionBtnText}>{portionActionLabel}</Text>
                       </View>
                     </View>
@@ -1355,7 +1546,7 @@ export default function StoreStaffPOSTerminal() {
                 activeOpacity={0.82}
               >
                 <View style={[styles.gateOptionIconBox, { backgroundColor: "#fff1f2" }]}>
-                  <Text style={styles.gateOptionEmoji}>🍷</Text>
+                  <MaterialCommunityIcons name="glass-wine" size={26} color={MAROON.primary} />
                 </View>
                 <View style={styles.gateOptionBody}>
                   <Text style={styles.gateOptionTitle}>By the Glass</Text>
@@ -1373,7 +1564,7 @@ export default function StoreStaffPOSTerminal() {
                 activeOpacity={0.82}
               >
                 <View style={[styles.gateOptionIconBox, { backgroundColor: "#fef3c7" }]}>
-                  <Text style={styles.gateOptionEmoji}>🫗</Text>
+                  <MaterialCommunityIcons name="cup-water" size={26} color="#b45309" />
                 </View>
                 <View style={styles.gateOptionBody}>
                   <Text style={styles.gateOptionTitle}>Carafe</Text>
@@ -1391,7 +1582,7 @@ export default function StoreStaffPOSTerminal() {
                 activeOpacity={0.82}
               >
                 <View style={[styles.gateOptionIconBox, { backgroundColor: "#f0fdf4" }]}>
-                  <Text style={styles.gateOptionEmoji}>🍾</Text>
+                  <MaterialCommunityIcons name="bottle-wine" size={26} color="#16a34a" />
                 </View>
                 <View style={styles.gateOptionBody}>
                   <Text style={styles.gateOptionTitle}>Full Bottle</Text>
@@ -1592,8 +1783,17 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 6,
   },
-  portionSegmentIcon: {
-    fontSize: 22,
+  portionSegmentIconBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: MAROON.ultraLight,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 6,
+  },
+  portionSegmentIconBoxActive: {
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
   },
   portionSegmentTitle: {
     fontSize: 13,
@@ -1792,6 +1992,7 @@ const styles = StyleSheet.create({
   },
   cardProducer: {
     fontSize: 11,
+    textTransform: "uppercase",
     fontWeight: "600",
     color: "#71717a",
     marginTop: 2,
@@ -1804,6 +2005,27 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: "#f8fafc",
   },
+  glassMeterContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  glassMeterIcons: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 1.5,
+  },
+  stockIconRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  stockSubIconRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 2,
+  },
   stockHighlightText: {
     fontSize: 13,
     fontWeight: "900",
@@ -1812,7 +2034,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "600",
     color: "#94a3b8",
-    marginTop: 1,
   },
   cardActionBtn: {
     flexDirection: "row",
@@ -2421,9 +2642,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
-  },
-  gateOptionEmoji: {
-    fontSize: 26,
   },
   gateOptionBody: {
     flex: 1,
