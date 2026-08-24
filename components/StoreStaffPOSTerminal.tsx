@@ -987,12 +987,12 @@ export default function StoreStaffPOSTerminal() {
             style={{ marginHorizontal: -16, marginBottom: 10, height: 44, flexGrow: 0, flexShrink: 0 }}
           >
             {([
-              { key: "all", label: "All Wines", emoji: "🍷", activeBg: MAROON.primary, activeText: "#ffffff", activeBorder: MAROON.primary },
-              { key: "Red Wine", label: "Red", emoji: "🍷", activeBg: "#4c0519", activeText: "#ffffff", activeBorder: "#9f1239" },
-              { key: "White Wine", label: "White", emoji: "🥂", activeBg: "#b45309", activeText: "#ffffff", activeBorder: "#d97706" },
-              { key: "Sparkling", label: "Sparkling", emoji: "🍾", activeBg: "#a16207", activeText: "#ffffff", activeBorder: "#ca8a04" },
-              { key: "Rosé", label: "Rosé", emoji: "🌸", activeBg: "#be123c", activeText: "#ffffff", activeBorder: "#f43f5e" },
-              { key: "Dessert & Fortified", label: "Dessert", emoji: "✨", activeBg: "#7e22ce", activeText: "#ffffff", activeBorder: "#a855f7" },
+              { key: "all", label: "All Wines", activeBg: MAROON.primary, activeText: "#ffffff", activeBorder: MAROON.primary },
+              { key: "Red Wine", label: "Red", activeBg: "#4c0519", activeText: "#ffffff", activeBorder: "#9f1239" },
+              { key: "White Wine", label: "White", activeBg: "#b45309", activeText: "#ffffff", activeBorder: "#d97706" },
+              { key: "Sparkling", label: "Sparkling", activeBg: "#a16207", activeText: "#ffffff", activeBorder: "#ca8a04" },
+              { key: "Rosé", label: "Rosé", activeBg: "#be123c", activeText: "#ffffff", activeBorder: "#f43f5e" },
+              { key: "Dessert & Fortified", label: "Dessert", activeBg: "#7e22ce", activeText: "#ffffff", activeBorder: "#a855f7" },
             ] as const).map((pill) => {
               const count = wineTypeCounts[pill.key] ?? 0;
               if (pill.key !== "all" && count === 0) return null;
@@ -1009,7 +1009,6 @@ export default function StoreStaffPOSTerminal() {
                   ]}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.categoryPillEmoji}>{pill.emoji}</Text>
                   <Text
                     style={[
                       styles.categoryPillText,
@@ -1018,21 +1017,14 @@ export default function StoreStaffPOSTerminal() {
                   >
                     {pill.label}
                   </Text>
-                  <View
+                  <Text
                     style={[
-                      styles.categoryPillBadge,
-                      { backgroundColor: isActive ? "rgba(255,255,255,0.25)" : MAROON.ultraLight },
+                      styles.categoryPillBadgeText,
+                      { color: isActive ? pill.activeText : "#71717a" },
                     ]}
                   >
-                    <Text
-                      style={[
-                        styles.categoryPillBadgeText,
-                        { color: isActive ? "#ffffff" : MAROON.primary },
-                      ]}
-                    >
-                      {count}
-                    </Text>
-                  </View>
+                    {count}
+                  </Text>
                 </TouchableOpacity>
               );
             })}
@@ -1100,20 +1092,12 @@ export default function StoreStaffPOSTerminal() {
                     {/* Top Visual Box */}
                     <View style={[styles.cardVisualBox, { backgroundColor: typeTheme.bg }]}>
                       {/* Open Bottle Pill */}
-                      {hasOpen && salesTypeMode === "glass" ? (
-                        <View style={styles.openBottleGlowPill}>
-                          <Text style={styles.openBottleGlowText}>
-                            🍾 {openGlasses}/6 gls open
-                          </Text>
-                        </View>
-                      ) : (
-                        <View style={[styles.wineTypeBadge, { backgroundColor: "#ffffff" }]}>
-                          <Text style={[styles.wineTypeBadgeText, { color: typeTheme.accent }]}>
-                            {typeTheme.tag}
-                          </Text>
-                        </View>
-                      )}
 
+                      <View style={[styles.wineTypeBadge, { backgroundColor: "#ffffff" }]}>
+                        <Text style={[styles.wineTypeBadgeText, { color: typeTheme.accent }]}>
+                          {typeTheme.tag}
+                        </Text>
+                      </View>
                       {/* Vintage Badge */}
                       {item.vintage ? (
                         <View style={styles.vintagePill}>
@@ -1688,9 +1672,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
     borderColor: "#e2e8f0",
   },
-  categoryPillEmoji: {
-    fontSize: 13,
-  },
   categoryPillText: {
     fontSize: 12,
     fontWeight: "700",
@@ -1699,14 +1680,6 @@ const styles = StyleSheet.create({
   categoryPillTextActive: {
     color: "#ffffff",
     fontWeight: "900",
-  },
-  categoryPillBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 10,
-    minWidth: 20,
-    alignItems: "center",
-    justifyContent: "center",
   },
   categoryPillBadgeText: {
     fontSize: 10,
