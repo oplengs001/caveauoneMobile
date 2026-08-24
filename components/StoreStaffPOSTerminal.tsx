@@ -126,7 +126,6 @@ export default function StoreStaffPOSTerminal() {
   // Primary Filters: Sales Type First + Wine Type Grouping
   const [salesTypeMode, setSalesTypeMode] = useState<PortionType>("glass");
   const [wineTypeFilter, setWineTypeFilter] = useState<string>("all");
-  const [isStaffPickerOpen, setIsStaffPickerOpen] = useState(false);
 
   // Portion-picker gate modal — shown on every fresh mount
   const [showPortionModal, setShowPortionModal] = useState(true);
@@ -584,7 +583,16 @@ export default function StoreStaffPOSTerminal() {
 
   // Render Current Service / Dispense Queue Sidebar / Drawer
   const renderCurrentOrderPanel = () => (
-    <View style={[styles.orderPanel, { backgroundColor: "#ffffff" }]}>
+    <View
+      style={[
+        styles.orderPanel,
+        {
+          backgroundColor: "#ffffff",
+          width: isTabletLandscape ? 360 : "100%",
+          borderLeftWidth: isTabletLandscape ? 1 : 0,
+        },
+      ]}
+    >
       {/* Order Panel Header */}
       <View style={styles.orderPanelHeader}>
         <View>
@@ -593,52 +601,61 @@ export default function StoreStaffPOSTerminal() {
             {orderSummary.totalItems} item{orderSummary.totalItems !== 1 ? "s" : ""} to dispense
           </Text>
         </View>
-
-        {/* Staff Attribution Pill */}
-        <TouchableOpacity
-          onPress={() => setIsStaffPickerOpen(!isStaffPickerOpen)}
-          style={styles.staffHeaderChip}
-        >
-          <View style={styles.staffAvatarCircle}>
-            <Text style={styles.staffAvatarInitial}>
-              {(selectedStaff?.displayName || profile?.email || "S")[0].toUpperCase()}
-            </Text>
-          </View>
-          <Text style={styles.staffHeaderName} numberOfLines={1}>
-            {selectedStaff?.displayName || profile?.email?.split("@")[0] || "Staff"}
-          </Text>
-          <ChevronDown size={14} color="#64748b" />
-        </TouchableOpacity>
       </View>
 
-      {/* Staff Picker Dropdown */}
-      {isStaffPickerOpen && (
-        <View style={styles.staffDropdownMenu}>
-          {staffList.map((st) => (
-            <TouchableOpacity
-              key={st.id}
-              onPress={() => {
-                setSelectedStaff(st);
-                setIsStaffPickerOpen(false);
-              }}
-              style={[
-                styles.staffDropdownOption,
-                selectedStaff?.id === st.id && { backgroundColor: MAROON.ultraLight },
-              ]}
-            >
-              <Text
+      {/* Staff Selector - Display All Pill Buttons (Non-scrollable) */}
+      <View style={styles.staffSection}>
+        <Text style={styles.staffSectionLabel}>SERVED BY</Text>
+        <View style={styles.staffPillsWrap}>
+          {(staffList.length > 0 ? staffList : selectedStaff ? [selectedStaff] : []).map((st) => {
+            const isSelected = selectedStaff?.id === st.id;
+            const name = st.displayName || st.email?.split("@")[0] || "Staff";
+            const initial = name[0].toUpperCase();
+
+            return (
+              <TouchableOpacity
+                key={st.id}
+                onPress={() => setSelectedStaff(st)}
                 style={[
-                  styles.staffDropdownOptionText,
-                  selectedStaff?.id === st.id && { fontWeight: "900", color: MAROON.primary },
+                  styles.staffPillBtn,
+                  isSelected ? styles.staffPillBtnActive : styles.staffPillBtnInactive,
                 ]}
+                activeOpacity={0.8}
               >
-                {st.displayName || st.email?.split("@")[0] || "Staff"}
-              </Text>
-              {selectedStaff?.id === st.id && <Check size={14} color={MAROON.primary} />}
-            </TouchableOpacity>
-          ))}
+                <View
+                  style={[
+                    styles.staffPillAvatar,
+                    isSelected ? styles.staffPillAvatarActive : styles.staffPillAvatarInactive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.staffPillAvatarText,
+                      isSelected ? styles.staffPillAvatarTextActive : styles.staffPillAvatarTextInactive,
+                    ]}
+                  >
+                    {initial}
+                  </Text>
+                </View>
+                <Text
+                  style={[
+                    styles.staffPillText,
+                    isSelected ? styles.staffPillTextActive : styles.staffPillTextInactive,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {name}
+                </Text>
+                {isSelected && (
+                  <View style={styles.staffPillCheckCircle}>
+                    <Check size={11} color={MAROON.primary} strokeWidth={3.5} />
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          })}
         </View>
-      )}
+      </View>
 
       {/* Service Items List */}
       <ScrollView style={styles.orderItemsList} showsVerticalScrollIndicator={false}>
@@ -984,7 +1001,7 @@ export default function StoreStaffPOSTerminal() {
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.categoryPillsScroll}
-            style={{ marginHorizontal: -16, marginBottom: 10, height: 44, flexGrow: 0, flexShrink: 0 }}
+            style={{ marginHorizontal: -16, marginBottom: 10, flexGrow: 0, flexShrink: 0 }}
           >
             {([
               { key: "all", label: "All Wines", activeBg: MAROON.primary, activeText: "#ffffff", activeBorder: MAROON.primary },
@@ -1088,7 +1105,11 @@ export default function StoreStaffPOSTerminal() {
                 const cardSize = Math.floor((width - dockW - panelW - catalogPad - totalGap) / cols);
 
                 return (
-                  <View style={[styles.oversizedCard, { width: cardSize }]}>
+                  <TouchableOpacity
+                    onPress={() => addToOrder(item)}
+                    activeOpacity={0.85}
+                    style={[styles.oversizedCard, { width: cardSize }]}
+                  >
                     {/* Top Visual Box */}
                     <View style={[styles.cardVisualBox, { backgroundColor: typeTheme.bg }]}>
                       {/* Open Bottle Pill */}
@@ -1161,16 +1182,14 @@ export default function StoreStaffPOSTerminal() {
                       </View>
 
                       {/* Explicit Action Button with Portion Label */}
-                      <TouchableOpacity
-                        onPress={() => addToOrder(item)}
+                      <View
                         style={styles.cardActionBtn}
-                        activeOpacity={0.8}
                       >
                         <Plus size={15} color="#ffffff" strokeWidth={3} />
                         <Text style={styles.cardActionBtnText}>{portionActionLabel}</Text>
-                      </TouchableOpacity>
+                      </View>
                     </View>
-                  </View>
+                  </TouchableOpacity>
                 );
               }}
             />
@@ -1646,7 +1665,7 @@ const styles = StyleSheet.create({
   // Category Pills
   categoryPillsScroll: {
     gap: 8,
-    paddingBottom: 2,
+    paddingVertical: 3,
     paddingHorizontal: 16,
     alignItems: "center",
   },
@@ -1828,61 +1847,95 @@ const styles = StyleSheet.create({
     color: "#71717a",
     marginTop: 1,
   },
-  staffHeaderChip: {
+  // Staff Selector Pills
+  staffSection: {
+    marginBottom: 8,
+  },
+  staffSectionLabel: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: MAROON.medium,
+    letterSpacing: 0.8,
+    marginBottom: 6,
+  },
+  staffPillsWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    width: "100%",
+  },
+  staffPillBtn: {
+    flex: 1,
+    minWidth: "47%",
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: MAROON.ultraLight,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 20,
-    gap: 6,
-    maxWidth: 150,
-    borderWidth: 1,
-    borderColor: MAROON.border,
+    justifyContent: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    gap: 8,
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
   },
-  staffAvatarCircle: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+  staffPillBtnActive: {
     backgroundColor: MAROON.primary,
+    borderColor: MAROON.primary,
+    elevation: 3,
+    shadowColor: MAROON.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+  },
+  staffPillBtnInactive: {
+    backgroundColor: "#ffffff",
+    borderColor: "#e2e8f0",
+  },
+  staffPillAvatar: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
   },
-  staffAvatarInitial: {
+  staffPillAvatarActive: {
+    backgroundColor: "#ffffff",
+  },
+  staffPillAvatarInactive: {
+    backgroundColor: MAROON.ultraLight,
+  },
+  staffPillAvatarText: {
     fontSize: 11,
     fontWeight: "900",
-    color: "#ffffff",
   },
-  staffHeaderName: {
-    fontSize: 12,
-    fontWeight: "700",
+  staffPillAvatarTextActive: {
     color: MAROON.primary,
   },
-  staffDropdownMenu: {
-    backgroundColor: "#ffffff",
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: MAROON.border,
-    padding: 6,
-    marginBottom: 10,
-    elevation: 4,
-    shadowColor: MAROON.primary,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
+  staffPillAvatarTextInactive: {
+    color: MAROON.primary,
   },
-  staffDropdownOption: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+  staffPillText: {
+    fontSize: 13,
+    fontWeight: "700",
+    flexShrink: 1,
+  },
+  staffPillTextActive: {
+    color: "#ffffff",
+    fontWeight: "900",
+  },
+  staffPillTextInactive: {
+    color: "#3f3f46",
+  },
+  staffPillCheckCircle: {
+    width: 16,
+    height: 16,
     borderRadius: 8,
-  },
-  staffDropdownOptionText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#52525b",
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
   },
   orderItemsList: {
     flex: 1,
