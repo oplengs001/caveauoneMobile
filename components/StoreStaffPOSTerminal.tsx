@@ -1108,21 +1108,29 @@ export default function StoreStaffPOSTerminal() {
                   <TouchableOpacity
                     onPress={() => addToOrder(item)}
                     activeOpacity={0.85}
-                    style={[styles.oversizedCard, { width: cardSize }]}
+                    style={[
+                      styles.oversizedCard,
+                      { width: cardSize, borderLeftColor: typeTheme.color },
+                    ]}
                   >
-                    {/* Top Visual Box */}
-                    <View style={[styles.cardVisualBox, { backgroundColor: typeTheme.bg }]}>
-                      {/* Open Bottle Pill */}
-
-                      <View style={[styles.wineTypeBadge, { backgroundColor: "#ffffff" }]}>
-                        <Text style={[styles.wineTypeBadgeText, { color: typeTheme.accent }]}>
+                    {/* Top Tag Header Row */}
+                    <View style={styles.cardHeaderRow}>
+                      <View style={[styles.wineTypePill, { backgroundColor: typeTheme.bg, borderColor: typeTheme.accent }]}>
+                        <View style={[styles.wineTypeDot, { backgroundColor: typeTheme.color }]} />
+                        <Text style={[styles.wineTypePillText, { color: typeTheme.accent }]}>
                           {typeTheme.tag}
                         </Text>
                       </View>
-                      {/* Vintage Badge */}
-                      {item.vintage ? (
-                        <View style={styles.vintagePill}>
-                          <Text style={styles.vintagePillText}>{item.vintage}</Text>
+
+                      {hasOpen && salesTypeMode === "glass" ? (
+                        <View style={styles.openBottlePill}>
+                          <Text style={styles.openBottlePillText}>
+                            🍾 {openGlasses}/6 gls
+                          </Text>
+                        </View>
+                      ) : item.vintage ? (
+                        <View style={styles.vintageTag}>
+                          <Text style={styles.vintageTagText}>{item.vintage}</Text>
                         </View>
                       ) : null}
                     </View>
@@ -1721,62 +1729,66 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     borderWidth: 1,
     borderColor: "#e2e8f0",
+    borderLeftWidth: 4,
+    justifyContent: "space-between",
   },
-  cardVisualBox: {
-    height: 90,
-    borderRadius: 10,
-    position: "relative",
-    marginBottom: 10,
+  cardHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
   },
-  openBottleGlowPill: {
-    position: "absolute",
-    top: 6,
-    left: 6,
-    backgroundColor: MAROON.primary,
+  wineTypePill: {
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: 7,
     paddingVertical: 3,
-    borderRadius: 6,
+    borderRadius: 7,
+    borderWidth: 1,
+    gap: 4,
   },
-  openBottleGlowText: {
-    fontSize: 9,
-    fontWeight: "900",
-    color: "#ffffff",
+  wineTypeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
-  wineTypeBadge: {
-    position: "absolute",
-    top: 6,
-    left: 6,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  wineTypeBadgeText: {
+  wineTypePillText: {
     fontSize: 9,
     fontWeight: "900",
     letterSpacing: 0.5,
   },
-  vintagePill: {
-    position: "absolute",
-    bottom: 6,
-    right: 6,
-    backgroundColor: "rgba(0,0,0,0.6)",
+  openBottlePill: {
+    backgroundColor: MAROON.ultraLight,
+    borderColor: MAROON.border,
+    borderWidth: 1,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 7,
+  },
+  openBottlePillText: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: MAROON.primary,
+  },
+  vintageTag: {
+    backgroundColor: "#f1f5f9",
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 5,
   },
-  vintagePillText: {
+  vintageTagText: {
     fontSize: 9,
     fontWeight: "800",
-    color: "#ffffff",
+    color: "#64748b",
   },
   cardInfo: {
     marginBottom: 8,
   },
   cardTitle: {
-    fontSize: 14,
-    fontWeight: "900",
+    fontSize: 13,
+    fontWeight: "800",
     color: "#18181b",
-    lineHeight: 18,
+    lineHeight: 17,
   },
   cardProducer: {
     fontSize: 11,
@@ -1788,10 +1800,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingTop: 4,
+    paddingTop: 6,
+    borderTopWidth: 1,
+    borderTopColor: "#f8fafc",
   },
   stockHighlightText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "900",
   },
   stockSubText: {
@@ -1804,15 +1818,15 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: MAROON.primary,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 14,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    borderRadius: 12,
     gap: 3,
     elevation: 2,
     shadowColor: MAROON.primary,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
   },
   cardActionBtnText: {
     fontSize: 11,
