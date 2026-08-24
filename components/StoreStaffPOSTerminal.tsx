@@ -954,7 +954,7 @@ export default function StoreStaffPOSTerminal() {
                 >
                   <MaterialCommunityIcons
                     name="glass-wine"
-                    size={20}
+                    size={26}
                     color={salesTypeMode === "glass" ? "#ffffff" : MAROON.primary}
                   />
                 </View>
@@ -995,7 +995,7 @@ export default function StoreStaffPOSTerminal() {
                 >
                   <MaterialCommunityIcons
                     name="cup-water"
-                    size={20}
+                    size={26}
                     color={salesTypeMode === "carafe" ? "#ffffff" : MAROON.primary}
                   />
                 </View>
@@ -1036,7 +1036,7 @@ export default function StoreStaffPOSTerminal() {
                 >
                   <MaterialCommunityIcons
                     name="bottle-wine"
-                    size={20}
+                    size={26}
                     color={salesTypeMode === "bottle" ? "#ffffff" : MAROON.primary}
                   />
                 </View>
@@ -1060,18 +1060,6 @@ export default function StoreStaffPOSTerminal() {
                 </View>
               </TouchableOpacity>
             </View>
-          </View>
-
-          {/* Active Mode Explanation Strip */}
-          <View style={styles.activeModeStrip}>
-            <Info size={14} color={MAROON.primary} />
-            <Text style={styles.activeModeStripText}>
-              {salesTypeMode === "glass"
-                ? "Glass Pour Mode Active: Tapping '+ Glass' pours 1/6 btl (open bottles prioritized first)."
-                : salesTypeMode === "carafe"
-                  ? "Carafe Mode Active: Tapping '+ Carafe' pours 2/6 btl into a serving decanter."
-                  : "Full Bottle Mode Active: Tapping '+ Bottle' dispenses 1 sealed bottle from cellar inventory."}
-            </Text>
           </View>
 
           {/* Search & Filter Bar */}
@@ -1193,18 +1181,8 @@ export default function StoreStaffPOSTerminal() {
               }
               renderItem={({ item }) => {
                 const typeTheme = getWineTypeTheme(item.wineType);
-                const hasOpen = Boolean(item.openBottle);
-                const openGlasses = item.openBottle?.glassesRemaining ?? 0;
-                const isLow = item.stockCount <= 3;
 
-                const portionActionLabel =
-                  salesTypeMode === "glass"
-                    ? "Glass"
-                    : salesTypeMode === "carafe"
-                      ? "Carafe"
-                      : "Bottle";
-
-                // Fixed square card size
+                // Responsive card width calculation
                 const cols = isTabletLandscape ? 3 : 2;
                 const catalogPad = 32; // 16px each side
                 const dockW = isTabletLandscape ? 68 : 0;
@@ -1212,6 +1190,9 @@ export default function StoreStaffPOSTerminal() {
                 const cardGap = 10;
                 const totalGap = cardGap * (cols + 1);
                 const cardSize = Math.floor((width - dockW - panelW - catalogPad - totalGap) / cols);
+
+                const vintagePrefix = item.vintage ? `${item.vintage} ` : "";
+                const fullWineTitle = `${vintagePrefix}${item.name}`;
 
                 return (
                   <TouchableOpacity
@@ -1230,163 +1211,16 @@ export default function StoreStaffPOSTerminal() {
                           {typeTheme.tag}
                         </Text>
                       </View>
-
-
-                      <View style={styles.vintageTag}>
-                        <Text style={styles.vintageTagText}>{item.vintage}</Text>
-                      </View>
-
                     </View>
 
-                    {/* Card Content */}
+                    {/* Card Content: Producer in ALL CAPS, Vintage then Wine Name */}
                     <View style={styles.cardInfo}>
-                      <Text style={styles.cardTitle} numberOfLines={2}>
-                        {item.name}
-                      </Text>
                       <Text style={styles.cardProducer} numberOfLines={1}>
-                        {item.producer || "Boutique Selection"} · {item.format || "75cl"}
+                        {(item.producer || "Boutique Selection").toUpperCase()}
                       </Text>
-                    </View>
-
-                    {/* Card Bottom: Stock Count Badge + Explicit Action Button */}
-                    <View style={styles.cardBottomRow}>
-                      <View style={{ flex: 1, paddingRight: 6 }}>
-                        {salesTypeMode === "glass" ? (
-                          hasOpen ? (
-                            <View>
-                              <View style={styles.glassMeterContainer}>
-                                <View style={styles.glassMeterIcons}>
-                                  {[1, 2, 3, 4, 5, 6].map((glassIdx) => {
-                                    const isAvailable = glassIdx <= openGlasses;
-                                    return (
-                                      <MaterialCommunityIcons
-                                        key={glassIdx}
-                                        name="glass-wine"
-                                        size={12}
-                                        color={isAvailable ? MAROON.primary : "#cbd5e1"}
-                                        style={!isAvailable && { opacity: 0.35 }}
-                                      />
-                                    );
-                                  })}
-                                </View>
-                                <Text style={[styles.stockHighlightText, { color: MAROON.primary, fontSize: 11 }]}>
-                                  {openGlasses}/6
-                                </Text>
-                              </View>
-                              <View style={styles.stockSubIconRow}>
-                                <MaterialCommunityIcons name="bottle-wine-outline" size={12} color="#94a3b8" />
-                                <Text style={styles.stockSubText}>
-                                  {item.stockCount} in cellar
-                                </Text>
-                              </View>
-                            </View>
-                          ) : (
-                            <View>
-                              <View style={styles.stockIconRow}>
-                                <MaterialCommunityIcons
-                                  name="bottle-wine"
-                                  size={14}
-                                  color={isLow ? MAROON.accentGold : "#18181b"}
-                                />
-                                <Text style={[styles.stockHighlightText, { color: isLow ? MAROON.accentGold : "#18181b" }]}>
-                                  {item.stockCount} btls
-                                </Text>
-                              </View>
-                              <View style={styles.stockSubIconRow}>
-                                <MaterialCommunityIcons name="glass-wine" size={11} color="#94a3b8" />
-                                <Text style={styles.stockSubText}>
-                                  6 gls / bottle
-                                </Text>
-                              </View>
-                            </View>
-                          )
-                        ) : salesTypeMode === "carafe" ? (
-                          hasOpen ? (
-                            <View>
-                              <View style={styles.glassMeterContainer}>
-                                <View style={styles.glassMeterIcons}>
-                                  {[1, 2, 3, 4, 5, 6].map((glassIdx) => {
-                                    const isAvailable = glassIdx <= openGlasses;
-                                    return (
-                                      <MaterialCommunityIcons
-                                        key={glassIdx}
-                                        name="glass-wine"
-                                        size={12}
-                                        color={isAvailable ? MAROON.primary : "#cbd5e1"}
-                                        style={!isAvailable && { opacity: 0.35 }}
-                                      />
-                                    );
-                                  })}
-                                </View>
-                                <Text style={[styles.stockHighlightText, { color: MAROON.primary, fontSize: 11 }]}>
-                                  {openGlasses}/6 gls
-                                </Text>
-                              </View>
-                              <View style={styles.stockSubIconRow}>
-                                <MaterialCommunityIcons name="bottle-wine-outline" size={12} color="#94a3b8" />
-                                <Text style={styles.stockSubText}>
-                                  {item.stockCount} in cellar
-                                </Text>
-                              </View>
-                            </View>
-                          ) : (
-                            <View>
-                              <View style={styles.stockIconRow}>
-                                <MaterialCommunityIcons
-                                  name="bottle-wine"
-                                  size={14}
-                                  color={isLow ? MAROON.accentGold : "#18181b"}
-                                />
-                                <Text style={[styles.stockHighlightText, { color: isLow ? MAROON.accentGold : "#18181b" }]}>
-                                  {item.stockCount} btls
-                                </Text>
-                              </View>
-                              <View style={styles.stockSubIconRow}>
-                                <MaterialCommunityIcons name="cup-water" size={11} color="#94a3b8" />
-                                <Text style={styles.stockSubText}>
-                                  3 carafes (6 gls) / btl
-                                </Text>
-                              </View>
-                            </View>
-                          )
-                        ) : (
-                          <View>
-                            <View style={styles.stockIconRow}>
-                              <MaterialCommunityIcons
-                                name="bottle-wine"
-                                size={14}
-                                color={isLow ? MAROON.accentGold : "#18181b"}
-                              />
-                              <Text style={[styles.stockHighlightText, { color: isLow ? MAROON.accentGold : "#18181b" }]}>
-                                {item.stockCount} btls
-                              </Text>
-                            </View>
-                            <View style={styles.stockSubIconRow}>
-                              {isLow ? (
-                                <>
-                                  <AlertCircle size={10} color={MAROON.accentGold} />
-                                  <Text style={[styles.stockSubText, { color: MAROON.accentGold, fontWeight: "700" }]}>
-                                    Low stock
-                                  </Text>
-                                </>
-                              ) : (
-                                <>
-                                  <MaterialCommunityIcons name="archive-outline" size={11} color="#94a3b8" />
-                                  <Text style={styles.stockSubText}>
-                                    available
-                                  </Text>
-                                </>
-                              )}
-                            </View>
-                          </View>
-                        )}
-                      </View>
-
-                      {/* Explicit Action Button with Portion Label */}
-                      <View style={styles.cardActionBtn}>
-                        <Plus size={14} color="#ffffff" strokeWidth={3} />
-                        <Text style={styles.cardActionBtnText}>{portionActionLabel}</Text>
-                      </View>
+                      <Text style={styles.cardTitle} numberOfLines={2}>
+                        {fullWineTitle}
+                      </Text>
                     </View>
                   </TouchableOpacity>
                 );
@@ -1745,27 +1579,27 @@ const styles = StyleSheet.create({
 
   // ── HIGH VISIBILITY PORTION MODE SELECTOR ──
   portionSegmentOuter: {
-    marginBottom: 10,
+    marginBottom: 14,
   },
   portionSectionLabel: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "900",
     color: MAROON.medium,
     letterSpacing: 0.8,
-    marginBottom: 6,
+    marginBottom: 8,
   },
   portionSegmentContainer: {
     flexDirection: "row",
-    gap: 8,
+    gap: 10,
   },
   portionSegmentBtn: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#ffffff",
-    borderRadius: 14,
-    paddingVertical: 10,
-    paddingHorizontal: 10,
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
     borderWidth: 1.5,
     borderColor: "#e2e8f0",
     elevation: 2,
@@ -1777,26 +1611,26 @@ const styles = StyleSheet.create({
   portionSegmentBtnActive: {
     backgroundColor: MAROON.primary,
     borderColor: MAROON.primary,
-    elevation: 4,
+    elevation: 5,
     shadowColor: MAROON.primary,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
   },
   portionSegmentIconBox: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
+    width: 44,
+    height: 44,
+    borderRadius: 12,
     backgroundColor: MAROON.ultraLight,
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 6,
+    marginRight: 10,
   },
   portionSegmentIconBoxActive: {
     backgroundColor: "rgba(255, 255, 255, 0.2)",
   },
   portionSegmentTitle: {
-    fontSize: 13,
+    fontSize: 16,
     fontWeight: "900",
     color: "#18181b",
   },
@@ -1804,10 +1638,10 @@ const styles = StyleSheet.create({
     color: "#ffffff",
   },
   portionSegmentSub: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "600",
     color: "#64748b",
-    marginTop: 1,
+    marginTop: 2,
   },
   portionSegmentSubActive: {
     color: "#fecdd3",
@@ -1919,31 +1753,31 @@ const styles = StyleSheet.create({
   },
   oversizedCard: {
     backgroundColor: "#ffffff",
-    borderRadius: 16,
-    padding: 10,
+    borderRadius: 14,
+    padding: 12,
     margin: 5,
     elevation: 2,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
-    shadowRadius: 6,
+    shadowRadius: 5,
     borderWidth: 1,
     borderColor: "#e2e8f0",
     borderLeftWidth: 4,
-    justifyContent: "space-between",
+    minHeight: 84,
   },
   cardHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 8,
+    marginBottom: 6,
   },
   wineTypePill: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 7,
+    paddingVertical: 2.5,
+    borderRadius: 6,
     borderWidth: 1,
     gap: 4,
   },
@@ -1957,45 +1791,21 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     letterSpacing: 0.5,
   },
-  openBottlePill: {
-    backgroundColor: MAROON.ultraLight,
-    borderColor: MAROON.border,
-    borderWidth: 1,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 7,
-  },
-  openBottlePillText: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: MAROON.primary,
-  },
-  vintageTag: {
-    backgroundColor: "#f1f5f9",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 5,
-  },
-  vintageTagText: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: "#64748b",
-  },
   cardInfo: {
-    marginBottom: 8,
+    marginTop: 2,
+  },
+  cardProducer: {
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.6,
+    color: "#71717a",
+    marginBottom: 3,
   },
   cardTitle: {
     fontSize: 13,
     fontWeight: "800",
     color: "#18181b",
-    lineHeight: 17,
-  },
-  cardProducer: {
-    fontSize: 11,
-    textTransform: "uppercase",
-    fontWeight: "600",
-    color: "#71717a",
-    marginTop: 2,
+    lineHeight: 18,
   },
   cardBottomRow: {
     flexDirection: "row",
