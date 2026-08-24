@@ -1,4 +1,5 @@
 import AdminDashboard from "@/components/AdminDashboard";
+import StoreStaffPOSTerminal from "@/components/StoreStaffPOSTerminal";
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { apiFetch } from "@/lib/api";
@@ -11,6 +12,8 @@ import {
   AlertOctagon,
   AlertTriangle,
   Banknote,
+  CalendarCheck,
+  ChevronRight,
   ClipboardList,
   FileDown,
   LayoutList,
@@ -21,8 +24,6 @@ import {
   Truck,
   Wine,
   Zap,
-  CalendarCheck,
-  ChevronRight,
 } from "lucide-react-native";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -568,9 +569,14 @@ export default function HomeScreen() {
     return <AdminDashboard />;
   }
 
+  // Store Staff gets dedicated POS Terminal
+  if (profile?.role === "store_staff") {
+    return <StoreStaffPOSTerminal />;
+  }
+
   const role = profile?.role || "warehouse";
-  const isStore = role === "store" || role === "store_manager" || role === "store_staff";
-  const isStoreStaff = role === "store_staff";
+  const isStore = role === "store" || role === "store_manager";
+  const isStoreStaff = false;
   const theme = isStore ? Colors.store : Colors.warehouse;
 
   if (!initialDataLoaded) {
@@ -713,8 +719,8 @@ export default function HomeScreen() {
                 {todayCloseStatus?.status === "acknowledged"
                   ? "Day Close Acknowledged ✓"
                   : todayCloseStatus?.status === "submitted"
-                  ? "Today's Day Close Submitted ✓"
-                  : "Today's Sales Day Is Still Open ⚠️"}
+                    ? "Today's Day Close Submitted ✓"
+                    : "Today's Sales Day Is Still Open ⚠️"}
               </Text>
               <Text style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>
                 {todayCloseStatus?.status === "submitted" || todayCloseStatus?.status === "acknowledged"
