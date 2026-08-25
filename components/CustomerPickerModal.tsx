@@ -367,11 +367,14 @@ export default function CustomerPickerModal({
             </View>
           ) : (
             <FlatList
+              key={isLandscape ? "grid-2" : "list-1"}
               data={filteredCustomers}
+              numColumns={isLandscape ? 2 : 1}
+              columnWrapperStyle={isLandscape ? styles.columnWrapper : undefined}
               keyExtractor={(item) => item.id}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
-              contentContainerStyle={{ gap: 10, paddingBottom: 8 }}
+              contentContainerStyle={{ gap: 8, paddingBottom: 8 }}
               style={{ flex: 1 }}
               renderItem={({ item }) => {
                 const isSelected = selectedCustomerId === item.id;
@@ -406,8 +409,8 @@ export default function CustomerPickerModal({
                         </Text>
                       </View>
 
-                      <View style={{ flex: 1 }}>
-                        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                           <Text style={styles.customerCardName} numberOfLines={1}>
                             {item.name}
                           </Text>
@@ -421,22 +424,24 @@ export default function CustomerPickerModal({
                         </View>
 
                         {/* Contact info row */}
-                        <View style={styles.customerMetaRow}>
-                          {item.contactNo ? (
-                            <View style={styles.metaItem}>
-                              <MaterialCommunityIcons name="phone-outline" size={14} color="#64748b" />
-                              <Text style={styles.metaText}>{item.contactNo}</Text>
-                            </View>
-                          ) : null}
-                          {item.email ? (
-                            <View style={styles.metaItem}>
-                              <MaterialCommunityIcons name="email-outline" size={14} color="#64748b" />
-                              <Text style={styles.metaText} numberOfLines={1}>
-                                {item.email}
-                              </Text>
-                            </View>
-                          ) : null}
-                        </View>
+                        {(item.contactNo || item.email) ? (
+                          <View style={styles.customerMetaRow}>
+                            {item.contactNo ? (
+                              <View style={styles.metaItem}>
+                                <MaterialCommunityIcons name="phone-outline" size={12} color="#64748b" />
+                                <Text style={styles.metaText} numberOfLines={1}>{item.contactNo}</Text>
+                              </View>
+                            ) : null}
+                            {item.email ? (
+                              <View style={styles.metaItem}>
+                                <MaterialCommunityIcons name="email-outline" size={12} color="#64748b" />
+                                <Text style={styles.metaText} numberOfLines={1}>
+                                  {item.email}
+                                </Text>
+                              </View>
+                            ) : null}
+                          </View>
+                        ) : null}
 
                         {/* Wine Style & Region badges */}
                         {(item.favoriteWineStyle || (item.favoriteRegions && item.favoriteRegions.length > 0)) && (
@@ -448,7 +453,7 @@ export default function CustomerPickerModal({
                                 </Text>
                               </View>
                             ) : null}
-                            {item.favoriteRegions && item.favoriteRegions.slice(0, 3).map((reg, rIdx) => (
+                            {item.favoriteRegions && item.favoriteRegions.slice(0, 2).map((reg, rIdx) => (
                               <View key={rIdx} style={styles.regionPill}>
                                 <Text style={styles.regionPillText} numberOfLines={1}>
                                   📍 {reg}
@@ -467,7 +472,7 @@ export default function CustomerPickerModal({
                       ]}
                     >
                       {isSelected && (
-                        <MaterialCommunityIcons name="check" size={14} color="#ffffff" />
+                        <MaterialCommunityIcons name="check" size={12} color="#ffffff" />
                       )}
                     </View>
                   </TouchableOpacity>
@@ -874,8 +879,8 @@ const styles = StyleSheet.create({
   modalCard: {
     width: "100%",
     backgroundColor: "#ffffff",
-    borderRadius: 24,
-    padding: 24,
+    borderRadius: 20,
+    padding: 16,
     elevation: 16,
     shadowColor: "#000000",
     shadowOffset: { width: 0, height: 10 },
@@ -886,12 +891,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 16,
+    marginBottom: 10,
   },
   iconCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
+    width: 40,
+    height: 40,
+    borderRadius: 12,
     backgroundColor: MAROON.ultraLight,
     alignItems: "center",
     justifyContent: "center",
@@ -899,20 +904,20 @@ const styles = StyleSheet.create({
     borderColor: MAROON.border,
   },
   modalTitle: {
-    fontSize: 20,
+    fontSize: 17,
     fontWeight: "900",
     color: "#18181b",
   },
   modalSub: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "600",
     color: "#71717a",
-    marginTop: 2,
+    marginTop: 1,
   },
   closeBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: "#f1f5f9",
     alignItems: "center",
     justifyContent: "center",
@@ -922,19 +927,19 @@ const styles = StyleSheet.create({
   tabSwitcher: {
     flexDirection: "row",
     backgroundColor: "#f1f5f9",
-    borderRadius: 14,
-    padding: 4,
-    marginBottom: 14,
-    gap: 6,
+    borderRadius: 12,
+    padding: 3,
+    marginBottom: 10,
+    gap: 4,
   },
   tabBtn: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 10,
-    borderRadius: 10,
-    gap: 8,
+    paddingVertical: 7,
+    borderRadius: 9,
+    gap: 6,
   },
   tabBtnActive: {
     backgroundColor: "#ffffff",
@@ -945,7 +950,7 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
   },
   tabBtnText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "700",
     color: "#64748b",
   },
@@ -955,31 +960,36 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#f8fafc",
-    borderWidth: 1.5,
+    borderWidth: 1.2,
     borderColor: "#e2e8f0",
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    height: 46,
-    gap: 10,
-    marginBottom: 12,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 40,
+    gap: 8,
+    marginBottom: 8,
   },
   searchInput: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "600",
     color: "#0f172a",
   },
 
-  // Customer Card
+  // Customer Card & Grid
+  columnWrapper: {
+    gap: 8,
+  },
   customerCard: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     backgroundColor: "#ffffff",
-    borderWidth: 1.5,
+    borderWidth: 1.2,
     borderColor: "#e2e8f0",
-    borderRadius: 16,
-    padding: 14,
+    borderRadius: 12,
+    paddingHorizontal: 11,
+    paddingVertical: 9,
   },
   customerCardSelected: {
     borderColor: MAROON.primary,
@@ -989,13 +999,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     flex: 1,
-    gap: 12,
-    marginRight: 10,
+    gap: 10,
+    marginRight: 8,
   },
   customerAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     backgroundColor: "#f1f5f9",
     alignItems: "center",
     justifyContent: "center",
@@ -1007,7 +1017,7 @@ const styles = StyleSheet.create({
     borderColor: MAROON.primary,
   },
   customerAvatarText: {
-    fontSize: 18,
+    fontSize: 15,
     fontWeight: "900",
     color: "#475569",
   },
@@ -1015,55 +1025,56 @@ const styles = StyleSheet.create({
     color: "#ffffff",
   },
   customerCardName: {
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: "900",
     color: "#0f172a",
   },
   ordersBadge: {
     backgroundColor: "#f1f5f9",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
+    paddingHorizontal: 5,
+    paddingVertical: 1.5,
+    borderRadius: 5,
   },
   ordersBadgeText: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "800",
     color: "#64748b",
   },
   customerMetaRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    marginTop: 3,
+    gap: 8,
+    marginTop: 2,
     flexWrap: "wrap",
   },
   metaItem: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: 3,
+    maxWidth: 160,
   },
   metaText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "600",
     color: "#64748b",
   },
   preferencesRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    marginTop: 6,
+    gap: 4,
+    marginTop: 3,
     flexWrap: "wrap",
   },
   stylePill: {
     backgroundColor: "#ffedd5",
     borderColor: "#fed7aa",
     borderWidth: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 2.5,
-    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: 5,
   },
   stylePillText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "800",
     color: "#c2410c",
   },
@@ -1071,20 +1082,20 @@ const styles = StyleSheet.create({
     backgroundColor: "#fef3c7",
     borderColor: "#fde68a",
     borderWidth: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 2.5,
-    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: 5,
   },
   regionPillText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "700",
     color: "#b45309",
   },
   customerRadio: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 2,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 1.5,
     borderColor: "#cbd5e1",
     alignItems: "center",
     justifyContent: "center",
@@ -1315,22 +1326,22 @@ const styles = StyleSheet.create({
   // Modal Footer
   modalFooter: {
     flexDirection: "row",
-    gap: 12,
-    marginTop: 14,
-    paddingTop: 14,
+    gap: 10,
+    marginTop: 10,
+    paddingTop: 10,
     borderTopWidth: 1,
     borderTopColor: "#f1f5f9",
   },
   cancelBtn: {
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 12,
     backgroundColor: "#f1f5f9",
     alignItems: "center",
     justifyContent: "center",
   },
   cancelBtnText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "800",
     color: "#64748b",
   },
@@ -1339,17 +1350,17 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 16,
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 12,
     backgroundColor: MAROON.primary,
   },
   primaryActionBtnDisabled: {
     backgroundColor: "#94a3b8",
   },
   primaryActionBtnText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "900",
     color: "#ffffff",
   },
