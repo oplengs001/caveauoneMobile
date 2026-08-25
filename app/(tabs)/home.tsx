@@ -19,6 +19,7 @@ import {
   LayoutList,
   LogOut,
   MapPin,
+  Package,
   QrCode,
   Search,
   Truck,
@@ -87,12 +88,15 @@ export default function HomeScreen() {
   });
   const [loadingRequests, setLoadingRequests] = useState(true);
   const [initialDataLoaded, setInitialDataLoaded] = useState(false);
+  const isStoreUser = profile?.role === "store" || profile?.role === "store_manager" || profile?.role === "store_staff";
 
   useEffect(() => {
-    if (!loadingMetrics && !loadingRequests && !loadingSales) {
+    if (!isStoreUser) {
+      setInitialDataLoaded(true);
+    } else if (!loadingMetrics && !loadingRequests && !loadingSales) {
       setInitialDataLoaded(true);
     }
-  }, [loadingMetrics, loadingRequests, loadingSales]);
+  }, [isStoreUser, loadingMetrics, loadingRequests, loadingSales]);
 
   // --- Calculate Responsive Layout with Full Landscape Support ---
   const isLandscape = width > height;
@@ -494,8 +498,8 @@ export default function HomeScreen() {
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      const isStoreUser = profile?.role === "store" || profile?.role === "store_manager" || profile?.role === "store_staff";
-      if (isStoreUser) {
+      const isStoreRole = profile?.role === "store" || profile?.role === "store_manager" || profile?.role === "store_staff";
+      if (isStoreRole) {
         const promises: Promise<any>[] = [fetchSalesMetrics(), fetchTodayCloseStatus()];
         if (profile?.role !== "store_staff") {
           promises.push(fetchMetrics(), fetchOutboundRequests());
@@ -517,10 +521,13 @@ export default function HomeScreen() {
             AsyncStorage.removeItem("forceDashboardRefresh");
             onRefresh();
           } else {
-            fetchMetrics();
-            fetchOutboundRequests();
-            fetchSalesMetrics();
-            fetchTodayCloseStatus();
+            const isStoreRole = profile?.role === "store" || profile?.role === "store_manager" || profile?.role === "store_staff";
+            if (isStoreRole) {
+              fetchMetrics();
+              fetchOutboundRequests();
+              fetchSalesMetrics();
+              fetchTodayCloseStatus();
+            }
           }
         });
       }
@@ -529,8 +536,11 @@ export default function HomeScreen() {
 
   useEffect(() => {
     if (!loading) {
-      fetchSalesMetrics();
-      fetchTodayCloseStatus();
+      const isStoreRole = profile?.role === "store" || profile?.role === "store_manager" || profile?.role === "store_staff";
+      if (isStoreRole) {
+        fetchSalesMetrics();
+        fetchTodayCloseStatus();
+      }
     }
   }, [loading, profile, salesPeriod, fetchSalesMetrics, fetchTodayCloseStatus]);
 
@@ -682,57 +692,83 @@ export default function HomeScreen() {
 
         {isStore && (profile?.role === "store_manager" || profile?.role === "store") && (
           <TouchableOpacity
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              padding: 14,
-              borderRadius: 16,
-              borderWidth: 1,
-              marginBottom: 16,
-              gap: 12,
-              backgroundColor:
-                todayCloseStatus?.status === "submitted" || todayCloseStatus?.status === "acknowledged"
-                  ? "#10b98115"
-                  : "#f59e0b15",
-              borderColor:
-                todayCloseStatus?.status === "submitted" || todayCloseStatus?.status === "acknowledged"
-                  ? "#10b98140"
-                  : "#f59e0b40",
-            }}
+            style={[
+              styles.dayCloseBanner,
+              {
+                backgroundColor:
+                  todayCloseStatus?.status === "submitted" || todayCloseStatus?.status === "acknowledged"
+                    ? "#10b98112"
+                    : "#f59e0b12",
+                borderColor:
+                  todayCloseStatus?.status === "submitted" || todayCloseStatus?.status === "acknowledged"
+                    ? "#10b98135"
+                    : "#f59e0b35",
+              },
+            ]}
             onPress={() => router.push("/day-close")}
+            activeOpacity={0.82}
           >
-            <CalendarCheck
-              size={24}
-              color={
-                todayCloseStatus?.status === "submitted" || todayCloseStatus?.status === "acknowledged"
-                  ? "#10b981"
-                  : "#f59e0b"
-              }
-            />
-            <View style={{ flex: 1 }}>
-              <Text
-                style={{
-                  fontSize: 14,
-                  fontWeight: "900",
-                  color:
-                    todayCloseStatus?.status === "submitted" || todayCloseStatus?.status === "acknowledged"
-                      ? "#059669"
-                      : "#d97706",
-                }}
+            <View style={styles.dayCloseBannerLeft}>
+              <View
+                style={[
+                  styles.dayCloseIconCircle,
+                  {
+                    backgroundColor:
+                      todayCloseStatus?.status === "submitted" || todayCloseStatus?.status === "acknowledged"
+                        ? "#10b98120"
+                        : "#f59e0b20",
+                  },
+                ]}
               >
-                {todayCloseStatus?.status === "acknowledged"
-                  ? "Day Close Acknowledged ✓"
-                  : todayCloseStatus?.status === "submitted"
-                    ? "Today's Day Close Submitted ✓"
-                    : "Today's Sales Day Is Still Open ⚠️"}
-              </Text>
-              <Text style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>
-                {todayCloseStatus?.status === "submitted" || todayCloseStatus?.status === "acknowledged"
-                  ? `₱${todayCloseStatus.totalRevenue.toLocaleString()} · ${todayCloseStatus.totalBottlesSold} btl sold`
-                  : "Tap to review metrics, report discrepancies & close day →"}
-              </Text>
+                <CalendarCheck
+                  size={16}
+                  color={
+                    todayCloseStatus?.status === "submitted" || todayCloseStatus?.status === "acknowledged"
+                      ? "#10b981"
+                      : "#f59e0b"
+                  }
+                  strokeWidth={2.2}
+                />
+              </View>
+              <View>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                  <Text
+                    style={[
+                      styles.dayCloseTitle,
+                      {
+                        color:
+                          todayCloseStatus?.status === "submitted" || todayCloseStatus?.status === "acknowledged"
+                            ? "#059669"
+                            : "#d97706",
+                      },
+                    ]}
+                  >
+                    {todayCloseStatus?.status === "acknowledged"
+                      ? "Day Close Acknowledged"
+                      : todayCloseStatus?.status === "submitted"
+                        ? "Day Close Submitted"
+                        : "Sales Day Open"}
+                  </Text>
+                  <View
+                    style={[
+                      styles.dayCloseLiveDot,
+                      {
+                        backgroundColor:
+                          todayCloseStatus?.status === "submitted" || todayCloseStatus?.status === "acknowledged"
+                            ? "#10b981"
+                            : "#f59e0b",
+                      },
+                    ]}
+                  />
+                </View>
+                <Text style={styles.dayCloseSubtitle}>
+                  {todayCloseStatus?.status === "submitted" || todayCloseStatus?.status === "acknowledged"
+                    ? `₱${todayCloseStatus.totalRevenue.toLocaleString()} · ${todayCloseStatus.totalBottlesSold} btl sold`
+                    : "Tap to review metrics & close day →"}
+                </Text>
+              </View>
             </View>
-            <ChevronRight size={18} color="#94a3b8" />
+            <ChevronRight size={16} color="#94a3b8" />
           </TouchableOpacity>
         )}
 
@@ -822,13 +858,27 @@ export default function HomeScreen() {
           <View style={isLandscape || isTablet ? styles.tasksRow : undefined}>
             {hasPulloutTasks && (
               <View style={[styles.metricsDashboard, isLandscape || isTablet ? styles.taskColumn : undefined]}>
-                <Text style={styles.metricsTitle}>Pullout Tasks</Text>
-                <View style={{ gap: 12 }}>
+                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    <Text style={styles.metricsTitle}>Pullout Tasks</Text>
+                    <View style={[styles.deliveryCountPill, { backgroundColor: "rgba(245, 158, 11, 0.15)" }]}>
+                      <Text style={[styles.deliveryCountPillText, { color: "#d97706" }]}>
+                        {pulloutTasks.length}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={{ gap: 12, paddingRight: 8 }}
+                >
                   {pulloutTasks.map((task) => (
                     <TouchableOpacity
                       key={task.id}
                       style={[
-                        styles.requestCard,
+                        styles.deliveryCardCompact,
                         {
                           backgroundColor: theme.card,
                           borderColor: theme.border,
@@ -840,50 +890,71 @@ export default function HomeScreen() {
                           params: { id: task.id },
                         })
                       }
+                      activeOpacity={0.85}
                     >
-                      <View
-                        style={[
-                          styles.requestCardIcon,
-                          { backgroundColor: "#f59e0b15" },
-                        ]}
-                      >
-                        <ClipboardList size={20} color="#f59e0b" />
+                      <View style={styles.deliveryCardHeader}>
+                        <View style={[styles.deliveryCardIconCircle, { backgroundColor: "#f59e0b18" }]}>
+                          <ClipboardList size={18} color="#f59e0b" strokeWidth={2.2} />
+                        </View>
+                        <View style={[styles.deliveryStatusBadge, { backgroundColor: "rgba(245, 158, 11, 0.12)", borderColor: "rgba(245, 158, 11, 0.3)" }]}>
+                          <Text style={[styles.deliveryStatusBadgeText, { color: "#d97706" }]}>PULLOUT</Text>
+                        </View>
                       </View>
-                      <View style={{ flex: 1 }}>
-                        <Text
-                          style={[styles.requestCardTitle, { color: theme.text }]}
-                        >
-                          Pull Stock for Another Store
+
+                      <View style={styles.deliveryCardBody}>
+                        <Text style={[styles.deliveryCardTitle, { color: theme.text }]} numberOfLines={1}>
+                          Pull Stock
                         </Text>
-                        <Text style={styles.requestCardSubtitle}>
-                          {task.items.reduce(
-                            (acc, i) => acc + (i.requestedQty || 0),
-                            0,
-                          )}{" "}
-                          items • REQ: {task.id.slice(0, 4).toUpperCase()}
+                        <Text style={[styles.deliveryCardSubtitle, { color: theme.textSecondary }]} numberOfLines={1}>
+                          REQ: {task.id.slice(0, 4).toUpperCase()} · Outbound
                         </Text>
+                      </View>
+
+                      <View style={[styles.deliveryCardFooter, { borderTopColor: theme.border }]}>
+                        <View style={styles.deliveryQtyPill}>
+                          <Package size={12} color="#d97706" strokeWidth={2.2} />
+                          <Text style={[styles.deliveryQtyText, { color: theme.text }]}>
+                            {task.items.reduce((acc, i) => acc + (i.requestedQty || 0), 0)} bottles
+                          </Text>
+                        </View>
+                        <ChevronRight size={14} color="#94a3b8" />
                       </View>
                     </TouchableOpacity>
                   ))}
-                </View>
+                </ScrollView>
               </View>
             )}
 
             {hasDeliveries && (
-              <View style={[styles.metricsDashboard, isTablet ? styles.taskColumn : undefined]}>
-                <Text style={styles.metricsTitle}>Incoming Deliveries</Text>
-                <View style={{ gap: 12 }}>
+              <View style={[styles.metricsDashboard, isLandscape || isTablet ? styles.taskColumn : undefined]}>
+                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    <Text style={styles.metricsTitle}>Incoming Deliveries</Text>
+                    <View style={styles.deliveryCountPill}>
+                      <Text style={styles.deliveryCountPillText}>
+                        {outboundRequests.length + incomingDeliveries.length}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={{ gap: 12, paddingRight: 8 }}
+                >
                   {outboundRequests.map((req) => {
                     const targetStoreName =
                       req.targetStoreId === "warehouse"
                         ? "Central Warehouse"
-                        : locations[req.targetStoreId || ""] || "Unknown Source";
+                        : locations[req.targetStoreId || ""] || "Warehouse";
+                    const totalQty = req.items.reduce((acc, i) => acc + (i.qty || 0), 0);
 
                     return (
                       <TouchableOpacity
                         key={req.id}
                         style={[
-                          styles.requestCard,
+                          styles.deliveryCardCompact,
                           {
                             backgroundColor: theme.card,
                             borderColor: theme.border,
@@ -895,23 +966,34 @@ export default function HomeScreen() {
                             params: { id: req.id },
                           })
                         }
+                        activeOpacity={0.85}
                       >
-                        <View style={styles.requestCardIcon}>
-                          <Truck size={20} color={theme.primary} />
+                        <View style={styles.deliveryCardHeader}>
+                          <View style={[styles.deliveryCardIconCircle, { backgroundColor: theme.primary + "15" }]}>
+                            <Truck size={18} color={theme.primary} strokeWidth={2.2} />
+                          </View>
+                          <View style={styles.deliveryStatusBadge}>
+                            <Text style={styles.deliveryStatusBadgeText}>IN TRANSIT</Text>
+                          </View>
                         </View>
-                        <View style={{ flex: 1 }}>
-                          <Text
-                            style={[
-                              styles.requestCardTitle,
-                              { color: theme.text },
-                            ]}
-                          >
+
+                        <View style={styles.deliveryCardBody}>
+                          <Text style={[styles.deliveryCardTitle, { color: theme.text }]} numberOfLines={1}>
                             Transfer from {targetStoreName}
                           </Text>
-                          <Text style={styles.requestCardSubtitle}>
-                            {req.items.reduce((acc, i) => acc + (i.qty || 0), 0)}{" "}
-                            items • REQ: {req.id.slice(0, 4).toUpperCase()}
+                          <Text style={[styles.deliveryCardSubtitle, { color: theme.textSecondary }]} numberOfLines={1}>
+                            REQ: {req.id.slice(0, 4).toUpperCase()}
                           </Text>
+                        </View>
+
+                        <View style={[styles.deliveryCardFooter, { borderTopColor: theme.border }]}>
+                          <View style={styles.deliveryQtyPill}>
+                            <Package size={12} color={theme.primary} strokeWidth={2.2} />
+                            <Text style={[styles.deliveryQtyText, { color: theme.text }]}>
+                              {totalQty} {totalQty === 1 ? "bottle" : "bottles"}
+                            </Text>
+                          </View>
+                          <ChevronRight size={14} color="#94a3b8" />
                         </View>
                       </TouchableOpacity>
                     );
@@ -921,7 +1003,7 @@ export default function HomeScreen() {
                     <TouchableOpacity
                       key={del.id}
                       style={[
-                        styles.requestCard,
+                        styles.deliveryCardCompact,
                         {
                           backgroundColor: theme.card,
                           borderColor: theme.border,
@@ -933,24 +1015,38 @@ export default function HomeScreen() {
                           params: { id: del.id },
                         })
                       }
+                      activeOpacity={0.85}
                     >
-                      <View style={styles.requestCardIcon}>
-                        <Truck size={20} color="#8b5cf6" />
+                      <View style={styles.deliveryCardHeader}>
+                        <View style={[styles.deliveryCardIconCircle, { backgroundColor: "#8b5cf618" }]}>
+                          <Truck size={18} color="#8b5cf6" strokeWidth={2.2} />
+                        </View>
+                        <View style={[styles.deliveryStatusBadge, { backgroundColor: "#8b5cf618", borderColor: "#8b5cf640" }]}>
+                          <Text style={[styles.deliveryStatusBadgeText, { color: "#a78bfa" }]}>DIRECT DELIVERY</Text>
+                        </View>
                       </View>
-                      <View style={{ flex: 1 }}>
-                        <Text
-                          style={[styles.requestCardTitle, { color: theme.text }]}
-                        >
+
+                      <View style={styles.deliveryCardBody}>
+                        <Text style={[styles.deliveryCardTitle, { color: theme.text }]} numberOfLines={1}>
                           Admin Delivery
                         </Text>
-                        <Text style={styles.requestCardSubtitle}>
-                          {del.totalBottles} items • DEL:{" "}
-                          {del.id.slice(0, 4).toUpperCase()}
+                        <Text style={[styles.deliveryCardSubtitle, { color: theme.textSecondary }]} numberOfLines={1}>
+                          DEL: {del.id.slice(0, 4).toUpperCase()}
                         </Text>
+                      </View>
+
+                      <View style={[styles.deliveryCardFooter, { borderTopColor: theme.border }]}>
+                        <View style={styles.deliveryQtyPill}>
+                          <Package size={12} color="#8b5cf6" strokeWidth={2.2} />
+                          <Text style={[styles.deliveryQtyText, { color: theme.text }]}>
+                            {del.totalBottles} {del.totalBottles === 1 ? "bottle" : "bottles"}
+                          </Text>
+                        </View>
+                        <ChevronRight size={14} color="#94a3b8" />
                       </View>
                     </TouchableOpacity>
                   ))}
-                </View>
+                </ScrollView>
               </View>
             )}
           </View>
@@ -1387,10 +1483,10 @@ export default function HomeScreen() {
             >
               <View style={styles.heroActionLeft}>
                 <View style={styles.heroActionIconBadge}>
-                  <Zap size={24} color="#ffffff" strokeWidth={2.4} />
+                  <Zap size={18} color="#ffffff" strokeWidth={2.4} />
                 </View>
                 <View style={styles.heroActionTextContainer}>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                     <Text style={styles.heroActionTitle}>POS Mode</Text>
                     <View style={styles.heroLiveBadge}>
                       <View style={styles.heroLiveDot} />
@@ -1398,12 +1494,12 @@ export default function HomeScreen() {
                     </View>
                   </View>
                   <Text style={styles.heroActionDesc} numberOfLines={1}>
-                    Fast wine quick sales, VIP guest attachment & staff attribution
+                    Fast wine sales & live register
                   </Text>
                 </View>
               </View>
               <View style={styles.heroActionArrow}>
-                <ChevronRight size={18} color="#ffffff" strokeWidth={2.5} />
+                <ChevronRight size={15} color="#ffffff" strokeWidth={2.5} />
               </View>
             </TouchableOpacity>
 
@@ -1491,90 +1587,195 @@ export default function HomeScreen() {
             </View>
           </View>
         ) : (
-          /* ── WAREHOUSE BUTTONS ─────────────────────────────────────────── */
-          <View style={styles.buttonContainer}>
+          /* ── WAREHOUSE QUICK ACTIONS (Hero Intake Card + Compact Grid) ─── */
+          <View style={styles.storeActionsSection}>
+            <Text style={[styles.metricsTitle, { color: theme.textSecondary }]}>Warehouse Operations</Text>
+
+            {/* Prominent Onboarding Hero Action */}
             <TouchableOpacity
-              style={[styles.actionButton, { backgroundColor: "#4f46e5" }]}
+              style={[
+                styles.heroActionCard,
+                {
+                  backgroundColor: theme.primary,
+                  shadowColor: theme.primary,
+                },
+              ]}
               onPress={() => router.push("/onboarding")}
+              activeOpacity={0.88}
             >
-              <View style={styles.buttonContent}>
-                <FileDown size={36} color="#ffffff" strokeWidth={1.5} />
-                <View style={styles.buttonTextContainer}>
-                  <Text style={styles.buttonTitle}>Onboarding Tasks</Text>
-                  <Text style={styles.buttonDesc}>
-                    Process new wine deliveries
+              <View style={styles.heroActionLeft}>
+                <View style={styles.heroActionIconBadge}>
+                  <FileDown size={18} color="#ffffff" strokeWidth={2.4} />
+                </View>
+                <View style={styles.heroActionTextContainer}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                    <Text style={styles.heroActionTitle}>Onboarding Tasks</Text>
+                    <View style={styles.heroLiveBadge}>
+                      <View style={styles.heroLiveDot} />
+                      <Text style={styles.heroLiveBadgeText}>Inbound Intake</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.heroActionDesc} numberOfLines={1}>
+                    Process deliveries & scans
                   </Text>
                 </View>
+              </View>
+              <View style={styles.heroActionArrow}>
+                <ChevronRight size={15} color="#ffffff" strokeWidth={2.5} />
               </View>
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[styles.actionButton, { backgroundColor: theme.primary }]}
-              onPress={() => router.push("/bottle-tagging")}
-            >
-              <View style={styles.buttonContent}>
-                <QrCode size={36} color="#ffffff" strokeWidth={1.5} />
-                <View style={styles.buttonTextContainer}>
-                  <Text style={styles.buttonTitle}>QR Tagging</Text>
-                  <Text style={styles.buttonDesc}>
-                    Scan and stick QR labels
+            {/* 4-Tile Compact Grid for Core Warehouse Operations */}
+            <View style={styles.storeGrid}>
+              {/* Tile 1: QR Tagging */}
+              <TouchableOpacity
+                style={[
+                  styles.storeGridTile,
+                  {
+                    width: storeTileWidth,
+                    backgroundColor: theme.card,
+                    borderColor: theme.border,
+                  },
+                ]}
+                onPress={() => router.push("/bottle-tagging")}
+                activeOpacity={0.85}
+              >
+                <View style={styles.tileHeaderRow}>
+                  <View style={[styles.tileIconCircle, { backgroundColor: "#8b5cf618" }]}>
+                    <QrCode size={18} color="#a78bfa" strokeWidth={2} />
+                  </View>
+                  <ChevronRight size={14} color="#94a3b8" />
+                </View>
+                <View style={styles.tileTextContainer}>
+                  <Text style={[styles.tileTitle, { color: theme.text }]} numberOfLines={1}>
+                    QR Tagging
+                  </Text>
+                  <Text style={[styles.tileDesc, { color: theme.textSecondary }]} numberOfLines={1}>
+                    Scan & stick QR labels
                   </Text>
                 </View>
-              </View>
-            </TouchableOpacity>
+              </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[styles.actionButton, { backgroundColor: theme.secondary }]}
-              onPress={() => router.push("/tagging")}
-            >
-              <View style={styles.buttonContent}>
-                <MapPin size={36} color="#ffffff" strokeWidth={1.5} />
-                <View style={styles.buttonTextContainer}>
-                  <Text style={styles.buttonTitle}>Bottle Tagging</Text>
-                  <Text style={styles.buttonDesc}>
-                    Assign bottles to bin locations
+              {/* Tile 2: Bottle Tagging */}
+              <TouchableOpacity
+                style={[
+                  styles.storeGridTile,
+                  {
+                    width: storeTileWidth,
+                    backgroundColor: theme.card,
+                    borderColor: theme.border,
+                  },
+                ]}
+                onPress={() => router.push("/tagging")}
+                activeOpacity={0.85}
+              >
+                <View style={styles.tileHeaderRow}>
+                  <View style={[styles.tileIconCircle, { backgroundColor: "#0ea5e918" }]}>
+                    <MapPin size={18} color="#38bdf8" strokeWidth={2} />
+                  </View>
+                  <ChevronRight size={14} color="#94a3b8" />
+                </View>
+                <View style={styles.tileTextContainer}>
+                  <Text style={[styles.tileTitle, { color: theme.text }]} numberOfLines={1}>
+                    Bottle Tagging
+                  </Text>
+                  <Text style={[styles.tileDesc, { color: theme.textSecondary }]} numberOfLines={1}>
+                    Assign bottles to bins
                   </Text>
                 </View>
-              </View>
-            </TouchableOpacity>
+              </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[styles.actionButton, { backgroundColor: theme.accent }]}
-              onPress={() => router.push("/pullout")}
-            >
-              <View style={styles.buttonContent}>
-                <Truck size={36} color="#ffffff" strokeWidth={1.5} />
-                <View style={styles.buttonTextContainer}>
-                  <Text style={styles.buttonTitle}>Pullout Tasks</Text>
-                  <Text style={styles.buttonDesc}>
-                    Fulfill outbound requests
+              {/* Tile 3: Pullout Tasks */}
+              <TouchableOpacity
+                style={[
+                  styles.storeGridTile,
+                  {
+                    width: storeTileWidth,
+                    backgroundColor: theme.card,
+                    borderColor: theme.border,
+                  },
+                ]}
+                onPress={() => router.push("/pullout")}
+                activeOpacity={0.85}
+              >
+                <View style={styles.tileHeaderRow}>
+                  <View style={[styles.tileIconCircle, { backgroundColor: "#f59e0b18" }]}>
+                    <Truck size={18} color="#fbbf24" strokeWidth={2} />
+                  </View>
+                  <ChevronRight size={14} color="#94a3b8" />
+                </View>
+                <View style={styles.tileTextContainer}>
+                  <Text style={[styles.tileTitle, { color: theme.text }]} numberOfLines={1}>
+                    Pullout Tasks
+                  </Text>
+                  <Text style={[styles.tileDesc, { color: theme.textSecondary }]} numberOfLines={1}>
+                    Fulfill store requests
                   </Text>
                 </View>
-              </View>
-            </TouchableOpacity>
+              </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[styles.actionButton, { backgroundColor: theme.primary }]}
-              onPress={() => router.push("/inventory")}
-            >
-              <View style={styles.buttonContent}>
-                <Search size={36} color="#ffffff" strokeWidth={1.5} />
-                <View style={styles.buttonTextContainer}>
-                  <Text style={styles.buttonTitle}>Bottle Management</Text>
-                  <Text style={styles.buttonDesc}>
-                    Search by SKU or Wine Name
+              {/* Tile 4: Bottle Lookup */}
+              <TouchableOpacity
+                style={[
+                  styles.storeGridTile,
+                  {
+                    width: storeTileWidth,
+                    backgroundColor: theme.card,
+                    borderColor: theme.border,
+                  },
+                ]}
+                onPress={() => router.push("/inventory")}
+                activeOpacity={0.85}
+              >
+                <View style={styles.tileHeaderRow}>
+                  <View style={[styles.tileIconCircle, { backgroundColor: "#10b98118" }]}>
+                    <Search size={18} color="#34d399" strokeWidth={2} />
+                  </View>
+                  <ChevronRight size={14} color="#94a3b8" />
+                </View>
+                <View style={styles.tileTextContainer}>
+                  <Text style={[styles.tileTitle, { color: theme.text }]} numberOfLines={1}>
+                    Bottle Lookup
+                  </Text>
+                  <Text style={[styles.tileDesc, { color: theme.textSecondary }]} numberOfLines={1}>
+                    SKU, bin & cellar lookup
                   </Text>
                 </View>
-              </View>
-            </TouchableOpacity>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
 
-        {isStore && (
+        {isStore ? (
           <View style={styles.storeModeBadge}>
             <View style={styles.storeModeBadgeDot} />
             <Text style={styles.storeModeBadgeText}>
               Boutique Sommelier Mode · Authorized for sales, inventory & requisitions
+            </Text>
+          </View>
+        ) : (
+          <View
+            style={[
+              styles.storeModeBadge,
+              {
+                backgroundColor: theme.primary + "12",
+                borderColor: theme.primary + "30",
+              },
+            ]}
+          >
+            <View
+              style={[
+                styles.storeModeBadgeDot,
+                { backgroundColor: theme.primary },
+              ]}
+            />
+            <Text
+              style={[
+                styles.storeModeBadgeText,
+                { color: "#a5b4fc" },
+              ]}
+            >
+              Warehouse Mode · Authorized for intake, tagging, binning & pullout fulfillment
             </Text>
           </View>
         )}
@@ -1700,36 +1901,37 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     backgroundColor: Colors.store.primary,
-    borderRadius: 16,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
     marginBottom: 12,
+    alignSelf: "flex-start",
+    maxWidth: "100%",
     shadowColor: Colors.store.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 4,
   },
   heroActionLeft: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    flex: 1,
-    marginRight: 8,
+    gap: 10,
+    marginRight: 12,
   },
   heroActionIconBadge: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
+    width: 34,
+    height: 34,
+    borderRadius: 10,
     backgroundColor: "rgba(255, 255, 255, 0.2)",
     alignItems: "center",
     justifyContent: "center",
   },
   heroActionTextContainer: {
-    flex: 1,
+    justifyContent: "center",
   },
   heroActionTitle: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "900",
     color: "#ffffff",
   },
@@ -1761,12 +1963,12 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "rgba(255, 255, 255, 0.85)",
     fontWeight: "500",
-    marginTop: 2,
+    marginTop: 1,
   },
   heroActionArrow: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: "rgba(255, 255, 255, 0.2)",
     alignItems: "center",
     justifyContent: "center",
@@ -1908,6 +2110,46 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#475569",
   },
+  dayCloseBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    borderWidth: 1.2,
+    marginBottom: 16,
+    alignSelf: "flex-start",
+    maxWidth: "100%",
+  },
+  dayCloseBannerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginRight: 12,
+  },
+  dayCloseIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  dayCloseTitle: {
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  dayCloseLiveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  dayCloseSubtitle: {
+    fontSize: 11,
+    color: "#64748b",
+    marginTop: 1,
+    fontWeight: "500",
+  },
   requestCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -1932,6 +2174,84 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#64748b",
     marginTop: 2,
+  },
+  deliveryCardCompact: {
+    width: 230,
+    borderRadius: 14,
+    borderWidth: 1.2,
+    padding: 13,
+    justifyContent: "space-between",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  deliveryCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  deliveryCardIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  deliveryStatusBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    backgroundColor: "rgba(16, 185, 129, 0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(16, 185, 129, 0.3)",
+  },
+  deliveryStatusBadgeText: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: "#059669",
+    letterSpacing: 0.4,
+  },
+  deliveryCardBody: {
+    marginBottom: 10,
+  },
+  deliveryCardTitle: {
+    fontSize: 13,
+    fontWeight: "800",
+    marginBottom: 2,
+  },
+  deliveryCardSubtitle: {
+    fontSize: 11,
+    fontWeight: "500",
+  },
+  deliveryCardFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingTop: 8,
+    borderTopWidth: 1,
+  },
+  deliveryQtyPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  deliveryQtyText: {
+    fontSize: 11.5,
+    fontWeight: "700",
+  },
+  deliveryCountPill: {
+    backgroundColor: "rgba(16, 185, 129, 0.15)",
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  deliveryCountPillText: {
+    color: "#059669",
+    fontSize: 11,
+    fontWeight: "800",
   },
   tasksRow: {
     flexDirection: "row",
