@@ -4,6 +4,7 @@ import { apiFetch } from "@/lib/api";
 import { clearToken } from "@/lib/auth";
 import { AppUser, fetchStoreStaff } from "@/lib/queries/users";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { BlurView } from "expo-blur";
 import { Stack, useRouter } from "expo-router";
 import {
   AlertCircle,
@@ -42,6 +43,23 @@ import {
   useWindowDimensions
 } from "react-native";
 
+export interface WineBottleLocationInfo {
+  locationId: string;
+  locationName: string;
+  count: number;
+  openCount: number;
+  openGlassesTotal: number;
+  bottleIds: string[];
+}
+
+export interface WineBottleDetail {
+  id: string;
+  locationId: string | null;
+  locationName: string;
+  status: "open" | "shelved" | "received" | string;
+  glassesRemaining?: number;
+}
+
 export interface FastWineItem {
   id: string;
   name: string;
@@ -57,8 +75,12 @@ export interface FastWineItem {
   wineCategory?: "fast" | "fine" | "reserve" | "standard" | string | null;
   stockCount: number;
   availableBottleIds: string[];
+  bottles?: WineBottleDetail[];
+  locationBreakdown?: WineBottleLocationInfo[];
   openBottle?: {
     id: string;
+    locationId?: string | null;
+    locationName?: string;
     glassesRemaining: number;
   } | null;
 }
@@ -69,6 +91,8 @@ export interface OrderItem {
   wine: FastWineItem;
   portion: PortionType;
   quantity: number;
+  selectedLocationId?: string | null;
+  selectedLocationName?: string;
 }
 
 const normalizeWineType = (rawType?: string | null): string => {
@@ -195,6 +219,11 @@ export default function StoreStaffPOSTerminal() {
   // Collapsible sidebar (landscape only)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
+  // Location Selection Modal State
+  const [locationModalWine, setLocationModalWine] = useState<FastWineItem | null>(null);
+  const [locationModalPortion, setLocationModalPortion] = useState<PortionType>("glass");
+  const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
+
   // Post-dispense feedback
   const [successData, setSuccessData] = useState<{
     itemsCount: number;
@@ -231,13 +260,24 @@ export default function StoreStaffPOSTerminal() {
       };
       setSelectedStaff(activeUserInStaff);
 
-      const [winesData, settingsData, bottlesData] = await Promise.all([
+      const [winesData, settingsData, bottlesData, locationsData] = await Promise.all([
         apiFetch("/wines"),
         storeId ? apiFetch(`/stock-settings?storeId=${storeId}`) : Promise.resolve([]),
         storeId
           ? apiFetch(`/bottles?storeId=${storeId}&status=received,shelved,open`)
           : Promise.resolve([]),
+        apiFetch("/locations").catch(() => []),
       ]);
+
+      const locs: any[] = Array.isArray(locationsData)
+        ? locationsData
+        : Array.isArray(locationsData?.locations)
+          ? locationsData.locations
+          : [];
+      const locationMap: Record<string, string> = {};
+      locs.forEach((l) => {
+        if (l.id) locationMap[l.id] = l.name || l.code || "Bin";
+      });
 
       const allWines: any[] = Array.isArray(winesData)
         ? winesData
@@ -265,15 +305,21 @@ export default function StoreStaffPOSTerminal() {
         const wId = b.masterWineId || b.masterWineRef?.id;
         if (!wId) return;
 
+        const locName = b.locationId ? (locationMap[b.locationId] || "Assigned Bin") : "Unassigned";
+        const enhancedBottle = {
+          ...b,
+          locationName: locName,
+        };
+
         if (!bottlesByWine.has(wId)) bottlesByWine.set(wId, []);
-        bottlesByWine.get(wId)!.push(b);
+        bottlesByWine.get(wId)!.push(enhancedBottle);
 
         if (
           b.status === "open" &&
           (!openBottleByWine.has(wId) ||
             (b.glassesRemaining ?? 0) > (openBottleByWine.get(wId)?.glassesRemaining ?? 0))
         ) {
-          openBottleByWine.set(wId, b);
+          openBottleByWine.set(wId, enhancedBottle);
         }
       });
 
@@ -282,6 +328,30 @@ export default function StoreStaffPOSTerminal() {
           const setting = settingsMap.get(mw.id);
           const wineBottles = bottlesByWine.get(mw.id) || [];
           const openB = openBottleByWine.get(mw.id);
+
+          // Calculate location breakdown
+          const locMapForWine = new Map<string, WineBottleLocationInfo>();
+          wineBottles.forEach((b: any) => {
+            const locId = b.locationId || "unassigned";
+            const locName = b.locationName || (b.locationId ? locationMap[b.locationId] || "Assigned" : "Unassigned");
+            if (!locMapForWine.has(locId)) {
+              locMapForWine.set(locId, {
+                locationId: locId,
+                locationName: locName,
+                count: 0,
+                openCount: 0,
+                openGlassesTotal: 0,
+                bottleIds: [],
+              });
+            }
+            const info = locMapForWine.get(locId)!;
+            info.count += 1;
+            info.bottleIds.push(b.id);
+            if (b.status === "open") {
+              info.openCount += 1;
+              info.openGlassesTotal += (b.glassesRemaining ?? 6);
+            }
+          });
 
           return {
             id: mw.id,
@@ -298,8 +368,15 @@ export default function StoreStaffPOSTerminal() {
             wineCategory: setting?.wineCategory ?? mw.wineCategory ?? "standard",
             stockCount: wineBottles.length,
             availableBottleIds: wineBottles.map((b: any) => b.id),
+            bottles: wineBottles,
+            locationBreakdown: Array.from(locMapForWine.values()),
             openBottle: openB
-              ? { id: openB.id, glassesRemaining: openB.glassesRemaining ?? 6 }
+              ? {
+                id: openB.id,
+                locationId: openB.locationId || null,
+                locationName: openB.locationName || "Bar",
+                glassesRemaining: openB.glassesRemaining ?? 6,
+              }
               : null,
           };
         })
@@ -408,8 +485,67 @@ export default function StoreStaffPOSTerminal() {
     return counts;
   }, [wines, tierFilter, searchQuery]);
 
+  // Open Location Selection Modal before adding to service
+  const handleSelectWineCard = (wine: FastWineItem) => {
+    const portion = salesTypeMode;
+    const canAdd = canAddPortion(wine, portion, currentOrder);
+    if (!canAdd) {
+      Alert.alert("Out of Stock", `No additional stock available for ${wine.name} in this portion.`);
+      return;
+    }
+
+    const breakdown = wine.locationBreakdown || [];
+    setLocationModalWine(wine);
+    setLocationModalPortion(portion);
+
+    const activeOpen = wine.openBottle;
+    const hasActiveOpen = (portion === "glass" || portion === "carafe") &&
+      Boolean(activeOpen && (activeOpen.glassesRemaining ?? 0) > 0);
+
+    if (hasActiveOpen) {
+      setSelectedLocationId(activeOpen!.locationId || (breakdown[0]?.locationId ?? null));
+    } else if (breakdown.length > 0) {
+      setSelectedLocationId(breakdown[0].locationId);
+    } else {
+      setSelectedLocationId(null);
+    }
+  };
+
+  const handleConfirmLocation = () => {
+    if (!locationModalWine) return;
+    const locInfo = (locationModalWine.locationBreakdown || []).find((l) => l.locationId === selectedLocationId);
+    const locName = locInfo ? locInfo.locationName : (selectedLocationId ? "Assigned" : "Unassigned");
+    addToOrder(locationModalWine, locationModalPortion, selectedLocationId, locName);
+    setLocationModalWine(null);
+  };
+
+  const handleAddMoreFromModal = () => {
+    handleConfirmLocation();
+  };
+
+  const handleDirectSaleFromModal = async () => {
+    if (!locationModalWine) return;
+    const locInfo = (locationModalWine.locationBreakdown || []).find((l) => l.locationId === selectedLocationId);
+    const locName = locInfo ? locInfo.locationName : (selectedLocationId ? "Assigned" : "Unassigned");
+    const newItem: OrderItem = {
+      wine: locationModalWine,
+      portion: locationModalPortion,
+      quantity: 1,
+      selectedLocationId: selectedLocationId || null,
+      selectedLocationName: locName,
+    };
+    const itemsToProcess = [...currentOrder, newItem];
+    setLocationModalWine(null);
+    await executeSaleOrder(itemsToProcess);
+  };
+
   // Cart / Current Order Handlers
-  const addToOrder = (wine: FastWineItem, preferredPortion?: PortionType) => {
+  const addToOrder = (
+    wine: FastWineItem,
+    preferredPortion?: PortionType,
+    locationId?: string | null,
+    locationName?: string
+  ) => {
     const portion = preferredPortion || salesTypeMode;
     const canAdd = canAddPortion(wine, portion, currentOrder);
     if (!canAdd) {
@@ -419,14 +555,26 @@ export default function StoreStaffPOSTerminal() {
 
     setCurrentOrder((prev) => {
       const existingIdx = prev.findIndex(
-        (item) => item.wine.id === wine.id && item.portion === portion
+        (item) =>
+          item.wine.id === wine.id &&
+          item.portion === portion &&
+          (item.selectedLocationId === locationId || (!item.selectedLocationId && !locationId))
       );
       if (existingIdx >= 0) {
         const updated = [...prev];
         updated[existingIdx].quantity += 1;
         return updated;
       }
-      return [...prev, { wine, portion, quantity: 1 }];
+      return [
+        ...prev,
+        {
+          wine,
+          portion,
+          quantity: 1,
+          selectedLocationId: locationId || null,
+          selectedLocationName: locationName || "Assigned",
+        },
+      ];
     });
   };
 
@@ -489,9 +637,9 @@ export default function StoreStaffPOSTerminal() {
     };
   }, [currentOrder]);
 
-  // Submit Batch Order / Dispense Log
-  const handleCompleteOrder = async () => {
-    if (currentOrder.length === 0) return;
+  // Core Order / Sale Execution logic
+  const executeSaleOrder = async (itemsToProcess: OrderItem[]) => {
+    if (itemsToProcess.length === 0) return;
 
     setIsProcessing(true);
     const triggeredParAlerts: Array<{ wineName: string; stockCount: number; requestedQty: number }> = [];
@@ -503,7 +651,7 @@ export default function StoreStaffPOSTerminal() {
         email: profile?.email,
       };
 
-      for (const item of currentOrder) {
+      for (const item of itemsToProcess) {
         const { wine, portion, quantity } = item;
 
         let glassCount = 1.0;
@@ -517,10 +665,19 @@ export default function StoreStaffPOSTerminal() {
         }
 
         if (portion === "bottle") {
-          for (let i = 0; i < quantity; i++) {
-            const targetBottleId = wine.availableBottleIds[i] || wine.availableBottleIds[0];
+          const locMatchingBottleIds = item.selectedLocationId && item.selectedLocationId !== "unassigned"
+            ? (wine.bottles || [])
+              .filter((b) => b.locationId === item.selectedLocationId && b.status !== "consumed")
+              .map((b) => b.id)
+            : [];
+          const candidateBottleIds = [
+            ...locMatchingBottleIds,
+            ...wine.availableBottleIds.filter((id) => !locMatchingBottleIds.includes(id)),
+          ];
 
-            // 1. Record Sale
+          for (let i = 0; i < quantity; i++) {
+            const targetBottleId = candidateBottleIds[i] || wine.availableBottleIds[i] || wine.availableBottleIds[0];
+
             await apiFetch("/sales", {
               method: "POST",
               body: JSON.stringify({
@@ -544,7 +701,6 @@ export default function StoreStaffPOSTerminal() {
               }),
             });
 
-            // 2. Update Bottle to consumed
             if (targetBottleId) {
               await apiFetch(`/bottles/${targetBottleId}`, {
                 method: "PATCH",
@@ -557,15 +713,11 @@ export default function StoreStaffPOSTerminal() {
             }
           }
         } else {
-          // Multiple glass or carafe dispense
           let totalGlassesToDeduct = quantity * glassesDeductedPerUnit;
           let activeOpenBottleId = wine.openBottle?.id || null;
           let currentGlassesInActiveBottle = wine.openBottle ? wine.openBottle.glassesRemaining : 0;
-
-          // Pool of unopened cellar bottles to open if current bottle runs out
           const availableUnopenedIds = [...wine.availableBottleIds.filter((bId) => bId !== activeOpenBottleId)];
 
-          // 1. Record sales for each portion ordered
           for (let q = 0; q < quantity; q++) {
             await apiFetch("/sales", {
               method: "POST",
@@ -591,7 +743,6 @@ export default function StoreStaffPOSTerminal() {
             });
           }
 
-          // 2. Deplete bottles sequentially across active open bottle and cellar bottles
           while (totalGlassesToDeduct > 0) {
             if (activeOpenBottleId && currentGlassesInActiveBottle > 0) {
               const glassesFromThis = Math.min(totalGlassesToDeduct, currentGlassesInActiveBottle);
@@ -609,9 +760,7 @@ export default function StoreStaffPOSTerminal() {
 
               totalGlassesToDeduct -= glassesFromThis;
               currentGlassesInActiveBottle = remainingInThis;
-              if (isNowConsumed) {
-                activeOpenBottleId = null;
-              }
+              if (isNowConsumed) activeOpenBottleId = null;
             } else if (availableUnopenedIds.length > 0) {
               const nextBottleId = availableUnopenedIds.shift()!;
               const glassesFromThis = Math.min(totalGlassesToDeduct, 6);
@@ -630,26 +779,21 @@ export default function StoreStaffPOSTerminal() {
               totalGlassesToDeduct -= glassesFromThis;
               activeOpenBottleId = isNowConsumed ? null : nextBottleId;
               currentGlassesInActiveBottle = remainingInThis;
-            } else {
-              break;
-            }
+            } else break;
           }
         }
 
-        // 3. PAR Check
         if (storeId) {
           try {
             const [settingsRes, countRes, pendingReqRes] = await Promise.all([
               apiFetch(`/stock-settings?storeId=${storeId}&masterWineId=${wine.id}`),
-              apiFetch(
-                `/bottles?storeId=${storeId}&masterWineId=${wine.id}&status=shelved,received&countOnly=true`
-              ),
+              apiFetch(`/bottles?storeId=${storeId}&masterWineId=${wine.id}&status=shelved,received&countOnly=true`),
               apiFetch(`/wine-requests?storeId=${storeId}&status=pending`).catch(() => []),
             ]);
 
             const settingList: any[] = settingsRes.settings || settingsRes;
-            const currentSetting = settingList[0];
-            const stockCount = countRes.count ?? 0;
+            const currentSetting = settingList?.[0];
+            const stockCount = countRes?.count ?? 0;
 
             if (currentSetting && currentSetting.parLevel > 0 && stockCount <= currentSetting.parLevel) {
               const pendingRequests = Array.isArray(pendingReqRes)
@@ -668,7 +812,7 @@ export default function StoreStaffPOSTerminal() {
               });
 
               if (!hasPending) {
-                const requestedQty = Math.max(1, currentSetting.safetyStock - stockCount);
+                const requestedQty = Math.max(1, (currentSetting.safetyStock || currentSetting.parLevel * 2) - stockCount);
                 const unitCost = wine.price || 0;
 
                 await apiFetch("/wine-requests", {
@@ -712,11 +856,24 @@ export default function StoreStaffPOSTerminal() {
         }
       }
 
+      // Calculate summary for success modal
+      let totalItems = 0;
+      let totalBottlesVolume = 0;
+      let totalAmount = 0;
+      itemsToProcess.forEach((item) => {
+        totalItems += item.quantity;
+        const unitPrice = getItemUnitPrice(item.wine, item.portion);
+        totalAmount += unitPrice * item.quantity;
+        if (item.portion === "glass") totalBottlesVolume += item.quantity * (1 / 6);
+        else if (item.portion === "carafe") totalBottlesVolume += item.quantity * (2 / 6);
+        else totalBottlesVolume += item.quantity;
+      });
+
       setParAlerts(triggeredParAlerts);
       setSuccessData({
-        itemsCount: orderSummary.totalItems,
-        totalBottlesVolume: orderSummary.totalBottlesVolume,
-        totalAmount: orderSummary.totalAmount,
+        itemsCount: totalItems,
+        totalBottlesVolume: Math.round(totalBottlesVolume * 100) / 100,
+        totalAmount,
         staffName: staffToAttribute.displayName || staffToAttribute.email?.split("@")[0] || "Staff",
         timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       });
@@ -731,6 +888,8 @@ export default function StoreStaffPOSTerminal() {
       setIsProcessing(false);
     }
   };
+
+  const handleCompleteOrder = () => executeSaleOrder(currentOrder);
 
   const handleSignOut = () => {
     Alert.alert("Sign Out", "Are you sure you want to sign out of the POS Terminal?", [
@@ -884,7 +1043,7 @@ export default function StoreStaffPOSTerminal() {
               const itemTotal = unitPrice * item.quantity;
 
               return (
-                <View key={`${item.wine.id}-${item.portion}-${idx}`} style={styles.orderItemCard}>
+                <View key={`${item.wine.id}-${item.portion}-${item.selectedLocationId || 'all'}-${idx}`} style={styles.orderItemCard}>
                   {/* Color-coded thumbnail dot */}
                   <View style={[styles.itemThumbnail, { backgroundColor: typeTheme.bg }]}>
                     <View style={[styles.thumbnailDot, { backgroundColor: typeTheme.color }]} />
@@ -895,8 +1054,18 @@ export default function StoreStaffPOSTerminal() {
                     <Text style={styles.orderItemName} numberOfLines={1}>
                       {item.wine.name}
                     </Text>
-                    <View style={styles.orderItemPortionBadge}>
-                      <Text style={styles.orderItemPortionText}>{portionTag}</Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 5, flexWrap: "wrap", marginTop: 2 }}>
+                      <View style={styles.orderItemPortionBadge}>
+                        <Text style={styles.orderItemPortionText}>{portionTag}</Text>
+                      </View>
+                      {item.selectedLocationName && (
+                        <View style={styles.orderItemLocationBadge}>
+                          <MaterialCommunityIcons name="map-marker-outline" size={10} color={MAROON.medium} />
+                          <Text style={styles.orderItemLocationText} numberOfLines={1}>
+                            {item.selectedLocationName}
+                          </Text>
+                        </View>
+                      )}
                     </View>
                     <Text style={styles.orderItemPriceText}>
                       ₱{unitPrice.toLocaleString("en-PH")}
@@ -1402,7 +1571,7 @@ export default function StoreStaffPOSTerminal() {
 
                 return (
                   <TouchableOpacity
-                    onPress={() => addToOrder(item)}
+                    onPress={() => handleSelectWineCard(item)}
                     disabled={!canAdd}
                     activeOpacity={0.85}
                     style={[
@@ -1564,15 +1733,21 @@ export default function StoreStaffPOSTerminal() {
         visible={Boolean(successData)}
         transparent
         animationType="fade"
+        statusBarTranslucent
         onRequestClose={() => setSuccessData(null)}
       >
         <View style={styles.successOverlay}>
+          <BlurView
+            intensity={20}
+            tint="systemMaterialDark"
+            style={StyleSheet.absoluteFill}
+          />
           <View style={styles.successCard}>
             <View style={styles.successIconCircle}>
               <CheckCircle2 size={44} color="#059669" strokeWidth={2.5} />
             </View>
 
-            <Text style={styles.successTitle}>Service Logged!</Text>
+            <Text style={styles.successTitle}>Sales Confirmed!</Text>
             <Text style={styles.successSub}>
               {successData?.itemsCount} item(s) dispensed and inventory deducted.
             </Text>
@@ -1614,6 +1789,301 @@ export default function StoreStaffPOSTerminal() {
             >
               <Text style={styles.successBtnText}>Done / Next Service</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── LOCATION CONFIRMATION / SELECTION MODAL ───────────────────────── */}
+      <Modal
+        visible={Boolean(locationModalWine)}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => setLocationModalWine(null)}
+      >
+        <View style={styles.locationModalOverlay}>
+          <BlurView
+            intensity={20}
+            tint="systemMaterialDark"
+            style={StyleSheet.absoluteFill}
+          />
+          <View style={styles.locationModalCard}>
+            {/* Modal Header */}
+            <View style={styles.locationModalHeader}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                <View style={styles.locationIconCircle}>
+                  <MaterialCommunityIcons name="map-marker-radius-outline" size={22} color={MAROON.primary} />
+                </View>
+                <View>
+                  <Text style={styles.locationModalTitle}>Confirm Wine Location</Text>
+                  <Text style={styles.locationModalSub}>
+                    {locationModalWine?.openBottle && (locationModalPortion === "glass" || locationModalPortion === "carafe") && (locationModalWine.openBottle.glassesRemaining ?? 0) > 0
+                      ? "Pouring directly from active open bottle"
+                      : (locationModalWine?.locationBreakdown?.length ?? 0) > 1
+                        ? "Select storage location to pullout from"
+                        : "Verify storage location for pullout"}
+                  </Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                onPress={() => setLocationModalWine(null)}
+                style={styles.locationCloseBtn}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <MaterialCommunityIcons name="close" size={20} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Selected Wine Snapshot */}
+            {locationModalWine && (() => {
+              const typeTheme = getWineTypeTheme(locationModalWine.wineType);
+              const unitPrice = getItemUnitPrice(locationModalWine, locationModalPortion);
+
+              return (
+                <View style={[styles.locationWineSnapshot, { backgroundColor: typeTheme.bg, borderColor: typeTheme.color }]}>
+                  {/* Top Row: Producer & Price */}
+                  <View style={styles.locationWineTopRow}>
+                    <Text style={styles.locationWineProducer} numberOfLines={1}>
+                      {(locationModalWine.producer || "Boutique Selection").toUpperCase()}
+                    </Text>
+                    <Text style={styles.locationPriceText}>
+                      ₱{unitPrice.toLocaleString("en-PH")}
+                    </Text>
+                  </View>
+
+                  {/* Wine Full Title (Regular Weight) */}
+                  <Text style={styles.locationWineName} numberOfLines={2}>
+                    {locationModalWine.vintage ? `${locationModalWine.vintage} ` : ""}
+                    {locationModalWine.name}
+                  </Text>
+                </View>
+              );
+            })()}
+
+            {/* Open Bottle Status Banner (For Glass Serves) */}
+            {locationModalWine && locationModalPortion === "glass" && (() => {
+              const activeOpen = locationModalWine.openBottle;
+              const hasOpen = Boolean(activeOpen && (activeOpen.glassesRemaining ?? 0) > 0);
+
+              return (
+                <View
+                  style={[
+                    styles.openBottleBanner,
+                    hasOpen ? styles.openBottleBannerHasOpen : styles.openBottleBannerNoOpen,
+                  ]}
+                >
+                  <MaterialCommunityIcons
+                    name={hasOpen ? "bottle-wine-outline" : "package-variant-closed"}
+                    size={22}
+                    color={hasOpen ? "#059669" : "#b45309"}
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      style={[
+                        styles.openBottleBannerTitle,
+                        { color: hasOpen ? "#065f46" : "#92400e" },
+                      ]}
+                    >
+                      {hasOpen
+                        ? `Active Open Bottle (${activeOpen!.glassesRemaining} glass${activeOpen!.glassesRemaining !== 1 ? "es" : ""} remaining)`
+                        : "No Open Bottle in Service"}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.openBottleBannerSub,
+                        { color: hasOpen ? "#047857" : "#b45309" },
+                      ]}
+                    >
+                      {hasOpen
+                        ? `Stored at: ${activeOpen!.locationName || "Bar"} · Pouring from open bottle first.`
+                        : "A fresh sealed bottle will be opened from inventory (6 glasses total)."}
+                    </Text>
+                  </View>
+                </View>
+              );
+            })()}
+
+            {/* Locations List / Single Location View / Open Bottle View */}
+            <ScrollView style={styles.locationScrollList} showsVerticalScrollIndicator={false}>
+              {locationModalWine && (() => {
+                const breakdown = locationModalWine.locationBreakdown || [];
+                const activeOpen = locationModalWine.openBottle;
+                const hasActiveOpen =
+                  (locationModalPortion === "glass" || locationModalPortion === "carafe") &&
+                  Boolean(activeOpen && (activeOpen.glassesRemaining ?? 0) > 0);
+
+                // If an open bottle exists for glass/carafe, lock selection to open bottle
+                if (hasActiveOpen) {
+                  return (
+                    <View style={styles.singleLocationCard}>
+                      <View style={styles.singleLocationIconBox}>
+                        <MaterialCommunityIcons name="bottle-wine-outline" size={24} color={MAROON.primary} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                          <Text style={styles.singleLocationBadgeLabel}>POURING FROM OPEN BOTTLE</Text>
+                          <View style={styles.lockedBadge}>
+                            <MaterialCommunityIcons name="lock-outline" size={10} color={MAROON.primary} />
+                            <Text style={styles.lockedBadgeText}>Priority</Text>
+                          </View>
+                        </View>
+                        <Text style={styles.singleLocationTitle}>{activeOpen!.locationName || "Bar / Service Area"}</Text>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 3 }}>
+                          <MaterialCommunityIcons name="check-circle-outline" size={14} color="#059669" />
+                          <Text style={styles.singleLocationStockText}>
+                            {activeOpen!.glassesRemaining} glass{activeOpen!.glassesRemaining !== 1 ? "es" : ""} remaining to pour
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                  );
+                }
+
+                if (breakdown.length === 0) {
+                  return (
+                    <View style={styles.singleLocationCard}>
+                      <View style={styles.singleLocationIconBox}>
+                        <MaterialCommunityIcons name="map-marker-outline" size={24} color={MAROON.primary} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.singleLocationBadgeLabel}>STORAGE</Text>
+                        <Text style={styles.singleLocationTitle}>Unassigned Storage</Text>
+                        <Text style={styles.singleLocationSub}>
+                          {locationModalWine.stockCount} bottle(s) available in store inventory.
+                        </Text>
+                      </View>
+                    </View>
+                  );
+                }
+
+                if (breakdown.length === 1) {
+                  const loc = breakdown[0];
+                  return (
+                    <View style={styles.singleLocationCard}>
+                      <View style={styles.singleLocationIconBox}>
+                        <MaterialCommunityIcons name="map-marker-radius-outline" size={24} color={MAROON.primary} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.singleLocationBadgeLabel}>PULLOUT LOCATION</Text>
+                        <Text style={styles.singleLocationTitle}>{loc.locationName}</Text>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 }}>
+                          <MaterialCommunityIcons name="check-circle-outline" size={14} color="#059669" />
+                          <Text style={styles.singleLocationStockText}>
+                            {loc.count} bottle{loc.count !== 1 ? "s" : ""} available here
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                  );
+                }
+
+                // Multiple Locations - Compact 2-Column Grid
+                return (
+                  <View style={{ gap: 8 }}>
+                    <Text style={styles.locationListHeader}>
+                      SELECT PULLOUT BIN ({breakdown.length} LOCATIONS):
+                    </Text>
+                    <View style={styles.locationGridContainer}>
+                      {breakdown.map((loc) => {
+                        const isSelected = selectedLocationId === loc.locationId;
+                        return (
+                          <TouchableOpacity
+                            key={loc.locationId}
+                            onPress={() => setSelectedLocationId(loc.locationId)}
+                            style={[
+                              styles.locationGridTile,
+                              isSelected && styles.locationGridTileSelected,
+                            ]}
+                            activeOpacity={0.8}
+                          >
+                            <View style={styles.locationGridTileTop}>
+                              <MaterialCommunityIcons
+                                name="map-marker-outline"
+                                size={16}
+                                color={isSelected ? MAROON.primary : "#64748b"}
+                              />
+                              <Text
+                                style={[
+                                  styles.locationGridTileName,
+                                  isSelected && styles.locationGridTileNameSelected,
+                                ]}
+                                numberOfLines={1}
+                              >
+                                {loc.locationName}
+                              </Text>
+                              <View
+                                style={[
+                                  styles.locationGridRadio,
+                                  isSelected && styles.locationGridRadioSelected,
+                                ]}
+                              >
+                                {isSelected && <MaterialCommunityIcons name="check" size={11} color="#ffffff" />}
+                              </View>
+                            </View>
+
+                            <View style={styles.locationGridTileBottom}>
+                              <Text
+                                style={[
+                                  styles.locationGridStockText,
+                                  isSelected && styles.locationGridStockTextSelected,
+                                ]}
+                              >
+                                {loc.count} bottle{loc.count !== 1 ? "s" : ""}
+                              </Text>
+                            </View>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+                );
+              })()}
+            </ScrollView>
+
+            {/* Modal Actions: Cancel, Add More (Queue), or Confirm Sale (Direct Checkout) */}
+            {locationModalWine && (() => {
+              const unitPrice = getItemUnitPrice(locationModalWine, locationModalPortion);
+              const directSaleTotal = (orderSummary.totalAmount || 0) + unitPrice;
+
+              return (
+                <View style={styles.locationModalFooter}>
+                  <TouchableOpacity
+                    onPress={() => setLocationModalWine(null)}
+                    style={styles.locationCancelBtn}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.locationCancelBtnText}>Cancel</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={handleAddMoreFromModal}
+                    style={styles.locationAddMoreBtn}
+                    activeOpacity={0.85}
+                  >
+                    <MaterialCommunityIcons name="plus" size={16} color={MAROON.primary} />
+                    <Text style={styles.locationAddMoreBtnText}>Add More</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={handleDirectSaleFromModal}
+                    disabled={isProcessing}
+                    style={styles.locationConfirmSaleBtn}
+                    activeOpacity={0.85}
+                  >
+                    {isProcessing ? (
+                      <ActivityIndicator color="#ffffff" size="small" />
+                    ) : (
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                        <MaterialCommunityIcons name="check" size={16} color="#ffffff" />
+                        <Text style={styles.locationConfirmSaleBtnText} numberOfLines={1}>
+                          Confirm Sale · ₱{directSaleTotal.toLocaleString("en-PH")}
+                        </Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              );
+            })()}
           </View>
         </View>
       </Modal>
@@ -2719,23 +3189,23 @@ const styles = StyleSheet.create({
   // Success Modal
   successOverlay: {
     flex: 1,
-    backgroundColor: "rgba(56, 3, 17, 0.7)",
+    backgroundColor: "rgba(30, 41, 59, 0.55)", // Slate gray overlay with blur matching location modal
     alignItems: "center",
     justifyContent: "center",
     padding: 24,
   },
   successCard: {
     width: "100%",
-    maxWidth: 400,
+    maxWidth: 420,
     backgroundColor: "#ffffff",
     borderRadius: 24,
     padding: 24,
     alignItems: "center",
-    elevation: 8,
-    shadowColor: MAROON.primary,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
+    elevation: 12,
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
   },
   successIconCircle: {
     width: 68,
@@ -2814,5 +3284,347 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "900",
     color: "#ffffff",
+  },
+  orderItemLocationBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f1f5f9",
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 5,
+    gap: 3,
+    maxWidth: 130,
+  },
+  orderItemLocationText: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: "#475569",
+  },
+
+  // ── LOCATION SELECTION MODAL STYLES ───────────────────────────────────────
+  locationModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(30, 41, 59, 0.55)", // Slate gray overlay with blur
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 20,
+  },
+  locationModalCard: {
+    width: "100%",
+    maxWidth: 440,
+    maxHeight: "85%",
+    backgroundColor: "#ffffff",
+    borderRadius: 24,
+    padding: 20,
+    elevation: 12,
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+  },
+  locationModalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 14,
+  },
+  locationIconCircle: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: MAROON.ultraLight,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: MAROON.border,
+  },
+  locationModalTitle: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#18181b",
+  },
+  locationModalSub: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#71717a",
+    marginTop: 1,
+  },
+  locationCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#f1f5f9",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  locationWineSnapshot: {
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1.5,
+    marginBottom: 14,
+  },
+  locationWineTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 4,
+  },
+  locationWineProducer: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#09090b",
+    letterSpacing: 0.8,
+    flex: 1,
+    marginRight: 8,
+  },
+  locationWineName: {
+    fontSize: 16,
+    fontWeight: "500",
+    color: "#18181b",
+    lineHeight: 22,
+  },
+  locationPriceText: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#09090b",
+  },
+  locationScrollList: {
+    maxHeight: 220,
+    marginVertical: 4,
+  },
+  locationListHeader: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: MAROON.medium,
+    letterSpacing: 0.8,
+    marginBottom: 4,
+  },
+  singleLocationCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: MAROON.ultraLight,
+    borderRadius: 16,
+    padding: 16,
+    gap: 12,
+    borderWidth: 1.5,
+    borderColor: MAROON.border,
+    marginVertical: 4,
+  },
+  singleLocationIconBox: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: MAROON.border,
+  },
+  singleLocationBadgeLabel: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: MAROON.medium,
+    letterSpacing: 0.8,
+  },
+  singleLocationTitle: {
+    fontSize: 17,
+    fontWeight: "900",
+    color: MAROON.primary,
+    marginTop: 1,
+  },
+  singleLocationSub: {
+    fontSize: 12,
+    color: "#71717a",
+    marginTop: 2,
+  },
+  singleLocationStockText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#059669",
+  },
+  lockedBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: MAROON.ultraLight,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: MAROON.border,
+  },
+  lockedBadgeText: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: MAROON.primary,
+  },
+  openBottleBadge: {
+    backgroundColor: "#fef3c7",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#fde68a",
+  },
+  openBottleBadgeText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#b45309",
+  },
+  locationGridContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  locationGridTile: {
+    width: "48.5%",
+    backgroundColor: "#ffffff",
+    borderRadius: 12,
+    padding: 10,
+    borderWidth: 1.5,
+    borderColor: "#e2e8f0",
+    justifyContent: "space-between",
+  },
+  locationGridTileSelected: {
+    backgroundColor: MAROON.ultraLight,
+    borderColor: MAROON.primary,
+    elevation: 2,
+    shadowColor: MAROON.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+  },
+  locationGridTileTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 6,
+  },
+  locationGridTileName: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#18181b",
+  },
+  locationGridTileNameSelected: {
+    color: MAROON.primary,
+  },
+  locationGridRadio: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 1.5,
+    borderColor: "#cbd5e1",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#ffffff",
+  },
+  locationGridRadioSelected: {
+    borderColor: MAROON.primary,
+    backgroundColor: MAROON.primary,
+  },
+  locationGridTileBottom: {
+    marginTop: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  locationGridStockText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#64748b",
+  },
+  locationGridStockTextSelected: {
+    color: MAROON.medium,
+    fontWeight: "800",
+  },
+  locationModalFooter: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 16,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#f1f5f9",
+  },
+  locationCancelBtn: {
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    backgroundColor: "#f1f5f9",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  locationCancelBtnText: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#64748b",
+  },
+  locationAddMoreBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    backgroundColor: MAROON.ultraLight,
+    borderWidth: 1.5,
+    borderColor: MAROON.border,
+  },
+  locationAddMoreBtnText: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: MAROON.primary,
+  },
+  locationConfirmSaleBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    backgroundColor: MAROON.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    elevation: 3,
+    shadowColor: MAROON.primary,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+  },
+  locationConfirmSaleBtnText: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#ffffff",
+  },
+  openBottleBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: 12,
+    borderWidth: 1,
+  },
+  openBottleBannerHasOpen: {
+    backgroundColor: "#ecfdf5",
+    borderColor: "#a7f3d0",
+  },
+  openBottleBannerNoOpen: {
+    backgroundColor: "#fffbeb",
+    borderColor: "#fde68a",
+  },
+  openBottleDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginHorizontal: 2,
+  },
+  openBottleBannerTitle: {
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  openBottleBannerSub: {
+    fontSize: 10,
+    fontWeight: "600",
+    marginTop: 1,
   },
 });
