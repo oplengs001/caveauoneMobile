@@ -1,8 +1,9 @@
-import { Colors } from "@/constants/theme";
+import CustomerPickerModal from "@/components/CustomerPickerModal";
 import { useAuth } from "@/context/AuthContext";
 import { apiFetch } from "@/lib/api";
 import { clearToken } from "@/lib/auth";
 import { AppUser, fetchStoreStaff } from "@/lib/queries/users";
+import { Customer } from "@/types";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { Stack, useRouter } from "expo-router";
@@ -30,6 +31,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  KeyboardAvoidingView,
   Modal,
   Platform,
   RefreshControl,
@@ -190,8 +192,6 @@ export default function StoreStaffPOSTerminal() {
   const router = useRouter();
   const { width, height } = useWindowDimensions();
   const { profile, refreshProfile } = useAuth();
-  const theme = Colors.store;
-
   const isLandscape = width > height;
   const isTabletLandscape = isLandscape && width >= 900;
   const storeId = profile?.locationId || null;
@@ -224,17 +224,22 @@ export default function StoreStaffPOSTerminal() {
   const [locationModalPortion, setLocationModalPortion] = useState<PortionType>("glass");
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
 
+  // Customer / VIP Guest Attachment (for Fine Wine sales)
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
+
   // Post-dispense feedback
   const [successData, setSuccessData] = useState<{
     itemsCount: number;
     totalBottlesVolume: number;
     totalAmount: number;
     staffName: string;
+    customerName?: string | null;
     timestamp: string;
   } | null>(null);
 
   const [parAlerts, setParAlerts] = useState<
-    Array<{ wineName: string; stockCount: number; requestedQty: number }>
+    { wineName: string; stockCount: number; requestedQty: number }[]
   >([]);
 
   // Load staff, store name & inventory data
@@ -642,7 +647,7 @@ export default function StoreStaffPOSTerminal() {
     if (itemsToProcess.length === 0) return;
 
     setIsProcessing(true);
-    const triggeredParAlerts: Array<{ wineName: string; stockCount: number; requestedQty: number }> = [];
+    const triggeredParAlerts: { wineName: string; stockCount: number; requestedQty: number }[] = [];
 
     try {
       const staffToAttribute = selectedStaff || {
@@ -694,6 +699,8 @@ export default function StoreStaffPOSTerminal() {
                 vatAmount: 0,
                 totalAmount: wine.price || 0,
                 vatMode: "included",
+                customerId: selectedCustomer?.id || null,
+                customerName: selectedCustomer?.name || null,
                 wineCategory: wine.wineCategory,
                 masterWinePrice: wine.price || null,
                 saleType: portion,
@@ -735,6 +742,8 @@ export default function StoreStaffPOSTerminal() {
                 vatAmount: 0,
                 totalAmount: wine.price || 0,
                 vatMode: "included",
+                customerId: selectedCustomer?.id || null,
+                customerName: selectedCustomer?.name || null,
                 wineCategory: wine.wineCategory,
                 masterWinePrice: wine.price || null,
                 saleType: portion,
@@ -875,9 +884,11 @@ export default function StoreStaffPOSTerminal() {
         totalBottlesVolume: Math.round(totalBottlesVolume * 100) / 100,
         totalAmount,
         staffName: staffToAttribute.displayName || staffToAttribute.email?.split("@")[0] || "Staff",
+        customerName: selectedCustomer?.name || null,
         timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       });
 
+      setSelectedCustomer(null);
       setCurrentOrder([]);
       setIsMobileCartOpen(false);
       loadData();
@@ -1146,6 +1157,47 @@ export default function StoreStaffPOSTerminal() {
           </View>
         </View>
 
+        {/* Customer / VIP Guest Attachment */}
+        {selectedCustomer && (
+          <View style={styles.fineWineCustomerSection}>
+            <View style={styles.fineWineCustomerHeader}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                <MaterialCommunityIcons name="account-star-outline" size={14} color={MAROON.primary} />
+                <Text style={styles.fineWineCustomerTitle}>
+                  {currentOrder.some((it) => it.wine.wineCategory === "fine") ? "VIP / CUSTOMER (FINE WINE)" : "CUSTOMER (OPTIONAL)"}
+                </Text>
+              </View>
+              {currentOrder.some((it) => it.wine.wineCategory === "fine") && (
+                <View style={styles.fineWinePill}>
+                  <Text style={styles.fineWinePillText}>Fine Wine</Text>
+                </View>
+              )}
+            </View>
+            <View style={styles.selectedCustomerCard}>
+              <View style={styles.selectedCustomerInfo}>
+                <MaterialCommunityIcons name="account-check" size={16} color={MAROON.primary} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.selectedCustomerName} numberOfLines={1}>
+                    {selectedCustomer.name}
+                  </Text>
+                  {(selectedCustomer.email || selectedCustomer.contactNo) && (
+                    <Text style={styles.selectedCustomerSub} numberOfLines={1}>
+                      {selectedCustomer.email || selectedCustomer.contactNo}
+                    </Text>
+                  )}
+                </View>
+              </View>
+              <TouchableOpacity
+                onPress={() => setSelectedCustomer(null)}
+                style={styles.removeCustomerBtn}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <MaterialCommunityIcons name="close-circle" size={16} color="#94a3b8" />
+              </TouchableOpacity>
+            </View>
+
+          </View>
+        )}
         {/* Action Button */}
         <TouchableOpacity
           onPress={handleCompleteOrder}
@@ -1772,6 +1824,15 @@ export default function StoreStaffPOSTerminal() {
                 <Text style={styles.successText}>{successData?.staffName}</Text>
               </View>
 
+              {successData?.customerName && (
+                <View style={styles.successRow}>
+                  <Text style={styles.successLabel}>Customer / VIP:</Text>
+                  <Text style={[styles.successText, { color: MAROON.primary, fontWeight: "800" }]}>
+                    {successData.customerName}
+                  </Text>
+                </View>
+              )}
+
               {parAlerts.length > 0 && (
                 <View style={styles.parAlertBox}>
                   <AlertCircle size={14} color={MAROON.accentGold} />
@@ -1799,294 +1860,404 @@ export default function StoreStaffPOSTerminal() {
         transparent
         animationType="fade"
         statusBarTranslucent
-        onRequestClose={() => setLocationModalWine(null)}
+        onRequestClose={() => {
+          if (isCustomerModalOpen) {
+            setIsCustomerModalOpen(false);
+          } else {
+            setLocationModalWine(null);
+          }
+        }}
       >
-        <View style={styles.locationModalOverlay}>
-          <BlurView
-            intensity={20}
-            tint="systemMaterialDark"
-            style={StyleSheet.absoluteFill}
-          />
-          <View style={styles.locationModalCard}>
-            {/* Modal Header */}
-            <View style={styles.locationModalHeader}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                <View style={styles.locationIconCircle}>
-                  <MaterialCommunityIcons name="map-marker-radius-outline" size={22} color={MAROON.primary} />
-                </View>
-                <View>
-                  <Text style={styles.locationModalTitle}>Confirm Wine Location</Text>
-                  <Text style={styles.locationModalSub}>
-                    {locationModalWine?.openBottle && (locationModalPortion === "glass" || locationModalPortion === "carafe") && (locationModalWine.openBottle.glassesRemaining ?? 0) > 0
-                      ? "Pouring directly from active open bottle"
-                      : (locationModalWine?.locationBreakdown?.length ?? 0) > 1
-                        ? "Select storage location to pullout from"
-                        : "Verify storage location for pullout"}
-                  </Text>
-                </View>
-              </View>
-              <TouchableOpacity
-                onPress={() => setLocationModalWine(null)}
-                style={styles.locationCloseBtn}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <MaterialCommunityIcons name="close" size={20} color="#64748b" />
-              </TouchableOpacity>
-            </View>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
+          <View style={styles.locationModalOverlay}>
+            <BlurView
+              intensity={20}
+              tint="systemMaterialDark"
+              style={StyleSheet.absoluteFill}
+            />
 
-            {/* Selected Wine Snapshot */}
-            {locationModalWine && (() => {
-              const typeTheme = getWineTypeTheme(locationModalWine.wineType);
-              const unitPrice = getItemUnitPrice(locationModalWine, locationModalPortion);
-
-              return (
-                <View style={[styles.locationWineSnapshot, { backgroundColor: typeTheme.bg, borderColor: typeTheme.color }]}>
-                  {/* Top Row: Producer & Price */}
-                  <View style={styles.locationWineTopRow}>
-                    <Text style={styles.locationWineProducer} numberOfLines={1}>
-                      {(locationModalWine.producer || "Boutique Selection").toUpperCase()}
-                    </Text>
-                    <Text style={styles.locationPriceText}>
-                      ₱{unitPrice.toLocaleString("en-PH")}
-                    </Text>
-                  </View>
-
-                  {/* Wine Full Title (Regular Weight) */}
-                  <Text style={styles.locationWineName} numberOfLines={2}>
-                    {locationModalWine.vintage ? `${locationModalWine.vintage} ` : ""}
-                    {locationModalWine.name}
-                  </Text>
-                </View>
-              );
-            })()}
-
-            {/* Open Bottle Status Banner (For Glass Serves) */}
-            {locationModalWine && locationModalPortion === "glass" && (() => {
-              const activeOpen = locationModalWine.openBottle;
-              const hasOpen = Boolean(activeOpen && (activeOpen.glassesRemaining ?? 0) > 0);
-
-              return (
-                <View
-                  style={[
-                    styles.openBottleBanner,
-                    hasOpen ? styles.openBottleBannerHasOpen : styles.openBottleBannerNoOpen,
-                  ]}
-                >
-                  <MaterialCommunityIcons
-                    name={hasOpen ? "bottle-wine-outline" : "package-variant-closed"}
-                    size={22}
-                    color={hasOpen ? "#059669" : "#b45309"}
-                  />
-                  <View style={{ flex: 1 }}>
-                    <Text
-                      style={[
-                        styles.openBottleBannerTitle,
-                        { color: hasOpen ? "#065f46" : "#92400e" },
-                      ]}
-                    >
-                      {hasOpen
-                        ? `Active Open Bottle (${activeOpen!.glassesRemaining} glass${activeOpen!.glassesRemaining !== 1 ? "es" : ""} remaining)`
-                        : "No Open Bottle in Service"}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.openBottleBannerSub,
-                        { color: hasOpen ? "#047857" : "#b45309" },
-                      ]}
-                    >
-                      {hasOpen
-                        ? `Stored at: ${activeOpen!.locationName || "Bar"} · Pouring from open bottle first.`
-                        : "A fresh sealed bottle will be opened from inventory (6 glasses total)."}
-                    </Text>
-                  </View>
-                </View>
-              );
-            })()}
-
-            {/* Locations List / Single Location View / Open Bottle View */}
-            <ScrollView style={styles.locationScrollList} showsVerticalScrollIndicator={false}>
-              {locationModalWine && (() => {
-                const breakdown = locationModalWine.locationBreakdown || [];
-                const activeOpen = locationModalWine.openBottle;
-                const hasActiveOpen =
-                  (locationModalPortion === "glass" || locationModalPortion === "carafe") &&
-                  Boolean(activeOpen && (activeOpen.glassesRemaining ?? 0) > 0);
-
-                // If an open bottle exists for glass/carafe, lock selection to open bottle
-                if (hasActiveOpen) {
-                  return (
-                    <View style={styles.singleLocationCard}>
-                      <View style={styles.singleLocationIconBox}>
-                        <MaterialCommunityIcons name="bottle-wine-outline" size={24} color={MAROON.primary} />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                          <Text style={styles.singleLocationBadgeLabel}>POURING FROM OPEN BOTTLE</Text>
-                          <View style={styles.lockedBadge}>
-                            <MaterialCommunityIcons name="lock-outline" size={10} color={MAROON.primary} />
-                            <Text style={styles.lockedBadgeText}>Priority</Text>
-                          </View>
-                        </View>
-                        <Text style={styles.singleLocationTitle}>{activeOpen!.locationName || "Bar / Service Area"}</Text>
-                        <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 3 }}>
-                          <MaterialCommunityIcons name="check-circle-outline" size={14} color="#059669" />
-                          <Text style={styles.singleLocationStockText}>
-                            {activeOpen!.glassesRemaining} glass{activeOpen!.glassesRemaining !== 1 ? "es" : ""} remaining to pour
-                          </Text>
-                        </View>
-                      </View>
+            {isCustomerModalOpen ? (
+              <CustomerPickerModal
+                isOpen={isCustomerModalOpen}
+                useModal={false}
+                onClose={() => setIsCustomerModalOpen(false)}
+                onSelectCustomer={(cust) => {
+                  setSelectedCustomer(cust);
+                  setIsCustomerModalOpen(false);
+                }}
+                storeId={storeId || profile?.locationId || ""}
+                theme={{
+                  primary: MAROON.primary,
+                  background: "#fdfcf8",
+                  card: "#ffffff",
+                  text: "#18181b",
+                  textSecondary: "#71717a",
+                  border: "#e2e8f0",
+                  danger: "#ef4444",
+                }}
+                selectedCustomerId={selectedCustomer?.id}
+              />
+            ) : (
+              <View style={styles.locationModalCard}>
+                {/* Modal Header */}
+                <View style={styles.locationModalHeader}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                    <View style={styles.locationIconCircle}>
+                      <MaterialCommunityIcons name="map-marker-radius-outline" size={22} color={MAROON.primary} />
                     </View>
-                  );
-                }
-
-                if (breakdown.length === 0) {
-                  return (
-                    <View style={styles.singleLocationCard}>
-                      <View style={styles.singleLocationIconBox}>
-                        <MaterialCommunityIcons name="map-marker-outline" size={24} color={MAROON.primary} />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.singleLocationBadgeLabel}>STORAGE</Text>
-                        <Text style={styles.singleLocationTitle}>Unassigned Storage</Text>
-                        <Text style={styles.singleLocationSub}>
-                          {locationModalWine.stockCount} bottle(s) available in store inventory.
-                        </Text>
-                      </View>
-                    </View>
-                  );
-                }
-
-                if (breakdown.length === 1) {
-                  const loc = breakdown[0];
-                  return (
-                    <View style={styles.singleLocationCard}>
-                      <View style={styles.singleLocationIconBox}>
-                        <MaterialCommunityIcons name="map-marker-radius-outline" size={24} color={MAROON.primary} />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.singleLocationBadgeLabel}>PULLOUT LOCATION</Text>
-                        <Text style={styles.singleLocationTitle}>{loc.locationName}</Text>
-                        <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 }}>
-                          <MaterialCommunityIcons name="check-circle-outline" size={14} color="#059669" />
-                          <Text style={styles.singleLocationStockText}>
-                            {loc.count} bottle{loc.count !== 1 ? "s" : ""} available here
-                          </Text>
-                        </View>
-                      </View>
-                    </View>
-                  );
-                }
-
-                // Multiple Locations - Compact 2-Column Grid
-                return (
-                  <View style={{ gap: 8 }}>
-                    <Text style={styles.locationListHeader}>
-                      SELECT PULLOUT BIN ({breakdown.length} LOCATIONS):
-                    </Text>
-                    <View style={styles.locationGridContainer}>
-                      {breakdown.map((loc) => {
-                        const isSelected = selectedLocationId === loc.locationId;
-                        return (
-                          <TouchableOpacity
-                            key={loc.locationId}
-                            onPress={() => setSelectedLocationId(loc.locationId)}
-                            style={[
-                              styles.locationGridTile,
-                              isSelected && styles.locationGridTileSelected,
-                            ]}
-                            activeOpacity={0.8}
-                          >
-                            <View style={styles.locationGridTileTop}>
-                              <MaterialCommunityIcons
-                                name="map-marker-outline"
-                                size={16}
-                                color={isSelected ? MAROON.primary : "#64748b"}
-                              />
-                              <Text
-                                style={[
-                                  styles.locationGridTileName,
-                                  isSelected && styles.locationGridTileNameSelected,
-                                ]}
-                                numberOfLines={1}
-                              >
-                                {loc.locationName}
-                              </Text>
-                              <View
-                                style={[
-                                  styles.locationGridRadio,
-                                  isSelected && styles.locationGridRadioSelected,
-                                ]}
-                              >
-                                {isSelected && <MaterialCommunityIcons name="check" size={11} color="#ffffff" />}
-                              </View>
-                            </View>
-
-                            <View style={styles.locationGridTileBottom}>
-                              <Text
-                                style={[
-                                  styles.locationGridStockText,
-                                  isSelected && styles.locationGridStockTextSelected,
-                                ]}
-                              >
-                                {loc.count} bottle{loc.count !== 1 ? "s" : ""}
-                              </Text>
-                            </View>
-                          </TouchableOpacity>
-                        );
-                      })}
+                    <View>
+                      <Text style={styles.locationModalTitle}>Confirm Wine Location</Text>
+                      <Text style={styles.locationModalSub}>
+                        {locationModalWine?.openBottle && (locationModalPortion === "glass" || locationModalPortion === "carafe") && (locationModalWine.openBottle.glassesRemaining ?? 0) > 0
+                          ? "Pouring directly from active open bottle"
+                          : (locationModalWine?.locationBreakdown?.length ?? 0) > 1
+                            ? "Select storage location to pullout from"
+                            : "Verify storage location for pullout"}
+                      </Text>
                     </View>
                   </View>
-                );
-              })()}
-            </ScrollView>
-
-            {/* Modal Actions: Cancel, Add More (Queue), or Confirm Sale (Direct Checkout) */}
-            {locationModalWine && (() => {
-              const unitPrice = getItemUnitPrice(locationModalWine, locationModalPortion);
-              const directSaleTotal = (orderSummary.totalAmount || 0) + unitPrice;
-
-              return (
-                <View style={styles.locationModalFooter}>
                   <TouchableOpacity
                     onPress={() => setLocationModalWine(null)}
-                    style={styles.locationCancelBtn}
-                    activeOpacity={0.8}
+                    style={styles.locationCloseBtn}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                   >
-                    <Text style={styles.locationCancelBtnText}>Cancel</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    onPress={handleAddMoreFromModal}
-                    style={styles.locationAddMoreBtn}
-                    activeOpacity={0.85}
-                  >
-                    <MaterialCommunityIcons name="plus" size={16} color={MAROON.primary} />
-                    <Text style={styles.locationAddMoreBtnText}>Add More</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    onPress={handleDirectSaleFromModal}
-                    disabled={isProcessing}
-                    style={styles.locationConfirmSaleBtn}
-                    activeOpacity={0.85}
-                  >
-                    {isProcessing ? (
-                      <ActivityIndicator color="#ffffff" size="small" />
-                    ) : (
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                        <MaterialCommunityIcons name="check" size={16} color="#ffffff" />
-                        <Text style={styles.locationConfirmSaleBtnText} numberOfLines={1}>
-                          Confirm Sale · ₱{directSaleTotal.toLocaleString("en-PH")}
-                        </Text>
-                      </View>
-                    )}
+                    <MaterialCommunityIcons name="close" size={20} color="#64748b" />
                   </TouchableOpacity>
                 </View>
-              );
-            })()}
+
+                {/* Selected Wine Snapshot */}
+                {locationModalWine && (() => {
+                  const typeTheme = getWineTypeTheme(locationModalWine.wineType);
+                  const unitPrice = getItemUnitPrice(locationModalWine, locationModalPortion);
+
+                  return (
+                    <View style={[styles.locationWineSnapshot, { backgroundColor: typeTheme.bg, borderColor: typeTheme.color }]}>
+                      {/* Top Row: Producer & Price */}
+                      <View style={styles.locationWineTopRow}>
+                        <Text style={styles.locationWineProducer} numberOfLines={1}>
+                          {(locationModalWine.producer || "Boutique Selection").toUpperCase()}
+                        </Text>
+                        <Text style={styles.locationPriceText}>
+                          ₱{unitPrice.toLocaleString("en-PH")}
+                        </Text>
+                      </View>
+
+                      {/* Wine Full Title (Regular Weight) */}
+                      <Text style={styles.locationWineName} numberOfLines={2}>
+                        {locationModalWine.vintage ? `${locationModalWine.vintage} ` : ""}
+                        {locationModalWine.name}
+                      </Text>
+                    </View>
+                  );
+                })()}
+
+                {/* Open Bottle Status Banner (For Glass Serves) */}
+                {locationModalWine && locationModalPortion === "glass" && (() => {
+                  const activeOpen = locationModalWine.openBottle;
+                  const hasOpen = Boolean(activeOpen && (activeOpen.glassesRemaining ?? 0) > 0);
+
+                  return (
+                    <View
+                      style={[
+                        styles.openBottleBanner,
+                        hasOpen ? styles.openBottleBannerHasOpen : styles.openBottleBannerNoOpen,
+                      ]}
+                    >
+                      <MaterialCommunityIcons
+                        name={hasOpen ? "bottle-wine-outline" : "package-variant-closed"}
+                        size={22}
+                        color={hasOpen ? "#059669" : "#b45309"}
+                      />
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={[
+                            styles.openBottleBannerTitle,
+                            { color: hasOpen ? "#065f46" : "#92400e" },
+                          ]}
+                        >
+                          {hasOpen
+                            ? `Active Open Bottle (${activeOpen!.glassesRemaining} glass${activeOpen!.glassesRemaining !== 1 ? "es" : ""} remaining)`
+                            : "No Open Bottle in Service"}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.openBottleBannerSub,
+                            { color: hasOpen ? "#047857" : "#b45309" },
+                          ]}
+                        >
+                          {hasOpen
+                            ? `Stored at: ${activeOpen!.locationName || "Bar"} · Pouring from open bottle first.`
+                            : "A fresh sealed bottle will be opened from inventory (6 glasses total)."}
+                        </Text>
+                      </View>
+                    </View>
+                  );
+                })()}
+
+                {/* Locations List / Single Location View / Open Bottle View */}
+                <ScrollView style={styles.locationScrollList} showsVerticalScrollIndicator={false}>
+                  {locationModalWine && (() => {
+                    const breakdown = locationModalWine.locationBreakdown || [];
+                    const activeOpen = locationModalWine.openBottle;
+                    const hasActiveOpen =
+                      (locationModalPortion === "glass" || locationModalPortion === "carafe") &&
+                      Boolean(activeOpen && (activeOpen.glassesRemaining ?? 0) > 0);
+
+                    // If an open bottle exists for glass/carafe, lock selection to open bottle
+                    if (hasActiveOpen) {
+                      return (
+                        <View style={styles.singleLocationCard}>
+                          <View style={styles.singleLocationIconBox}>
+                            <MaterialCommunityIcons name="bottle-wine-outline" size={24} color={MAROON.primary} />
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                              <Text style={styles.singleLocationBadgeLabel}>POURING FROM OPEN BOTTLE</Text>
+                              <View style={styles.lockedBadge}>
+                                <MaterialCommunityIcons name="lock-outline" size={10} color={MAROON.primary} />
+                                <Text style={styles.lockedBadgeText}>Priority</Text>
+                              </View>
+                            </View>
+                            <Text style={styles.singleLocationTitle}>{activeOpen!.locationName || "Bar / Service Area"}</Text>
+                            <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 3 }}>
+                              <MaterialCommunityIcons name="check-circle-outline" size={14} color="#059669" />
+                              <Text style={styles.singleLocationStockText}>
+                                {activeOpen!.glassesRemaining} glass{activeOpen!.glassesRemaining !== 1 ? "es" : ""} remaining to pour
+                              </Text>
+                            </View>
+                          </View>
+                        </View>
+                      );
+                    }
+
+                    if (breakdown.length === 0) {
+                      return (
+                        <View style={styles.singleLocationCard}>
+                          <View style={styles.singleLocationIconBox}>
+                            <MaterialCommunityIcons name="map-marker-outline" size={24} color={MAROON.primary} />
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.singleLocationBadgeLabel}>STORAGE</Text>
+                            <Text style={styles.singleLocationTitle}>Unassigned Storage</Text>
+                            <Text style={styles.singleLocationSub}>
+                              {locationModalWine.stockCount} bottle(s) available in store inventory.
+                            </Text>
+                          </View>
+                        </View>
+                      );
+                    }
+
+                    if (breakdown.length === 1) {
+                      const loc = breakdown[0];
+                      return (
+                        <View style={styles.singleLocationCard}>
+                          <View style={styles.singleLocationIconBox}>
+                            <MaterialCommunityIcons name="map-marker-radius-outline" size={24} color={MAROON.primary} />
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.singleLocationBadgeLabel}>PULLOUT LOCATION</Text>
+                            <Text style={styles.singleLocationTitle}>{loc.locationName}</Text>
+                            <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 }}>
+                              <MaterialCommunityIcons name="check-circle-outline" size={14} color="#059669" />
+                              <Text style={styles.singleLocationStockText}>
+                                {loc.count} bottle{loc.count !== 1 ? "s" : ""} available here
+                              </Text>
+                            </View>
+                          </View>
+                        </View>
+                      );
+                    }
+
+                    // Multiple Locations - Compact 2-Column Grid
+                    return (
+                      <View style={{ gap: 8 }}>
+                        <Text style={styles.locationListHeader}>
+                          SELECT PULLOUT BIN ({breakdown.length} LOCATIONS):
+                        </Text>
+                        <View style={styles.locationGridContainer}>
+                          {breakdown.map((loc) => {
+                            const isSelected = selectedLocationId === loc.locationId;
+                            return (
+                              <TouchableOpacity
+                                key={loc.locationId}
+                                onPress={() => setSelectedLocationId(loc.locationId)}
+                                style={[
+                                  styles.locationGridTile,
+                                  isSelected && styles.locationGridTileSelected,
+                                ]}
+                                activeOpacity={0.8}
+                              >
+                                <View style={styles.locationGridTileTop}>
+                                  <MaterialCommunityIcons
+                                    name="map-marker-outline"
+                                    size={16}
+                                    color={isSelected ? MAROON.primary : "#64748b"}
+                                  />
+                                  <Text
+                                    style={[
+                                      styles.locationGridTileName,
+                                      isSelected && styles.locationGridTileNameSelected,
+                                    ]}
+                                    numberOfLines={1}
+                                  >
+                                    {loc.locationName}
+                                  </Text>
+                                  <View
+                                    style={[
+                                      styles.locationGridRadio,
+                                      isSelected && styles.locationGridRadioSelected,
+                                    ]}
+                                  >
+                                    {isSelected && <MaterialCommunityIcons name="check" size={11} color="#ffffff" />}
+                                  </View>
+                                </View>
+
+                                <View style={styles.locationGridTileBottom}>
+                                  <Text
+                                    style={[
+                                      styles.locationGridStockText,
+                                      isSelected && styles.locationGridStockTextSelected,
+                                    ]}
+                                  >
+                                    {loc.count} bottle{loc.count !== 1 ? "s" : ""}
+                                  </Text>
+                                </View>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </View>
+                      </View>
+                    );
+                  })()}
+                </ScrollView>
+
+                {/* Customer / VIP Guest Attachment in Modal */}
+                <View style={styles.fineWineCustomerSection}>
+                  <View style={styles.fineWineCustomerHeader}>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                      <MaterialCommunityIcons name="account-star-outline" size={15} color={MAROON.primary} />
+                      <Text style={styles.fineWineCustomerTitle}>
+                        {locationModalWine && locationModalWine.wineCategory === "fine" ? "VIP / CUSTOMER (FINE WINE)" : "CUSTOMER (OPTIONAL)"}
+                      </Text>
+                    </View>
+                    {locationModalWine && locationModalWine.wineCategory === "fine" && (
+                      <View style={styles.fineWinePill}>
+                        <Text style={styles.fineWinePillText}>Fine Wine</Text>
+                      </View>
+                    )}
+                  </View>
+
+                  {selectedCustomer ? (
+                    <View style={styles.selectedCustomerCard}>
+                      <View style={styles.selectedCustomerInfo}>
+                        <MaterialCommunityIcons name="account-check" size={16} color={MAROON.primary} />
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.selectedCustomerName} numberOfLines={1}>
+                            {selectedCustomer.name}
+                          </Text>
+                          {(selectedCustomer.email || selectedCustomer.contactNo) && (
+                            <Text style={styles.selectedCustomerSub} numberOfLines={1}>
+                              {selectedCustomer.email || selectedCustomer.contactNo}
+                            </Text>
+                          )}
+                        </View>
+                      </View>
+                      <TouchableOpacity
+                        onPress={() => setSelectedCustomer(null)}
+                        style={styles.removeCustomerBtn}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <MaterialCommunityIcons name="close-circle" size={16} color="#94a3b8" />
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      onPress={() => setIsCustomerModalOpen(true)}
+                      style={styles.addCustomerBtn}
+                      activeOpacity={0.8}
+                    >
+                      <MaterialCommunityIcons name="account-plus-outline" size={15} color={MAROON.primary} />
+                      <Text style={styles.addCustomerBtnText}>Attach Customer / VIP Guest...</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                {/* Modal Actions: Cancel, Add More (Queue), or Confirm Sale (Direct Checkout) */}
+                {locationModalWine && (() => {
+                  const unitPrice = getItemUnitPrice(locationModalWine, locationModalPortion);
+                  const directSaleTotal = (orderSummary.totalAmount || 0) + unitPrice;
+
+                  return (
+                    <View style={styles.locationModalFooter}>
+                      <TouchableOpacity
+                        onPress={() => setLocationModalWine(null)}
+                        style={styles.locationCancelBtn}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={styles.locationCancelBtnText}>Cancel</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        onPress={handleAddMoreFromModal}
+                        style={styles.locationAddMoreBtn}
+                        activeOpacity={0.85}
+                      >
+                        <MaterialCommunityIcons name="plus" size={16} color={MAROON.primary} />
+                        <Text style={styles.locationAddMoreBtnText}>Add More</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        onPress={handleDirectSaleFromModal}
+                        disabled={isProcessing}
+                        style={styles.locationConfirmSaleBtn}
+                        activeOpacity={0.85}
+                      >
+                        {isProcessing ? (
+                          <ActivityIndicator color="#ffffff" size="small" />
+                        ) : (
+                          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                            <MaterialCommunityIcons name="check" size={16} color="#ffffff" />
+                            <Text style={styles.locationConfirmSaleBtnText} numberOfLines={1}>
+                              Confirm Sale · ₱{directSaleTotal.toLocaleString("en-PH")}
+                            </Text>
+                          </View>
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  );
+                })()}
+              </View>
+            )}
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
+
+      {/* ── Customer Picker Modal (For Order Queue in Sidebar / Cart) ────────── */}
+      {isCustomerModalOpen && !locationModalWine && (
+        <CustomerPickerModal
+          isOpen={isCustomerModalOpen}
+          useModal={true}
+          onClose={() => setIsCustomerModalOpen(false)}
+          onSelectCustomer={(cust) => {
+            setSelectedCustomer(cust);
+            setIsCustomerModalOpen(false);
+          }}
+          storeId={storeId || profile?.locationId || ""}
+          theme={{
+            primary: MAROON.primary,
+            background: "#fdfcf8",
+            card: "#ffffff",
+            text: "#18181b",
+            textSecondary: "#71717a",
+            border: "#e2e8f0",
+            danger: "#ef4444",
+          }}
+          selectedCustomerId={selectedCustomer?.id}
+        />
+      )}
 
     </SafeAreaView>
   );
@@ -3545,6 +3716,88 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: "#f1f5f9",
+  },
+  fineWineCustomerSection: {
+    backgroundColor: "#fdf8f6",
+    borderRadius: 12,
+    padding: 10,
+    marginTop: 10,
+    marginBottom: 2,
+    borderWidth: 1,
+    borderColor: "#fed7aa",
+  },
+  fineWineCustomerHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 6,
+  },
+  fineWineCustomerTitle: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: MAROON.primary,
+    letterSpacing: 0.6,
+  },
+  fineWinePill: {
+    backgroundColor: "#ffedd5",
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#fed7aa",
+  },
+  fineWinePillText: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: "#c2410c",
+  },
+  addCustomerBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: "#ffffff",
+    borderRadius: 10,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderStyle: "dashed",
+  },
+  addCustomerBtnText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: MAROON.primary,
+  },
+  selectedCustomerCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#ffffff",
+    borderRadius: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: MAROON.border,
+  },
+  selectedCustomerInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+  },
+  selectedCustomerName: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#18181b",
+  },
+  selectedCustomerSub: {
+    fontSize: 10,
+    color: "#64748b",
+    marginTop: 1,
+  },
+  removeCustomerBtn: {
+    padding: 2,
   },
   locationCancelBtn: {
     paddingVertical: 14,

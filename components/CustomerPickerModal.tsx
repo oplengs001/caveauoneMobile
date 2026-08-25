@@ -1,101 +1,86 @@
-import React, { useState, useEffect, useMemo } from "react";
-import {
-  View,
-  Text,
-  Modal,
-  StyleSheet,
-  TouchableOpacity,
-  TextInput,
-  FlatList,
-  KeyboardAvoidingView,
-  Platform,
-  ActivityIndicator,
-  Alert,
-} from "react-native";
-import { Search, Plus, X, User, Check, Mail, Phone } from "lucide-react-native";
 import { apiFetch } from "@/lib/api";
 import { Customer } from "@/types";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { BlurView } from "expo-blur";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
+} from "react-native";
 
 interface CustomerPickerModalProps {
   isOpen: boolean;
   onClose: () => void;
-  storeId: string;
-  theme: any;
+  storeId?: string | null;
+  theme?: any;
   onSelectCustomer: (customer: Customer | null) => void;
   selectedCustomerId?: string;
+  useModal?: boolean;
 }
 
 export const PREDEFINED_COUNTRIES_REGIONS = [
-  "Germany",
-  "Austria",
   "France",
-  "Burgundy (White)",
-  "Burgundy (Red)",
-  "Côte de Nuits",
-  "Côte de Beaune",
-  "Chablis",
-  "Côte Chalonnaise",
-  "Mâconnais",
   "Bordeaux",
-  "Rhône (North)",
-  "Rhône (South)",
-  "Loire",
+  "Burgundy (Red)",
+  "Burgundy (White)",
+  "Champagne",
+  "Rhône Valley",
+  "Loire Valley",
   "Alsace",
-  "Jura",
   "Italy",
-  "Barolo",
-  "Brunello di Montalcino",
+  "Barolo / Piedmont",
+  "Brunello / Tuscany",
   "Chianti Classico",
   "Spain",
   "Rioja",
   "Ribera del Duero",
-  "Portugal",
-  "Douro",
-  "Dão",
-  "Vinho Verde",
   "United States",
   "Napa Valley",
   "Sonoma Coast",
-  "Russian River Valley",
-  "Santa Rita Hills",
-  "Willamette Valley (Oregon)",
+  "Oregon",
   "Australia",
   "Barossa Valley",
   "Margaret River",
-  "Yarra Valley",
-  "McLaren Vale",
-  "Hunter Valley",
-  "Eden Valley",
-  "Clare Valley",
-  "Coonawarra",
-  "Mornington Peninsula",
-  "Adelaide Hills",
-  "Tasmania",
-  "Beechworth",
+  "Germany",
+  "Austria",
+  "Portugal",
   "South Africa",
-  "Stellenbosch",
-  "Hemel-en-Aarde",
-  "Swartland",
   "Chile",
   "Argentina",
+  "New Zealand",
 ];
 
 export const PREDEFINED_WINE_STYLES = [
-  "Red Wine",
-  "White Wine",
-  "Sparkling Wine",
-  "Champagne",
-  "Rosé Wine",
-  "Dessert / Sweet Wine",
-  "Fortified Wine",
   "Full-Bodied Red",
   "Medium-Bodied Red",
-  "Light Red",
+  "Light-Bodied Red",
   "Crisp & Dry White",
   "Oaky & Rich White",
-  "Natural / Organic / Biodynamic",
-  "Skin Contact / Amber / Orange",
+  "Champagne / Sparkling",
+  "Rosé Wine",
+  "Dessert & Sweet",
+  "Fortified / Port",
+  "Natural / Biodynamic",
 ];
+
+const MAROON = {
+  primary: "#722F37",
+  primaryDark: "#5B2228",
+  ultraLight: "#fdf8f6",
+  border: "#fed7aa",
+  accentGold: "#b45309",
+};
 
 export default function CustomerPickerModal({
   isOpen,
@@ -104,13 +89,18 @@ export default function CustomerPickerModal({
   theme,
   onSelectCustomer,
   selectedCustomerId,
+  useModal = true,
 }: CustomerPickerModalProps) {
+  const { width, height } = useWindowDimensions();
+  const isLandscape = width > height;
+
+  const [activeTab, setActiveTab] = useState<"search" | "add">("search");
   const [searchQuery, setSearchQuery] = useState("");
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [availableProducers, setAvailableProducers] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [isAddingNew, setIsAddingNew] = useState(false);
+  // Form State
   const [newName, setNewName] = useState("");
   const [newEmail, setNewEmail] = useState("");
   const [newContact, setNewContact] = useState("");
@@ -125,11 +115,56 @@ export default function CustomerPickerModal({
 
   const [savingNew, setSavingNew] = useState(false);
 
+  const fetchMasterProducers = useCallback(async () => {
+    try {
+      const data = await apiFetch("/producers").catch(() => apiFetch("/wines"));
+      let uniqueProducers: string[] = [];
+      if (Array.isArray(data)) {
+        if (data.length > 0 && typeof data[0] === "string") {
+          uniqueProducers = data;
+        } else {
+          uniqueProducers = Array.from(
+            new Set(
+              data
+                .map((w: any) => w.producer)
+                .filter((p: any) => p && typeof p === "string" && p.trim().length > 0)
+            )
+          ) as string[];
+        }
+      } else if (data?.masterWines) {
+        uniqueProducers = Array.from(
+          new Set(
+            data.masterWines
+              .map((w: any) => w.producer)
+              .filter((p: any) => p && typeof p === "string" && p.trim().length > 0)
+          )
+        ) as string[];
+      }
+      setAvailableProducers(uniqueProducers.sort());
+    } catch (e) {
+      console.error("[CustomerPickerModal] Failed to fetch master wine producers", e);
+    }
+  }, []);
+
+  const fetchCustomers = useCallback(async () => {
+    setLoading(true);
+    try {
+      const url = storeId ? `/customers?storeId=${storeId}` : `/customers`;
+      const data = await apiFetch(url);
+      const list: Customer[] = Array.isArray(data) ? data : data.customers || [];
+      setCustomers(list);
+    } catch (err) {
+      console.error("[CustomerPickerModal] Failed to fetch customers", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [storeId]);
+
   useEffect(() => {
-    if (isOpen && storeId) {
+    if (isOpen) {
       fetchCustomers();
       fetchMasterProducers();
-      setIsAddingNew(false);
+      setActiveTab("search");
       setNewName("");
       setNewEmail("");
       setNewContact("");
@@ -141,43 +176,7 @@ export default function CustomerPickerModal({
       setFavoriteWineStyle("");
       setSearchQuery("");
     }
-  }, [isOpen, storeId]);
-
-  const fetchMasterProducers = async () => {
-    try {
-      const data = await apiFetch("/producers").catch(() => apiFetch("/wines"));
-      let uniqueProducers: string[] = [];
-      if (Array.isArray(data)) {
-        if (data.length > 0 && typeof data[0] === "string") {
-          uniqueProducers = data;
-        } else {
-          uniqueProducers = Array.from(
-            new Set(data.map((w: any) => w.producer).filter((p: any) => p && typeof p === "string" && p.trim().length > 0))
-          ) as string[];
-        }
-      } else if (data?.masterWines) {
-        uniqueProducers = Array.from(
-          new Set(data.masterWines.map((w: any) => w.producer).filter((p: any) => p && typeof p === "string" && p.trim().length > 0))
-        ) as string[];
-      }
-      setAvailableProducers(uniqueProducers.sort());
-    } catch (e) {
-      console.error("Failed to fetch master wine producers", e);
-    }
-  };
-
-  const fetchCustomers = async () => {
-    setLoading(true);
-    try {
-      const data = await apiFetch(`/customers?storeId=${storeId}`);
-      const list: Customer[] = Array.isArray(data) ? data : (data.customers || []);
-      setCustomers(list);
-    } catch (err) {
-      console.error("Failed to fetch customers", err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [isOpen, storeId, fetchCustomers, fetchMasterProducers]);
 
   const filteredCustomers = useMemo(() => {
     if (!searchQuery.trim()) return customers;
@@ -187,24 +186,26 @@ export default function CustomerPickerModal({
         c.name.toLowerCase().includes(lowerQ) ||
         (c.email && c.email.toLowerCase().includes(lowerQ)) ||
         (c.contactNo && c.contactNo.toLowerCase().includes(lowerQ)) ||
-        (c.notes && c.notes.toLowerCase().includes(lowerQ))
+        (c.notes && c.notes.toLowerCase().includes(lowerQ)) ||
+        (c.favoriteWineStyle && c.favoriteWineStyle.toLowerCase().includes(lowerQ))
     );
   }, [customers, searchQuery]);
 
   const handleSaveNew = async () => {
     const trimmedName = newName.trim();
     if (!trimmedName) {
-      Alert.alert("Required", "Please enter a customer name.");
+      Alert.alert("Required Field", "Please enter the customer name.");
       return;
     }
 
-    // Check duplicates
-    const duplicate = customers.find(c => c.name.toLowerCase() === trimmedName.toLowerCase());
-    
+    const duplicate = customers.find(
+      (c) => c.name.toLowerCase() === trimmedName.toLowerCase()
+    );
+
     if (duplicate) {
       Alert.alert(
         "Duplicate Name",
-        `A customer named "${trimmedName}" already exists. Do you want to proceed and create a new record anyway (e.g. you could add a suffix like _1)?`,
+        `A customer named "${trimmedName}" already exists. Do you want to proceed and create a new record anyway?`,
         [
           { text: "Cancel", style: "cancel" },
           { text: "Proceed", onPress: proceedSaveNew },
@@ -228,7 +229,7 @@ export default function CustomerPickerModal({
           favoriteRegions: favoriteRegions.slice(0, 10),
           favoriteWineStyle: favoriteWineStyle.trim() || null,
           notes: newNotes.trim() || null,
-          storeId,
+          storeId: storeId || null,
           totalSpend: 0,
           totalOrders: 0,
         }),
@@ -236,9 +237,9 @@ export default function CustomerPickerModal({
 
       onSelectCustomer(newCustomer as Customer);
       onClose();
-    } catch (err) {
-      console.error("Error creating customer", err);
-      Alert.alert("Error", "Failed to save customer.");
+    } catch (err: any) {
+      console.error("[CustomerPickerModal] Error creating customer", err);
+      Alert.alert("Error", err.message || "Failed to save customer.");
     } finally {
       setSavingNew(false);
     }
@@ -246,420 +247,616 @@ export default function CustomerPickerModal({
 
   if (!isOpen) return null;
 
-  return (
-    <Modal visible={isOpen} animationType="slide" transparent>
-      <KeyboardAvoidingView
-        style={styles.modalOverlay}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-      >
-        <View style={[styles.modalContent, { backgroundColor: theme.background }]}>
-          {/* Header */}
-          <View style={[styles.header, { borderBottomColor: theme.border }]}>
-            <Text style={[styles.headerTitle, { color: theme.text }]}>Select Customer</Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <X size={24} color={theme.textSecondary} />
-            </TouchableOpacity>
+  // Large POS dimensions
+  const cardMaxWidth = isLandscape ? Math.min(width * 0.94, 980) : Math.min(width * 0.94, 580);
+  const cardHeight = isLandscape ? Math.min(height * 0.92, 680) : Math.min(height * 0.90, 760);
+
+  const cardContent = (
+    <View
+      style={[
+        styles.modalCard,
+        {
+          maxWidth: cardMaxWidth,
+          height: cardHeight,
+        },
+      ]}
+    >
+      {/* ── Modal Header (Large POS Touch Targets) ─────────────────────────── */}
+      <View style={styles.modalHeader}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 12, flex: 1 }}>
+          <View style={styles.iconCircle}>
+            <MaterialCommunityIcons
+              name={activeTab === "add" ? "account-plus-outline" : "account-search-outline"}
+              size={26}
+              color={MAROON.primary}
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.modalTitle}>
+              {activeTab === "add" ? "Add VIP Customer" : "Select Customer / VIP"}
+            </Text>
+            <Text style={styles.modalSub} numberOfLines={1}>
+              {activeTab === "add"
+                ? "Enter guest credentials and taste preferences"
+                : "Attach customer or VIP guest profile to this transaction"}
+            </Text>
+          </View>
+        </View>
+
+        <TouchableOpacity
+          onPress={onClose}
+          style={styles.closeBtn}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        >
+          <MaterialCommunityIcons name="close" size={22} color="#64748b" />
+        </TouchableOpacity>
+      </View>
+
+      {/* ── Segmented Control (Large Tabs for Fast Switching) ───────────────── */}
+      <View style={styles.tabSwitcher}>
+        <TouchableOpacity
+          onPress={() => setActiveTab("search")}
+          style={[styles.tabBtn, activeTab === "search" && styles.tabBtnActive]}
+          activeOpacity={0.8}
+        >
+          <MaterialCommunityIcons
+            name="account-group-outline"
+            size={18}
+            color={activeTab === "search" ? MAROON.primary : "#64748b"}
+          />
+          <Text
+            style={[
+              styles.tabBtnText,
+              activeTab === "search" && { color: MAROON.primary, fontWeight: "900" },
+            ]}
+          >
+            Client Directory ({customers.length})
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={() => setActiveTab("add")}
+          style={[styles.tabBtn, activeTab === "add" && styles.tabBtnActive]}
+          activeOpacity={0.8}
+        >
+          <MaterialCommunityIcons
+            name="account-plus-outline"
+            size={18}
+            color={activeTab === "add" ? MAROON.primary : "#64748b"}
+          />
+          <Text
+            style={[
+              styles.tabBtnText,
+              activeTab === "add" && { color: MAROON.primary, fontWeight: "900" },
+            ]}
+          >
+            + New VIP Profile
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* ── Tab 1: Client Directory View ─────────────────────────────────────── */}
+      {activeTab === "search" ? (
+        <View style={{ flex: 1 }}>
+          {/* Large POS Search Box */}
+          <View style={styles.searchBarWrapper}>
+            <MaterialCommunityIcons name="magnify" size={22} color="#94a3b8" />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search by name, phone, email, or favorite wine style..."
+              placeholderTextColor="#94a3b8"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              autoCapitalize="none"
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity
+                onPress={() => setSearchQuery("")}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <MaterialCommunityIcons name="close-circle" size={20} color="#94a3b8" />
+              </TouchableOpacity>
+            )}
           </View>
 
-          {/* Search Bar */}
-          {!isAddingNew && (
-            <View style={[styles.searchContainer, { borderBottomColor: theme.border }]}>
-              <View style={[styles.searchInputWrapper, { backgroundColor: theme.card, borderColor: theme.border }]}>
-                <Search size={18} color={theme.textSecondary} />
-                <TextInput
-                  style={[styles.searchInput, { color: theme.text }]}
-                  placeholder="Search by name, email, or contact..."
-                  placeholderTextColor={theme.textSecondary}
-                  value={searchQuery}
-                  onChangeText={setSearchQuery}
-                  autoCapitalize="words"
-                />
-                {searchQuery.length > 0 && (
-                  <TouchableOpacity onPress={() => setSearchQuery("")}>
-                    <X size={16} color={theme.textSecondary} />
-                  </TouchableOpacity>
-                )}
-              </View>
+          {/* List Area */}
+          {loading ? (
+            <View style={styles.centerContainer}>
+              <ActivityIndicator size="large" color={MAROON.primary} />
+              <Text style={styles.centerText}>Loading guest directory...</Text>
             </View>
-          )}
-
-          {/* List or Add New */}
-          {isAddingNew ? (
-            <FlatList
-              data={[1]}
-              keyExtractor={() => "form"}
-              renderItem={() => (
-                <View style={styles.addForm}>
-                  <Text style={[styles.formLabel, { color: theme.textSecondary }]}>Customer Name *</Text>
-                  <TextInput
-                    style={[styles.formInput, { backgroundColor: theme.card, color: theme.text, borderColor: theme.border }]}
-                    placeholder="Juan dela Cruz"
-                    placeholderTextColor={theme.textSecondary}
-                    value={newName}
-                    onChangeText={setNewName}
-                    autoCapitalize="words"
-                  />
-
-                  {/* 2 Columns: Email & Contact */}
-                  <View style={{ flexDirection: "row", gap: 12, marginTop: 12 }}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.formLabel, { color: theme.textSecondary, marginTop: 0 }]}>Email</Text>
-                      <TextInput
-                        style={[styles.formInput, { backgroundColor: theme.card, color: theme.text, borderColor: theme.border }]}
-                        placeholder="juan@example.com"
-                        placeholderTextColor={theme.textSecondary}
-                        value={newEmail}
-                        onChangeText={setNewEmail}
-                        keyboardType="email-address"
-                        autoCapitalize="none"
-                      />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.formLabel, { color: theme.textSecondary, marginTop: 0 }]}>Contact No.</Text>
-                      <TextInput
-                        style={[styles.formInput, { backgroundColor: theme.card, color: theme.text, borderColor: theme.border }]}
-                        placeholder="+63 912 345 6789"
-                        placeholderTextColor={theme.textSecondary}
-                        value={newContact}
-                        onChangeText={setNewContact}
-                        keyboardType="phone-pad"
-                      />
-                    </View>
-                  </View>
-
-                  {/* Taste Preferences Header */}
-                  <View style={{ marginTop: 20, paddingTop: 16, borderTopWidth: 1, borderTopColor: theme.border }}>
-                    <Text style={{ fontSize: 13, fontWeight: "800", color: theme.primary, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 12 }}>
-                      Taste Preferences
-                    </Text>
-
-                    {/* Favourite Producers (up to 10) */}
-                    <View style={{ marginBottom: 16 }}>
-                      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                        <Text style={[styles.formLabel, { color: theme.textSecondary, marginTop: 0, marginBottom: 0 }]}>
-                          Favourite Producers ({favoriteProducers.length}/10)
-                        </Text>
-                      </View>
-                      {favoriteProducers.length > 0 && (
-                        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
-                          {favoriteProducers.map((prod, pIdx) => (
-                            <TouchableOpacity
-                              key={pIdx}
-                              style={{
-                                flexDirection: "row",
-                                alignItems: "center",
-                                gap: 6,
-                                backgroundColor: theme.primary + "1A",
-                                borderColor: theme.primary + "40",
-                                borderWidth: 1,
-                                paddingHorizontal: 10,
-                                paddingVertical: 5,
-                                borderRadius: 14,
-                              }}
-                              onPress={() => setFavoriteProducers(favoriteProducers.filter((_, i) => i !== pIdx))}
-                            >
-                              <Text style={{ fontSize: 12, fontWeight: "700", color: theme.primary }}>{prod}</Text>
-                              <X size={14} color={theme.primary} />
-                            </TouchableOpacity>
-                          ))}
-                        </View>
-                      )}
-                      {favoriteProducers.length < 10 && (
-                        <View style={{ position: "relative" }}>
-                          <TextInput
-                            style={[styles.formInput, { backgroundColor: theme.card, color: theme.text, borderColor: theme.border }]}
-                            placeholder="Type producer e.g. Domaine Leflaive..."
-                            placeholderTextColor={theme.textSecondary}
-                            value={producerInput}
-                            onChangeText={setProducerInput}
-                          />
-                          {producerInput.trim().length > 0 && (
-                            <View style={{ backgroundColor: theme.card, borderColor: theme.border, borderWidth: 1, borderRadius: 12, marginTop: 4, padding: 4, zIndex: 10 }}>
-                              {availableProducers
-                                .filter((p) => p.toLowerCase().includes(producerInput.toLowerCase()) && !favoriteProducers.includes(p))
-                                .slice(0, 5)
-                                .map((p, idx) => (
-                                  <TouchableOpacity
-                                    key={idx}
-                                    style={{ padding: 10, borderBottomWidth: idx < 4 ? 1 : 0, borderBottomColor: theme.border }}
-                                    onPress={() => {
-                                      setFavoriteProducers([...favoriteProducers, p]);
-                                      setProducerInput("");
-                                    }}
-                                  >
-                                    <Text style={{ fontSize: 13, fontWeight: "600", color: theme.text }}>{p}</Text>
-                                  </TouchableOpacity>
-                                ))}
-                              {!favoriteProducers.includes(producerInput.trim()) && (
-                                <TouchableOpacity
-                                  style={{ padding: 10, backgroundColor: theme.primary + "12", borderRadius: 8, marginTop: 4 }}
-                                  onPress={() => {
-                                    setFavoriteProducers([...favoriteProducers, producerInput.trim()]);
-                                    setProducerInput("");
-                                  }}
-                                >
-                                  <Text style={{ fontSize: 13, fontWeight: "700", color: theme.primary }}>
-                                    + Add "{producerInput.trim()}"
-                                  </Text>
-                                </TouchableOpacity>
-                              )}
-                            </View>
-                          )}
-                        </View>
-                      )}
-                    </View>
-
-                    {/* Favourite Country / Region (up to 10) */}
-                    <View style={{ marginBottom: 16 }}>
-                      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                        <Text style={[styles.formLabel, { color: theme.textSecondary, marginTop: 0, marginBottom: 0 }]}>
-                          Favourite Country / Region ({favoriteRegions.length}/10)
-                        </Text>
-                      </View>
-                      {favoriteRegions.length > 0 && (
-                        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
-                          {favoriteRegions.map((reg, rIdx) => (
-                            <TouchableOpacity
-                              key={rIdx}
-                              style={{
-                                flexDirection: "row",
-                                alignItems: "center",
-                                gap: 6,
-                                backgroundColor: "#f59e0b1A",
-                                borderColor: "#f59e0b40",
-                                borderWidth: 1,
-                                paddingHorizontal: 10,
-                                paddingVertical: 5,
-                                borderRadius: 14,
-                              }}
-                              onPress={() => setFavoriteRegions(favoriteRegions.filter((_, i) => i !== rIdx))}
-                            >
-                              <Text style={{ fontSize: 12, fontWeight: "700", color: "#d97706" }}>{reg}</Text>
-                              <X size={14} color="#d97706" />
-                            </TouchableOpacity>
-                          ))}
-                        </View>
-                      )}
-                      {favoriteRegions.length < 10 && (
-                        <View style={{ position: "relative" }}>
-                          <TextInput
-                            style={[styles.formInput, { backgroundColor: theme.card, color: theme.text, borderColor: theme.border }]}
-                            placeholder="Search region e.g. Bordeaux, Napa Valley..."
-                            placeholderTextColor={theme.textSecondary}
-                            value={regionInput}
-                            onChangeText={setRegionInput}
-                          />
-                          {regionInput.trim().length > 0 && (
-                            <View style={{ backgroundColor: theme.card, borderColor: theme.border, borderWidth: 1, borderRadius: 12, marginTop: 4, padding: 4, zIndex: 10 }}>
-                              {PREDEFINED_COUNTRIES_REGIONS
-                                .filter((r) => r.toLowerCase().includes(regionInput.toLowerCase()) && !favoriteRegions.includes(r))
-                                .slice(0, 5)
-                                .map((r, idx) => (
-                                  <TouchableOpacity
-                                    key={idx}
-                                    style={{ padding: 10, borderBottomWidth: idx < 4 ? 1 : 0, borderBottomColor: theme.border }}
-                                    onPress={() => {
-                                      setFavoriteRegions([...favoriteRegions, r]);
-                                      setRegionInput("");
-                                    }}
-                                  >
-                                    <Text style={{ fontSize: 13, fontWeight: "600", color: theme.text }}>{r}</Text>
-                                  </TouchableOpacity>
-                                ))}
-                              {!favoriteRegions.includes(regionInput.trim()) && (
-                                <TouchableOpacity
-                                  style={{ padding: 10, backgroundColor: "#f59e0b12", borderRadius: 8, marginTop: 4 }}
-                                  onPress={() => {
-                                    setFavoriteRegions([...favoriteRegions, regionInput.trim()]);
-                                    setRegionInput("");
-                                  }}
-                                >
-                                  <Text style={{ fontSize: 13, fontWeight: "700", color: "#d97706" }}>
-                                    + Add "{regionInput.trim()}"
-                                  </Text>
-                                </TouchableOpacity>
-                              )}
-                            </View>
-                          )}
-                        </View>
-                      )}
-                    </View>
-
-                    {/* Favorite Wine Style */}
-                    <View style={{ marginBottom: 16 }}>
-                      <Text style={[styles.formLabel, { color: theme.textSecondary, marginTop: 0 }]}>Favorite Wine Style</Text>
-                      <TextInput
-                        style={[styles.formInput, { backgroundColor: theme.card, color: theme.text, borderColor: theme.border }]}
-                        placeholder="Select or type style e.g. Full-Bodied Red..."
-                        placeholderTextColor={theme.textSecondary}
-                        value={favoriteWineStyle}
-                        onChangeText={setFavoriteWineStyle}
-                      />
-                      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
-                        {PREDEFINED_WINE_STYLES.slice(0, 6).map((st, idx) => (
-                          <TouchableOpacity
-                            key={idx}
-                            style={{
-                              paddingHorizontal: 10,
-                              paddingVertical: 5,
-                              borderRadius: 12,
-                              borderWidth: 1,
-                              borderColor: favoriteWineStyle === st ? theme.primary : theme.border,
-                              backgroundColor: favoriteWineStyle === st ? theme.primary + "1A" : theme.card,
-                            }}
-                            onPress={() => setFavoriteWineStyle(favoriteWineStyle === st ? "" : st)}
-                          >
-                            <Text style={{ fontSize: 11, fontWeight: "700", color: favoriteWineStyle === st ? theme.primary : theme.textSecondary }}>
-                              {st}
-                            </Text>
-                          </TouchableOpacity>
-                        ))}
-                      </View>
-                    </View>
-                  </View>
-
-                  {/* Notes Section (Full Width below preferences) */}
-                  <View style={{ marginTop: 12, paddingTop: 16, borderTopWidth: 1, borderTopColor: theme.border }}>
-                    <Text style={[styles.formLabel, { color: theme.textSecondary, marginTop: 0 }]}>Notes (Optional)</Text>
-                    <TextInput
-                      style={[
-                        styles.formInput,
-                        { backgroundColor: theme.card, color: theme.text, borderColor: theme.border, height: 80, paddingTop: 12, textAlignVertical: "top" }
-                      ]}
-                      placeholder="Any special requests or details..."
-                      placeholderTextColor={theme.textSecondary}
-                      value={newNotes}
-                      onChangeText={setNewNotes}
-                      multiline
-                    />
-                  </View>
-
-                  <View style={styles.formActions}>
-                    <TouchableOpacity
-                      style={[styles.btnCancel, { backgroundColor: theme.card }]}
-                      onPress={() => setIsAddingNew(false)}
-                    >
-                      <Text style={[styles.btnCancelText, { color: theme.textSecondary }]}>Cancel</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.btnSave, { backgroundColor: theme.primary }]}
-                      onPress={handleSaveNew}
-                      disabled={savingNew}
-                    >
-                      {savingNew ? (
-                        <ActivityIndicator size="small" color="#FFF" />
-                      ) : (
-                        <Text style={styles.btnSaveText}>Save & Select</Text>
-                      )}
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              )}
-            />
           ) : (
             <FlatList
               data={filteredCustomers}
               keyExtractor={(item) => item.id}
-              contentContainerStyle={styles.listContent}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={{ gap: 10, paddingBottom: 8 }}
+              style={{ flex: 1 }}
               renderItem={({ item }) => {
                 const isSelected = selectedCustomerId === item.id;
+                const initial = (item.name || "C").trim().charAt(0).toUpperCase();
+
                 return (
                   <TouchableOpacity
-                    style={[
-                      styles.customerCard,
-                      { backgroundColor: theme.card, borderColor: isSelected ? theme.primary : theme.border },
-                    ]}
                     onPress={() => {
                       onSelectCustomer(item);
                       onClose();
                     }}
+                    style={[
+                      styles.customerCard,
+                      isSelected && styles.customerCardSelected,
+                    ]}
+                    activeOpacity={0.85}
                   >
-                    <View style={styles.customerHeader}>
+                    <View style={styles.customerCardLeft}>
+                      <View
+                        style={[
+                          styles.customerAvatar,
+                          isSelected && styles.customerAvatarSelected,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.customerAvatarText,
+                            isSelected && styles.customerAvatarTextSelected,
+                          ]}
+                        >
+                          {initial}
+                        </Text>
+                      </View>
+
                       <View style={{ flex: 1 }}>
-                        <Text style={[styles.customerName, { color: theme.text }]}>{item.name}</Text>
-                        {(item.email || item.contactNo || item.favoriteWineStyle || (item.favoriteProducers && item.favoriteProducers.length > 0) || (item.favoriteRegions && item.favoriteRegions.length > 0)) && (
-                          <View style={styles.customerMeta}>
-                            {item.email && (
-                              <View style={styles.metaRow}>
-                                <Mail size={12} color={theme.textSecondary} />
-                                <Text style={[styles.metaText, { color: theme.textSecondary }]}>{item.email}</Text>
-                              </View>
-                            )}
-                            {item.contactNo && (
-                              <View style={styles.metaRow}>
-                                <Phone size={12} color={theme.textSecondary} />
-                                <Text style={[styles.metaText, { color: theme.textSecondary }]}>{item.contactNo}</Text>
-                              </View>
-                            )}
-                            {item.favoriteWineStyle && (
-                              <View style={{ marginTop: 4, alignSelf: "flex-start", backgroundColor: theme.primary + "15", borderColor: theme.primary + "30", borderWidth: 1, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 }}>
-                                <Text style={{ fontSize: 11, fontWeight: "700", color: theme.primary }}>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                          <Text style={styles.customerCardName} numberOfLines={1}>
+                            {item.name}
+                          </Text>
+                          {item.totalOrders && item.totalOrders > 0 ? (
+                            <View style={styles.ordersBadge}>
+                              <Text style={styles.ordersBadgeText}>
+                                {item.totalOrders} order{item.totalOrders !== 1 ? "s" : ""}
+                              </Text>
+                            </View>
+                          ) : null}
+                        </View>
+
+                        {/* Contact info row */}
+                        <View style={styles.customerMetaRow}>
+                          {item.contactNo ? (
+                            <View style={styles.metaItem}>
+                              <MaterialCommunityIcons name="phone-outline" size={14} color="#64748b" />
+                              <Text style={styles.metaText}>{item.contactNo}</Text>
+                            </View>
+                          ) : null}
+                          {item.email ? (
+                            <View style={styles.metaItem}>
+                              <MaterialCommunityIcons name="email-outline" size={14} color="#64748b" />
+                              <Text style={styles.metaText} numberOfLines={1}>
+                                {item.email}
+                              </Text>
+                            </View>
+                          ) : null}
+                        </View>
+
+                        {/* Wine Style & Region badges */}
+                        {(item.favoriteWineStyle || (item.favoriteRegions && item.favoriteRegions.length > 0)) && (
+                          <View style={styles.preferencesRow}>
+                            {item.favoriteWineStyle ? (
+                              <View style={styles.stylePill}>
+                                <Text style={styles.stylePillText} numberOfLines={1}>
                                   🍷 {item.favoriteWineStyle}
                                 </Text>
                               </View>
-                            )}
-                            {item.favoriteProducers && item.favoriteProducers.length > 0 && (
-                              <Text style={{ fontSize: 11, color: theme.textSecondary, marginTop: 4 }} numberOfLines={1}>
-                                ⭐ Producers: {item.favoriteProducers.join(", ")}
-                              </Text>
-                            )}
-                            {item.favoriteRegions && item.favoriteRegions.length > 0 && (
-                              <Text style={{ fontSize: 11, color: theme.textSecondary, marginTop: 2 }} numberOfLines={1}>
-                                📍 Regions: {item.favoriteRegions.join(", ")}
-                              </Text>
-                            )}
+                            ) : null}
+                            {item.favoriteRegions && item.favoriteRegions.slice(0, 3).map((reg, rIdx) => (
+                              <View key={rIdx} style={styles.regionPill}>
+                                <Text style={styles.regionPillText} numberOfLines={1}>
+                                  📍 {reg}
+                                </Text>
+                              </View>
+                            ))}
                           </View>
                         )}
                       </View>
-                      {isSelected ? (
-                        <View style={[styles.checkCircle, { backgroundColor: theme.primary }]}>
-                          <Check size={14} color="#FFF" />
-                        </View>
-                      ) : (
-                        <View style={styles.statsBadge}>
-                          <Text style={styles.statsText}>{item.totalOrders || 0} orders</Text>
-                        </View>
+                    </View>
+
+                    <View
+                      style={[
+                        styles.customerRadio,
+                        isSelected && styles.customerRadioSelected,
+                      ]}
+                    >
+                      {isSelected && (
+                        <MaterialCommunityIcons name="check" size={14} color="#ffffff" />
                       )}
                     </View>
                   </TouchableOpacity>
                 );
               }}
               ListEmptyComponent={
-                <View style={styles.emptyState}>
-                  {loading ? (
-                    <ActivityIndicator size="large" color={theme.primary} />
-                  ) : (
-                    <>
-                      <User size={48} color={theme.textSecondary} style={{ opacity: 0.5, marginBottom: 16 }} />
-                      <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
-                        {searchQuery ? "No matching customers found." : "No customers yet."}
-                      </Text>
-                      <TouchableOpacity
-                        style={[styles.addInlineBtn, { backgroundColor: theme.primary + "1A" }]}
-                        onPress={() => setIsAddingNew(true)}
-                      >
-                        <Plus size={16} color={theme.primary} />
-                        <Text style={[styles.addInlineText, { color: theme.primary }]}>Add "{searchQuery || "New Customer"}"</Text>
-                      </TouchableOpacity>
-                    </>
-                  )}
+                <View style={styles.emptyContainer}>
+                  <MaterialCommunityIcons name="account-question-outline" size={48} color="#94a3b8" />
+                  <Text style={styles.emptyTitle}>
+                    {searchQuery ? "No matching guests found" : "No customers in store directory"}
+                  </Text>
+                  <Text style={styles.emptySub}>
+                    {searchQuery
+                      ? `No customer matches "${searchQuery}". Create a new profile below.`
+                      : "Start building your customer relationship directory."}
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setNewName(searchQuery);
+                      setActiveTab("add");
+                    }}
+                    style={styles.emptyAddBtn}
+                    activeOpacity={0.85}
+                  >
+                    <MaterialCommunityIcons name="account-plus" size={18} color="#ffffff" />
+                    <Text style={styles.emptyAddBtnText}>
+                      {`Add "${searchQuery || "New VIP Customer"}"`}
+                    </Text>
+                  </TouchableOpacity>
                 </View>
               }
             />
           )}
 
-          {/* Footer Add Button */}
-          {!isAddingNew && (
-            <View style={[styles.footer, { borderTopColor: theme.border }]}>
-              <TouchableOpacity
-                style={[styles.addBtn, { backgroundColor: theme.primary }]}
-                onPress={() => setIsAddingNew(true)}
-              >
-                <Plus size={20} color="#FFF" />
-                <Text style={styles.addBtnText}>Add New Customer</Text>
-              </TouchableOpacity>
+          {/* Large POS Footer Actions */}
+          <View style={styles.modalFooter}>
+            <TouchableOpacity onPress={onClose} style={styles.cancelBtn} activeOpacity={0.8}>
+              <Text style={styles.cancelBtnText}>Close</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => setActiveTab("add")}
+              style={styles.primaryActionBtn}
+              activeOpacity={0.85}
+            >
+              <MaterialCommunityIcons name="account-plus-outline" size={18} color="#ffffff" />
+              <Text style={styles.primaryActionBtnText}>+ Add New VIP</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : (
+        /* ── Tab 2: Add New Customer Form (Spacious 2-Column POS Layout) ───── */
+        <View style={{ flex: 1 }}>
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={{ paddingBottom: 60 }}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={[isLandscape ? styles.formLandscapeRow : styles.formPortraitCol]}>
+              {/* Column 1: Guest Information */}
+              <View style={[isLandscape ? styles.formLandscapeCol : styles.formColFull]}>
+                <Text style={styles.sectionHeader}>1. GUEST INFORMATION</Text>
+
+                {/* Name */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>FULL NAME *</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="e.g. Atty. Alexander Cruz"
+                    placeholderTextColor="#94a3b8"
+                    value={newName}
+                    onChangeText={setNewName}
+                    autoCapitalize="words"
+                  />
+                </View>
+
+                {/* Contact & Email */}
+                <View style={{ flexDirection: "row", gap: 10 }}>
+                  <View style={[styles.inputGroup, { flex: 1 }]}>
+                    <Text style={styles.inputLabel}>CONTACT NO.</Text>
+                    <TextInput
+                      style={styles.textInput}
+                      placeholder="+63 917 123 4567"
+                      placeholderTextColor="#94a3b8"
+                      value={newContact}
+                      onChangeText={setNewContact}
+                      keyboardType="phone-pad"
+                    />
+                  </View>
+                  <View style={[styles.inputGroup, { flex: 1 }]}>
+                    <Text style={styles.inputLabel}>EMAIL (OPTIONAL)</Text>
+                    <TextInput
+                      style={styles.textInput}
+                      placeholder="client@mail.com"
+                      placeholderTextColor="#94a3b8"
+                      value={newEmail}
+                      onChangeText={setNewEmail}
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                    />
+                  </View>
+                </View>
+
+                {/* Notes */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>VIP NOTES / SOMMELIER MEMO</Text>
+                  <TextInput
+                    style={[styles.textInput, styles.textAreaInput]}
+                    placeholder="Cellar preferences, special requests, vintage preferences..."
+                    placeholderTextColor="#94a3b8"
+                    value={newNotes}
+                    onChangeText={setNewNotes}
+                    multiline
+                  />
+                </View>
+              </View>
+
+              {/* Column 2: Wine Preferences */}
+              <View style={[isLandscape ? styles.formLandscapeCol : styles.formColFull]}>
+                <Text style={styles.sectionHeader}>2. WINE PREFERENCES</Text>
+
+                {/* Wine Style Selector */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>FAVORITE WINE STYLE</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="Select or enter wine style..."
+                    placeholderTextColor="#94a3b8"
+                    value={favoriteWineStyle}
+                    onChangeText={setFavoriteWineStyle}
+                  />
+                  <View style={styles.quickChipsWrapper}>
+                    {PREDEFINED_WINE_STYLES.map((style, idx) => {
+                      const isSelected = favoriteWineStyle === style;
+                      return (
+                        <TouchableOpacity
+                          key={idx}
+                          onPress={() => {
+                            setFavoriteWineStyle(isSelected ? "" : style);
+                          }}
+                          style={[
+                            styles.quickChip,
+                            isSelected && styles.quickChipSelected,
+                          ]}
+                          activeOpacity={0.8}
+                        >
+                          <Text
+                            style={[
+                              styles.quickChipText,
+                              isSelected && styles.quickChipTextSelected,
+                            ]}
+                          >
+                            {style}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+
+                {/* Favorite Regions */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>
+                    FAVORITE REGIONS ({favoriteRegions.length}/10)
+                  </Text>
+                  {favoriteRegions.length > 0 && (
+                    <View style={styles.activeTagsRow}>
+                      {favoriteRegions.map((reg, idx) => (
+                        <View key={idx} style={styles.activeTagBadge}>
+                          <Text style={styles.activeTagBadgeText}>{reg}</Text>
+                          <TouchableOpacity
+                            onPress={() =>
+                              setFavoriteRegions(favoriteRegions.filter((_, i) => i !== idx))
+                            }
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          >
+                            <MaterialCommunityIcons name="close" size={13} color="#b45309" />
+                          </TouchableOpacity>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+
+                  {favoriteRegions.length < 10 && (
+                    <View>
+                      {regionInput.trim().length > 0 && (
+                        <ScrollView
+                          horizontal
+                          showsHorizontalScrollIndicator={false}
+                          keyboardShouldPersistTaps="handled"
+                          style={styles.suggestionStrip}
+                          contentContainerStyle={styles.suggestionStripContent}
+                        >
+                          {!favoriteRegions.includes(regionInput.trim()) && (
+                            <TouchableOpacity
+                              style={styles.suggestionRegionAddChip}
+                              onPress={() => {
+                                setFavoriteRegions([...favoriteRegions, regionInput.trim()]);
+                                setRegionInput("");
+                              }}
+                              activeOpacity={0.8}
+                            >
+                              <MaterialCommunityIcons name="plus" size={13} color="#ffffff" />
+                              <Text style={styles.suggestionAddChipText} numberOfLines={1}>
+                                Add "{regionInput.trim()}"
+                              </Text>
+                            </TouchableOpacity>
+                          )}
+                          {PREDEFINED_COUNTRIES_REGIONS.filter(
+                            (r) =>
+                              r.toLowerCase().includes(regionInput.toLowerCase()) &&
+                              !favoriteRegions.includes(r)
+                          )
+                            .slice(0, 8)
+                            .map((r, idx) => (
+                              <TouchableOpacity
+                                key={idx}
+                                style={styles.suggestionRegionChip}
+                                onPress={() => {
+                                  setFavoriteRegions([...favoriteRegions, r]);
+                                  setRegionInput("");
+                                }}
+                                activeOpacity={0.8}
+                              >
+                                <Text style={styles.suggestionRegionChipText} numberOfLines={1}>
+                                  {r}
+                                </Text>
+                              </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+                      )}
+                      <TextInput
+                        style={styles.textInput}
+                        placeholder="Type region e.g. Bordeaux, Napa..."
+                        placeholderTextColor="#94a3b8"
+                        value={regionInput}
+                        onChangeText={setRegionInput}
+                      />
+                    </View>
+                  )}
+                </View>
+
+                {/* Favorite Producers */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>
+                    FAVORITE PRODUCERS ({favoriteProducers.length}/10)
+                  </Text>
+                  {favoriteProducers.length > 0 && (
+                    <View style={styles.activeTagsRow}>
+                      {favoriteProducers.map((prod, idx) => (
+                        <View key={idx} style={[styles.activeTagBadge, styles.producerTagBadge]}>
+                          <Text style={[styles.activeTagBadgeText, styles.producerTagText]}>
+                            {prod}
+                          </Text>
+                          <TouchableOpacity
+                            onPress={() =>
+                              setFavoriteProducers(favoriteProducers.filter((_, i) => i !== idx))
+                            }
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          >
+                            <MaterialCommunityIcons name="close" size={13} color={MAROON.primary} />
+                          </TouchableOpacity>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+
+                  {favoriteProducers.length < 10 && (
+                    <View>
+                      {producerInput.trim().length > 0 && (
+                        <ScrollView
+                          horizontal
+                          showsHorizontalScrollIndicator={false}
+                          keyboardShouldPersistTaps="handled"
+                          style={styles.suggestionStrip}
+                          contentContainerStyle={styles.suggestionStripContent}
+                        >
+                          {!favoriteProducers.includes(producerInput.trim()) && (
+                            <TouchableOpacity
+                              style={styles.suggestionAddChip}
+                              onPress={() => {
+                                setFavoriteProducers([...favoriteProducers, producerInput.trim()]);
+                                setProducerInput("");
+                              }}
+                              activeOpacity={0.8}
+                            >
+                              <MaterialCommunityIcons name="plus" size={13} color="#ffffff" />
+                              <Text style={styles.suggestionAddChipText} numberOfLines={1}>
+                                Add "{producerInput.trim()}"
+                              </Text>
+                            </TouchableOpacity>
+                          )}
+                          {availableProducers
+                            .filter(
+                              (p) =>
+                                p.toLowerCase().includes(producerInput.toLowerCase()) &&
+                                !favoriteProducers.includes(p)
+                            )
+                            .slice(0, 10)
+                            .map((p, idx) => (
+                              <TouchableOpacity
+                                key={idx}
+                                style={styles.suggestionChip}
+                                onPress={() => {
+                                  setFavoriteProducers([...favoriteProducers, p]);
+                                  setProducerInput("");
+                                }}
+                                activeOpacity={0.8}
+                              >
+                                <Text style={styles.suggestionChipText} numberOfLines={1}>
+                                  {p}
+                                </Text>
+                              </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+                      )}
+                      <TextInput
+                        style={styles.textInput}
+                        placeholder="Type producer name..."
+                        placeholderTextColor="#94a3b8"
+                        value={producerInput}
+                        onChangeText={setProducerInput}
+                      />
+                    </View>
+                  )}
+                </View>
+              </View>
             </View>
-          )}
+          </ScrollView>
+
+          {/* Large POS Form Footer Actions */}
+          <View style={styles.modalFooter}>
+            <TouchableOpacity
+              onPress={() => setActiveTab("search")}
+              style={styles.cancelBtn}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.cancelBtnText}>Back to List</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={handleSaveNew}
+              disabled={savingNew || !newName.trim()}
+              style={[
+                styles.primaryActionBtn,
+                (!newName.trim() || savingNew) && styles.primaryActionBtnDisabled,
+              ]}
+              activeOpacity={0.85}
+            >
+              {savingNew ? (
+                <ActivityIndicator size="small" color="#ffffff" />
+              ) : (
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  <MaterialCommunityIcons name="check" size={18} color="#ffffff" />
+                  <Text style={styles.primaryActionBtnText}>Save & Attach VIP</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+    </View>
+  );
+
+  // If useModal is false, return the card directly (for embedding inside existing modal overlays)
+  if (useModal === false) {
+    return cardContent;
+  }
+
+  return (
+    <Modal
+      visible={isOpen}
+      transparent
+      animationType="fade"
+      statusBarTranslucent
+      onRequestClose={onClose}
+    >
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <View style={styles.modalOverlay}>
+          <BlurView
+            intensity={25}
+            tint="systemMaterialDark"
+            style={StyleSheet.absoluteFill}
+          />
+          {cardContent}
         </View>
       </KeyboardAvoidingView>
     </Modal>
@@ -669,182 +866,491 @@ export default function CustomerPickerModal({
 const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "flex-end",
+    backgroundColor: "rgba(30, 41, 59, 0.55)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 16,
   },
-  modalContent: {
-    height: "85%",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    overflow: "hidden",
-    flexDirection: "column",
+  modalCard: {
+    width: "100%",
+    backgroundColor: "#ffffff",
+    borderRadius: 24,
+    padding: 24,
+    elevation: 16,
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
   },
-  header: {
+  modalHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
+    marginBottom: 16,
   },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "800",
+  iconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: MAROON.ultraLight,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: MAROON.border,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "900",
+    color: "#18181b",
+  },
+  modalSub: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#71717a",
+    marginTop: 2,
   },
   closeBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#f1f5f9",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  // Tab Switcher
+  tabSwitcher: {
+    flexDirection: "row",
+    backgroundColor: "#f1f5f9",
+    borderRadius: 14,
     padding: 4,
+    marginBottom: 14,
+    gap: 6,
   },
-  searchContainer: {
-    padding: 16,
-    borderBottomWidth: 1,
-  },
-  searchInputWrapper: {
+  tabBtn: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    height: 44,
+    justifyContent: "center",
+    paddingVertical: 10,
+    borderRadius: 10,
     gap: 8,
+  },
+  tabBtnActive: {
+    backgroundColor: "#ffffff",
+    elevation: 2,
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+  },
+  tabBtnText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#64748b",
+  },
+
+  // Search Bar
+  searchBarWrapper: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f8fafc",
+    borderWidth: 1.5,
+    borderColor: "#e2e8f0",
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    height: 46,
+    gap: 10,
+    marginBottom: 12,
   },
   searchInput: {
     flex: 1,
-    fontSize: 15,
-    fontWeight: "500",
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#0f172a",
   },
-  listContent: {
-    padding: 16,
-    gap: 12,
-  },
+
+  // Customer Card
   customerCard: {
-    padding: 16,
-    borderRadius: 16,
-    borderWidth: 1,
-  },
-  customerHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-  },
-  customerName: {
-    fontSize: 16,
-    fontWeight: "800",
-    marginBottom: 4,
-  },
-  customerMeta: {
-    gap: 2,
-    marginTop: 4,
-  },
-  metaRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    justifyContent: "space-between",
+    backgroundColor: "#ffffff",
+    borderWidth: 1.5,
+    borderColor: "#e2e8f0",
+    borderRadius: 16,
+    padding: 14,
   },
-  metaText: {
-    fontSize: 12,
-    fontWeight: "500",
+  customerCardSelected: {
+    borderColor: MAROON.primary,
+    backgroundColor: "#fdf8f6",
   },
-  statsBadge: {
-    backgroundColor: "#F1F5F9",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
+  customerCardLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    gap: 12,
+    marginRight: 10,
   },
-  statsText: {
+  customerAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: "#f1f5f9",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  customerAvatarSelected: {
+    backgroundColor: MAROON.primary,
+    borderColor: MAROON.primary,
+  },
+  customerAvatarText: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#475569",
+  },
+  customerAvatarTextSelected: {
+    color: "#ffffff",
+  },
+  customerCardName: {
+    fontSize: 15,
+    fontWeight: "900",
+    color: "#0f172a",
+  },
+  ordersBadge: {
+    backgroundColor: "#f1f5f9",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  ordersBadgeText: {
     fontSize: 10,
     fontWeight: "800",
     color: "#64748b",
   },
-  checkCircle: {
+  customerMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginTop: 3,
+    flexWrap: "wrap",
+  },
+  metaItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  metaText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#64748b",
+  },
+  preferencesRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 6,
+    flexWrap: "wrap",
+  },
+  stylePill: {
+    backgroundColor: "#ffedd5",
+    borderColor: "#fed7aa",
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 2.5,
+    borderRadius: 6,
+  },
+  stylePillText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#c2410c",
+  },
+  regionPill: {
+    backgroundColor: "#fef3c7",
+    borderColor: "#fde68a",
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 2.5,
+    borderRadius: 6,
+  },
+  regionPillText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#b45309",
+  },
+  customerRadio: {
     width: 24,
     height: 24,
     borderRadius: 12,
+    borderWidth: 2,
+    borderColor: "#cbd5e1",
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: "#ffffff",
   },
-  emptyState: {
-    padding: 40,
+  customerRadioSelected: {
+    backgroundColor: MAROON.primary,
+    borderColor: MAROON.primary,
+  },
+
+  // Loading & Empty States
+  centerContainer: {
+    flex: 1,
     alignItems: "center",
+    justifyContent: "center",
+    padding: 30,
   },
-  emptyText: {
-    fontSize: 14,
+  centerText: {
+    fontSize: 13,
     fontWeight: "600",
-    marginBottom: 16,
+    color: "#64748b",
+    marginTop: 8,
   },
-  addInlineBtn: {
+  emptyContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 32,
+  },
+  emptyTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#18181b",
+    marginTop: 10,
+  },
+  emptySub: {
+    fontSize: 12,
+    color: "#64748b",
+    textAlign: "center",
+    marginTop: 4,
+    marginBottom: 16,
+    maxWidth: 320,
+  },
+  emptyAddBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    backgroundColor: MAROON.primary,
+    paddingHorizontal: 18,
+    paddingVertical: 11,
     borderRadius: 12,
   },
-  addInlineText: {
-    fontSize: 14,
+  emptyAddBtnText: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#ffffff",
+  },
+
+  // Form Styles (Landscape & Portrait Responsive)
+  formLandscapeRow: {
+    flexDirection: "row",
+    gap: 20,
+  },
+  formPortraitCol: {
+    flexDirection: "column",
+    gap: 8,
+  },
+  formLandscapeCol: {
+    flex: 1,
+  },
+  formColFull: {
+    width: "100%",
+  },
+  sectionHeader: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: MAROON.primary,
+    letterSpacing: 0.8,
+    marginBottom: 10,
+    marginTop: 4,
+  },
+  inputGroup: {
+    marginBottom: 12,
+  },
+  inputLabel: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#475569",
+    letterSpacing: 0.6,
+    marginBottom: 5,
+  },
+  textInput: {
+    backgroundColor: "#f8fafc",
+    borderWidth: 1.5,
+    borderColor: "#e2e8f0",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    height: 44,
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#0f172a",
+  },
+  textAreaInput: {
+    height: 64,
+    paddingTop: 10,
+    textAlignVertical: "top",
+  },
+  quickChipsWrapper: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: 6,
+  },
+  quickChip: {
+    backgroundColor: "#f1f5f9",
+    borderColor: "#e2e8f0",
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  quickChipSelected: {
+    backgroundColor: "#fdf8f6",
+    borderColor: MAROON.border,
+  },
+  quickChipText: {
+    fontSize: 11,
     fontWeight: "700",
+    color: "#64748b",
   },
-  footer: {
-    padding: 16,
+  quickChipTextSelected: {
+    color: MAROON.primary,
+    fontWeight: "800",
+  },
+  activeTagsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginBottom: 6,
+  },
+  activeTagBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#fef3c7",
+    borderColor: "#fde68a",
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  activeTagBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#b45309",
+  },
+  producerTagBadge: {
+    backgroundColor: "#fdf8f6",
+    borderColor: MAROON.border,
+  },
+  producerTagText: {
+    color: MAROON.primary,
+  },
+  // Suggestion Strips & Chips
+  suggestionStrip: {
+    marginBottom: 6,
+    maxHeight: 38,
+  },
+  suggestionStripContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 2,
+    paddingHorizontal: 2,
+  },
+  suggestionAddChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: MAROON.primary,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  suggestionAddChipText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#ffffff",
+    maxWidth: 160,
+  },
+  suggestionChip: {
+    backgroundColor: "#f1f5f9",
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  suggestionChipText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#334155",
+    maxWidth: 160,
+  },
+  suggestionRegionAddChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#b45309",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  suggestionRegionChip: {
+    backgroundColor: "#fef3c7",
+    borderWidth: 1,
+    borderColor: "#fde68a",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  suggestionRegionChipText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#92400e",
+    maxWidth: 160,
+  },
+
+  // Modal Footer
+  modalFooter: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 14,
+    paddingTop: 14,
     borderTopWidth: 1,
+    borderTopColor: "#f1f5f9",
   },
-  addBtn: {
+  cancelBtn: {
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 16,
+    backgroundColor: "#f1f5f9",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cancelBtnText: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#64748b",
+  },
+  primaryActionBtn: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
     paddingVertical: 14,
+    paddingHorizontal: 20,
     borderRadius: 16,
+    backgroundColor: MAROON.primary,
   },
-  addBtnText: {
-    color: "#FFF",
-    fontSize: 16,
-    fontWeight: "800",
+  primaryActionBtnDisabled: {
+    backgroundColor: "#94a3b8",
   },
-  addForm: {
-    padding: 20,
-    flex: 1,
-  },
-  formLabel: {
-    fontSize: 12,
-    fontWeight: "800",
-    textTransform: "uppercase",
-    marginBottom: 8,
-    marginTop: 16,
-  },
-  formInput: {
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    height: 50,
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  formActions: {
-    flexDirection: "row",
-    gap: 12,
-    marginTop: 32,
-  },
-  btnCancel: {
-    flex: 1,
-    height: 50,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  btnCancelText: {
-    fontSize: 15,
-    fontWeight: "700",
-  },
-  btnSave: {
-    flex: 1,
-    height: 50,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  btnSaveText: {
-    color: "#FFF",
-    fontSize: 15,
-    fontWeight: "700",
+  primaryActionBtnText: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#ffffff",
   },
 });
