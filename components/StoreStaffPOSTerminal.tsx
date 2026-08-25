@@ -193,7 +193,7 @@ export default function StoreStaffPOSTerminal() {
   const { width, height } = useWindowDimensions();
   const { profile, refreshProfile } = useAuth();
   const isLandscape = width > height;
-  const isTabletLandscape = isLandscape && width >= 900;
+  const isTabletLandscape = isLandscape && width >= 680;
   const storeId = profile?.locationId || null;
 
   // Data States
@@ -1247,6 +1247,16 @@ export default function StoreStaffPOSTerminal() {
           </View>
 
           <View style={styles.portraitActionsRow}>
+            {profile?.role !== "store_staff" && (
+              <TouchableOpacity
+                onPress={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)/home"))}
+                style={styles.portraitBackBtn}
+              >
+                <ChevronLeft size={16} color={MAROON.primary} strokeWidth={2.5} />
+                <Text style={styles.portraitBackBtnText}>Dashboard</Text>
+              </TouchableOpacity>
+            )}
+
             <TouchableOpacity
               onPress={() => router.push({ pathname: "/sell" })}
               style={styles.portraitScanBtn}
@@ -1259,9 +1269,11 @@ export default function StoreStaffPOSTerminal() {
               <RotateCcw size={16} color="#64748b" />
             </TouchableOpacity>
 
-            <TouchableOpacity onPress={handleSignOut} style={styles.portraitIconBtn}>
-              <LogOut size={16} color="#ef4444" />
-            </TouchableOpacity>
+            {profile?.role === "store_staff" ? (
+              <TouchableOpacity onPress={handleSignOut} style={styles.portraitIconBtn}>
+                <LogOut size={16} color="#ef4444" />
+              </TouchableOpacity>
+            ) : null}
           </View>
         </View>
       )}
@@ -1271,9 +1283,18 @@ export default function StoreStaffPOSTerminal() {
         {isTabletLandscape && (
           <View style={styles.leftDock}>
             <View style={styles.dockTop}>
-              <View style={styles.dockLogo}>
-                <Wine size={22} color="#ffffff" strokeWidth={2.5} />
-              </View>
+              {profile?.role !== "store_staff" ? (
+                <TouchableOpacity
+                  onPress={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)/home"))}
+                  style={[styles.dockIconBtn, { backgroundColor: MAROON.primary, marginBottom: 8 }]}
+                >
+                  <ChevronLeft size={22} color="#ffffff" strokeWidth={2.5} />
+                </TouchableOpacity>
+              ) : (
+                <View style={styles.dockLogo}>
+                  <Wine size={22} color="#ffffff" strokeWidth={2.5} />
+                </View>
+              )}
 
               <TouchableOpacity style={[styles.dockIconBtn, styles.dockIconBtnActive]}>
                 <Zap size={22} color={MAROON.primary} strokeWidth={2.5} />
@@ -1299,9 +1320,11 @@ export default function StoreStaffPOSTerminal() {
                 <RotateCcw size={20} color="#64748b" strokeWidth={2} />
               </TouchableOpacity>
 
-              <TouchableOpacity onPress={handleSignOut} style={styles.dockIconBtn}>
-                <LogOut size={20} color="#ef4444" strokeWidth={2} />
-              </TouchableOpacity>
+              {profile?.role === "store_staff" ? (
+                <TouchableOpacity onPress={handleSignOut} style={styles.dockIconBtn}>
+                  <LogOut size={20} color="#ef4444" strokeWidth={2} />
+                </TouchableOpacity>
+              ) : null}
             </View>
           </View>
         )}
@@ -2324,6 +2347,22 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
+  },
+  portraitBackBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: MAROON.ultraLight,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    gap: 4,
+    borderWidth: 1,
+    borderColor: MAROON.border,
+  },
+  portraitBackBtnText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: MAROON.primary,
   },
   portraitScanBtn: {
     flexDirection: "row",

@@ -235,6 +235,8 @@ export interface StoreWineSetting {
   sellingPrice?: number;
   glassPrice?: number;
   carafePrice?: number;
+  allowGlass?: boolean;
+  allowCarafe?: boolean;
   vatMode?: "included" | "excluded";
 }
 

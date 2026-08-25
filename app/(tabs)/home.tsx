@@ -41,7 +41,7 @@ import {
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const { profile, loading, refreshProfile } = useAuth();
   const [dashboardMetrics, setDashboardMetrics] = useState({
     stockout: { wines: 0, bottles: 0 },
@@ -53,9 +53,11 @@ export default function HomeScreen() {
   const [pulloutTasks, setPulloutTasks] = useState<PulloutRequest[]>([]);
   const [incomingDeliveries, setIncomingDeliveries] = useState<Delivery[]>([]);
   const [locations, setLocations] = useState<Record<string, string>>({});
-  const [loadingRequests, setLoadingRequests] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-
+  const [salesPeriod, setSalesPeriod] = useState<"today" | "week" | "all">(
+    "today",
+  );
+  const [loadingSales, setLoadingSales] = useState(false);
   const [salesDashboardMetrics, setSalesDashboardMetrics] = useState({
     soldCount: 0,
     totalRevenue: 0,
@@ -83,10 +85,7 @@ export default function HomeScreen() {
       volume: 0,
     },
   });
-  const [loadingSales, setLoadingSales] = useState(true);
-  const [salesPeriod, setSalesPeriod] = useState<"today" | "week" | "all">(
-    "today",
-  );
+  const [loadingRequests, setLoadingRequests] = useState(true);
   const [initialDataLoaded, setInitialDataLoaded] = useState(false);
 
   useEffect(() => {
@@ -95,12 +94,17 @@ export default function HomeScreen() {
     }
   }, [loadingMetrics, loadingRequests, loadingSales]);
 
-  // --- Calculate Responsive Layout ---
-  const isTablet = width >= 768;
-  const cardsPerRow = isTablet ? 3 : 2;
-  const containerPadding = 48; // scrollContent padding (24 * 2)
-  const totalGap = 16 * (cardsPerRow - 1);
+  // --- Calculate Responsive Layout with Full Landscape Support ---
+  const isLandscape = width > height;
+  const isTablet = width >= 768 || (isLandscape && width >= 680);
+  const cardsPerRow = isLandscape || isTablet ? 3 : 2;
+  const containerPadding = isLandscape ? 48 : 40; // scrollContent padding
+  const totalGap = 14 * (cardsPerRow - 1);
   const cardWidth = (width - containerPadding - totalGap) / cardsPerRow;
+
+  const storeCardsPerRow = isLandscape || isTablet ? 4 : 2;
+  const storeTotalGap = 12 * (storeCardsPerRow - 1);
+  const storeTileWidth = (width - containerPadding - storeTotalGap) / storeCardsPerRow;
 
   const metricsCache = useRef<{ data: any; storeId: string; fetchedAt: number } | null>(null);
   const METRICS_TTL_MS = 5 * 60 * 1000;
@@ -815,9 +819,9 @@ export default function HomeScreen() {
         )}
 
         {isStore && (hasPulloutTasks || hasDeliveries) && (
-          <View style={isTablet ? styles.tasksRow : undefined}>
+          <View style={isLandscape || isTablet ? styles.tasksRow : undefined}>
             {hasPulloutTasks && (
-              <View style={[styles.metricsDashboard, isTablet ? styles.taskColumn : undefined]}>
+              <View style={[styles.metricsDashboard, isLandscape || isTablet ? styles.taskColumn : undefined]}>
                 <Text style={styles.metricsTitle}>Pullout Tasks</Text>
                 <View style={{ gap: 12 }}>
                   {pulloutTasks.map((task) => (
@@ -1370,14 +1374,131 @@ export default function HomeScreen() {
           </View>
         )}
 
-        <View style={styles.buttonContainer}>
-          {!isStore && (
+        {/* ── STORE QUICK ACTIONS (Prominent POS Hero + Compact Grid) ──── */}
+        {isStore ? (
+          <View style={styles.storeActionsSection}>
+            <Text style={styles.metricsTitle}>Store Operations</Text>
+
+            {/* Prominent POS Hero Action */}
+            <TouchableOpacity
+              style={styles.heroActionCard}
+              onPress={() => router.push({ pathname: "/pos" })}
+              activeOpacity={0.88}
+            >
+              <View style={styles.heroActionLeft}>
+                <View style={styles.heroActionIconBadge}>
+                  <Zap size={24} color="#ffffff" strokeWidth={2.4} />
+                </View>
+                <View style={styles.heroActionTextContainer}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    <Text style={styles.heroActionTitle}>POS Mode</Text>
+                    <View style={styles.heroLiveBadge}>
+                      <View style={styles.heroLiveDot} />
+                      <Text style={styles.heroLiveBadgeText}>Live Register</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.heroActionDesc} numberOfLines={1}>
+                    Fast wine quick sales, VIP guest attachment & staff attribution
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.heroActionArrow}>
+                <ChevronRight size={18} color="#ffffff" strokeWidth={2.5} />
+              </View>
+            </TouchableOpacity>
+
+            {/* 4-Tile Compact Grid for Core Operations */}
+            <View style={styles.storeGrid}>
+              {/* Tile 1: Sell Glass or Bottle */}
+              <TouchableOpacity
+                style={[styles.storeGridTile, { width: storeTileWidth }]}
+                onPress={() => router.push({ pathname: "/sell" })}
+                activeOpacity={0.85}
+              >
+                <View style={styles.tileHeaderRow}>
+                  <View style={[styles.tileIconCircle, { backgroundColor: "#10b98115" }]}>
+                    <Banknote size={18} color="#059669" strokeWidth={2} />
+                  </View>
+                  <ChevronRight size={14} color="#94a3b8" />
+                </View>
+                <View style={styles.tileTextContainer}>
+                  <Text style={styles.tileTitle} numberOfLines={1}>Scan & Sell</Text>
+                  <Text style={styles.tileDesc} numberOfLines={1}>
+                    Bottle & portion pours
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
+              {/* Tile 2: Wine Requests */}
+              <TouchableOpacity
+                style={[styles.storeGridTile, { width: storeTileWidth }]}
+                onPress={() => router.push("/wine-requests")}
+                activeOpacity={0.85}
+              >
+                <View style={styles.tileHeaderRow}>
+                  <View style={[styles.tileIconCircle, { backgroundColor: Colors.store.primary + "15" }]}>
+                    <ClipboardList size={18} color={Colors.store.primary} strokeWidth={2} />
+                  </View>
+                  <ChevronRight size={14} color="#94a3b8" />
+                </View>
+                <View style={styles.tileTextContainer}>
+                  <Text style={styles.tileTitle} numberOfLines={1}>Wine Requests</Text>
+                  <Text style={styles.tileDesc} numberOfLines={1}>
+                    Order from warehouse
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
+              {/* Tile 3: Stock Management */}
+              <TouchableOpacity
+                style={[styles.storeGridTile, { width: storeTileWidth }]}
+                onPress={() => router.push("/store-master-list")}
+                activeOpacity={0.85}
+              >
+                <View style={styles.tileHeaderRow}>
+                  <View style={[styles.tileIconCircle, { backgroundColor: "#0f766e15" }]}>
+                    <LayoutList size={18} color="#0f766e" strokeWidth={2} />
+                  </View>
+                  <ChevronRight size={14} color="#94a3b8" />
+                </View>
+                <View style={styles.tileTextContainer}>
+                  <Text style={styles.tileTitle} numberOfLines={1}>Stock & PAR</Text>
+                  <Text style={styles.tileDesc} numberOfLines={1}>
+                    PAR alerts & store stock
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
+              {/* Tile 4: Bottle Management / Lookup */}
+              <TouchableOpacity
+                style={[styles.storeGridTile, { width: storeTileWidth }]}
+                onPress={() => router.push("/inventory")}
+                activeOpacity={0.85}
+              >
+                <View style={styles.tileHeaderRow}>
+                  <View style={[styles.tileIconCircle, { backgroundColor: "#6366f115" }]}>
+                    <Search size={18} color="#4f46e5" strokeWidth={2} />
+                  </View>
+                  <ChevronRight size={14} color="#94a3b8" />
+                </View>
+                <View style={styles.tileTextContainer}>
+                  <Text style={styles.tileTitle} numberOfLines={1}>Bottle Lookup</Text>
+                  <Text style={styles.tileDesc} numberOfLines={1}>
+                    SKU, bin & cellar lookup
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : (
+          /* ── WAREHOUSE BUTTONS ─────────────────────────────────────────── */
+          <View style={styles.buttonContainer}>
             <TouchableOpacity
               style={[styles.actionButton, { backgroundColor: "#4f46e5" }]}
               onPress={() => router.push("/onboarding")}
             >
               <View style={styles.buttonContent}>
-                <FileDown size={42} color="#ffffff" strokeWidth={1.5} />
+                <FileDown size={36} color="#ffffff" strokeWidth={1.5} />
                 <View style={styles.buttonTextContainer}>
                   <Text style={styles.buttonTitle}>Onboarding Tasks</Text>
                   <Text style={styles.buttonDesc}>
@@ -1386,106 +1507,43 @@ export default function HomeScreen() {
                 </View>
               </View>
             </TouchableOpacity>
-          )}
 
-          {isStore && !isStoreStaff && (
             <TouchableOpacity
-              style={[
-                styles.actionButton,
-                {
-                  backgroundColor: theme.primary,
-                  borderRadius: 24,
-                  padding: 32,
-                },
-              ]}
-              onPress={() => router.push("/wine-requests")}
-            >
-              <View style={styles.buttonContent}>
-                <ClipboardList size={32} color="#ffffff" strokeWidth={1.5} />
-                <View style={styles.buttonTextContainer}>
-                  <Text style={styles.buttonTitle}>
-                    Wine Requests
-                  </Text>
-                  <Text style={styles.buttonDesc}>
-                    Request stock from warehouse
-                  </Text>
-                </View>
-              </View>
-            </TouchableOpacity>
-          )}
-
-          {isStore && !isStoreStaff && (
-            <TouchableOpacity
-              style={[
-                styles.actionButton,
-                { backgroundColor: "#0f766e" },
-              ]}
-              onPress={() => router.push("/store-master-list")}
-            >
-              <View style={styles.buttonContent}>
-                <LayoutList size={32} color="#ffffff" strokeWidth={1.5} />
-                <View style={styles.buttonTextContainer}>
-                  <Text style={styles.buttonTitle}>
-                    Stock Management
-                  </Text>
-                  <Text style={styles.buttonDesc}>
-                    PAR levels & stock management
-                  </Text>
-                </View>
-              </View>
-            </TouchableOpacity>
-          )}
-          {!isStore && (
-            <TouchableOpacity
-              style={[
-                styles.actionButton,
-                {
-                  backgroundColor: theme.primary,
-                  borderRadius: 24,
-                },
-              ]}
+              style={[styles.actionButton, { backgroundColor: theme.primary }]}
               onPress={() => router.push("/bottle-tagging")}
             >
               <View style={styles.buttonContent}>
-                <QrCode size={42} color="#ffffff" strokeWidth={1.5} />
+                <QrCode size={36} color="#ffffff" strokeWidth={1.5} />
                 <View style={styles.buttonTextContainer}>
-                  <Text style={styles.buttonTitle}>{"QR Tagging"}</Text>
+                  <Text style={styles.buttonTitle}>QR Tagging</Text>
                   <Text style={styles.buttonDesc}>
-                    {"Scan and stick QR labels"}
+                    Scan and stick QR labels
                   </Text>
                 </View>
               </View>
             </TouchableOpacity>
-          )}
-          {!isStore && (
+
             <TouchableOpacity
-              style={[
-                styles.actionButton,
-                {
-                  backgroundColor: isStore ? theme.secondary : theme.secondary,
-                  borderRadius: isStore ? 24 : 24,
-                },
-              ]}
+              style={[styles.actionButton, { backgroundColor: theme.secondary }]}
               onPress={() => router.push("/tagging")}
             >
               <View style={styles.buttonContent}>
-                <MapPin size={42} color="#ffffff" strokeWidth={1.5} />
+                <MapPin size={36} color="#ffffff" strokeWidth={1.5} />
                 <View style={styles.buttonTextContainer}>
-                  <Text style={styles.buttonTitle}>{"Bottle Tagging"}</Text>
+                  <Text style={styles.buttonTitle}>Bottle Tagging</Text>
                   <Text style={styles.buttonDesc}>
-                    {"Assign bottles to bin locations"}
+                    Assign bottles to bin locations
                   </Text>
                 </View>
               </View>
             </TouchableOpacity>
-          )}
-          {!isStore && (
+
             <TouchableOpacity
               style={[styles.actionButton, { backgroundColor: theme.accent }]}
               onPress={() => router.push("/pullout")}
             >
               <View style={styles.buttonContent}>
-                <Truck size={42} color="#ffffff" strokeWidth={1.5} />
+                <Truck size={36} color="#ffffff" strokeWidth={1.5} />
                 <View style={styles.buttonTextContainer}>
                   <Text style={styles.buttonTitle}>Pullout Tasks</Text>
                   <Text style={styles.buttonDesc}>
@@ -1494,18 +1552,13 @@ export default function HomeScreen() {
                 </View>
               </View>
             </TouchableOpacity>
-          )}
 
-          {(!isStore || !isStoreStaff) && (
             <TouchableOpacity
-              style={[
-                styles.actionButton,
-                { backgroundColor: isStore ? theme.accent : theme.primary },
-              ]}
+              style={[styles.actionButton, { backgroundColor: theme.primary }]}
               onPress={() => router.push("/inventory")}
             >
               <View style={styles.buttonContent}>
-                <Search size={42} color="#ffffff" strokeWidth={1.5} />
+                <Search size={36} color="#ffffff" strokeWidth={1.5} />
                 <View style={styles.buttonTextContainer}>
                   <Text style={styles.buttonTitle}>Bottle Management</Text>
                   <Text style={styles.buttonDesc}>
@@ -1514,90 +1567,14 @@ export default function HomeScreen() {
                 </View>
               </View>
             </TouchableOpacity>
-          )}
-
-          {isStore && (
-            <>
-              <TouchableOpacity
-                style={[
-                  styles.actionButton,
-                  { backgroundColor: "#10b981" },
-                ]}
-                onPress={() =>
-                  router.push({ pathname: "/sell" })
-                }
-              >
-                <View style={styles.buttonContent}>
-                  <Banknote size={32} color="#ffffff" strokeWidth={1.5} />
-                  <View style={styles.buttonTextContainer}>
-                    <Text style={styles.buttonTitle}>
-                      Sell Glass or Bottle
-                    </Text>
-                    <Text style={styles.buttonDesc}>
-                      Scan a bottle to sell by glass or bottle
-                    </Text>
-                  </View>
-                </View>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.actionButton,
-                  { backgroundColor: Colors.store.primary },
-                ]}
-                onPress={() =>
-                  router.push({ pathname: "/pos" })
-                }
-              >
-                <View style={styles.buttonContent}>
-                  <Zap size={32} color="#ffffff" strokeWidth={1.5} />
-                  <View style={styles.buttonTextContainer}>
-                    <Text style={styles.buttonTitle}>
-                      POS Mode
-                    </Text>
-                    <Text style={styles.buttonDesc}>
-                      Fast wine quick sales & staff attribution
-                    </Text>
-                  </View>
-                </View>
-              </TouchableOpacity>
-            </>
-          )}
-        </View>
+          </View>
+        )}
 
         {isStore && (
-          <View
-            style={{
-              marginTop: 40,
-              padding: 24,
-              backgroundColor: theme.primary + "10",
-              borderRadius: 24,
-              borderStyle: "dashed",
-              borderWidth: 1,
-              borderColor: theme.primary + "30",
-            }}
-          >
-            <Text
-              style={{
-                color: theme.primary,
-                fontWeight: "900",
-                fontSize: 12,
-                letterSpacing: 1,
-                textTransform: "uppercase",
-                marginBottom: 8,
-              }}
-            >
-              Store Front Mode
-            </Text>
-            <Text
-              style={{
-                color: theme.textSecondary,
-                fontSize: 14,
-                fontStyle: "italic",
-              }}
-            >
-              Authorized for inventory lookup, stock requisition, and sale
-              fulfillment.
+          <View style={styles.storeModeBadge}>
+            <View style={styles.storeModeBadgeDot} />
+            <Text style={styles.storeModeBadgeText}>
+              Boutique Sommelier Mode · Authorized for sales, inventory & requisitions
             </Text>
           </View>
         )}
@@ -1611,12 +1588,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    padding: 24,
+    padding: 20,
     paddingBottom: 60,
   },
   header: {
-    marginTop: 40,
-    marginBottom: 32,
+    marginTop: 20,
+    marginBottom: 20,
   },
   headerTop: {
     flexDirection: "row",
@@ -1659,7 +1636,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   metricsDashboard: {
-    marginBottom: 28,
+    marginBottom: 24,
     backgroundColor: "transparent",
   },
   metricsTitle: {
@@ -1668,23 +1645,23 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     textTransform: "uppercase",
     letterSpacing: 1.5,
-    marginBottom: 14,
-    paddingHorizontal: 4,
+    marginBottom: 12,
+    paddingHorizontal: 2,
   },
   responsiveGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 16,
+    gap: 14,
   },
   metricsGrid: {
     flexDirection: "row",
-    gap: 16,
+    gap: 14,
   },
   metricCard: {
     width: 140,
-    height: 140,
+    height: 130,
     borderRadius: 16,
-    padding: 16,
+    padding: 14,
     alignItems: "center",
     justifyContent: "center",
     shadowColor: "#000",
@@ -1694,54 +1671,210 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   metricCount: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: "900",
-    marginTop: 6,
-    marginBottom: 4,
+    marginTop: 4,
+    marginBottom: 2,
   },
   metricLabel: {
     fontSize: 11,
     fontWeight: "800",
     textTransform: "uppercase",
     textAlign: "center",
-    color: "rgba(255,255,255,0.8)",
+    color: "rgba(255,255,255,0.85)",
   },
   metricSubLabel: {
-    marginTop: 6,
-    fontSize: 11,
+    marginTop: 4,
+    fontSize: 10,
     fontWeight: "600",
-    color: "rgba(255,255,255,0.7)",
+    color: "rgba(255,255,255,0.75)",
     textAlign: "center",
   },
+
+  // Store Unified Compact Grid
+  storeActionsSection: {
+    marginBottom: 16,
+  },
+  heroActionCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: Colors.store.primary,
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginBottom: 12,
+    shadowColor: Colors.store.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  heroActionLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flex: 1,
+    marginRight: 8,
+  },
+  heroActionIconBadge: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  heroActionTextContainer: {
+    flex: 1,
+  },
+  heroActionTitle: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#ffffff",
+  },
+  heroLiveBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "rgba(16, 185, 129, 0.25)",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "rgba(16, 185, 129, 0.5)",
+  },
+  heroLiveDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: "#10b981",
+  },
+  heroLiveBadgeText: {
+    color: "#ffffff",
+    fontSize: 9,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  heroActionDesc: {
+    fontSize: 11,
+    color: "rgba(255, 255, 255, 0.85)",
+    fontWeight: "500",
+    marginTop: 2,
+  },
+  heroActionArrow: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  storeGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+  },
+  storeGridTile: {
+    backgroundColor: "#ffffff",
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1.2,
+    borderColor: "#e2e8f0",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 2,
+    justifyContent: "space-between",
+    minHeight: 96,
+  },
+  tileHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  tileIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tileTextContainer: {
+    marginTop: 2,
+  },
+  tileTitle: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#0f172a",
+    marginBottom: 1,
+  },
+  tileDesc: {
+    fontSize: 10.5,
+    fontWeight: "500",
+    color: "#64748b",
+  },
+
+  // Store Front Mode Footer Badge
+  storeModeBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: Colors.store.primary + "0c",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.store.primary + "20",
+    marginTop: 8,
+  },
+  storeModeBadgeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: Colors.store.primary,
+  },
+  storeModeBadgeText: {
+    color: Colors.store.primary,
+    fontSize: 11,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+
+  // Warehouse Button Container
   buttonContainer: {
-    gap: 14,
+    gap: 12,
   },
   actionButton: {
-    borderRadius: 20,
-    padding: 20,
-    elevation: 4,
+    borderRadius: 16,
+    padding: 16,
+    elevation: 3,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
   },
   buttonContent: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 16,
+    gap: 14,
   },
   buttonTextContainer: {
     flex: 1,
   },
   buttonTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "900",
     color: "#ffffff",
     marginBottom: 2,
   },
   buttonDesc: {
-    fontSize: 12,
-    color: "rgba(255, 255, 255, 0.7)",
+    fontSize: 11,
+    color: "rgba(255, 255, 255, 0.75)",
     fontWeight: "500",
   },
   filterButton: {

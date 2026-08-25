@@ -12,13 +12,14 @@ import {
   Banknote,
   Building2,
   ChevronDown,
+  ChevronRight,
   ChevronUp,
   ClipboardList,
   LogOut,
   RotateCcw,
   Search,
   Truck,
-  Wine
+  Wine,
 } from "lucide-react-native";
 import React, { useCallback, useEffect, useState } from "react";
 import {
@@ -31,6 +32,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  useWindowDimensions,
 } from "react-native";
 
 interface StoreAlerts {
@@ -85,8 +87,16 @@ function formatCurrency(value: number) {
 
 export default function AdminDashboard() {
   const router = useRouter();
+  const { width, height } = useWindowDimensions();
   const { profile } = useAuth();
   const { notification } = usePushNotifications();
+
+  const isLandscape = width > height;
+  const isTablet = width >= 768 || (isLandscape && width >= 680);
+  const containerPadding = isLandscape ? 48 : 40;
+  const adminCardsPerRow = 2;
+  const adminTotalGap = 12 * (adminCardsPerRow - 1);
+  const adminTileWidth = (width - containerPadding - adminTotalGap) / adminCardsPerRow;
 
   const [salesPeriod, setSalesPeriod] = useState<"today" | "week" | "all">("today");
   const [breakdownMode, setBreakdownMode] = useState<"store" | "category" | "type">("store");
@@ -1121,29 +1131,47 @@ export default function AdminDashboard() {
           </View>
         )}
 
-        {/* ── Quick Actions ───────────────────────────────────────────────── */}
+        {/* ── Quick Actions (Single Row 2-Tile Grid) ────────────────────── */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Quick Actions</Text>
-          <View style={{ gap: 14, marginTop: 12 }}>
+          <View style={styles.adminGridRow}>
+            {/* Tile 1: Sell Glass or Bottle */}
             <TouchableOpacity
-              style={[styles.actionBtn, { backgroundColor: theme.accent }]}
+              style={styles.adminGridTile}
               onPress={() => router.push({ pathname: "/tagging", params: { mode: "sell" } })}
+              activeOpacity={0.85}
             >
-              <Banknote size={32} color="#fff" strokeWidth={1.5} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.actionTitle}>Sell Glass or Bottle</Text>
-                <Text style={styles.actionDesc}>Scan a bottle QR to process a sale by glass or bottle</Text>
+              <View style={styles.tileHeaderRow}>
+                <View style={[styles.tileIconCircle, { backgroundColor: "#10b98115" }]}>
+                  <Banknote size={18} color="#059669" strokeWidth={2} />
+                </View>
+                <ChevronRight size={14} color="#94a3b8" />
+              </View>
+              <View style={styles.tileTextContainer}>
+                <Text style={styles.tileTitle} numberOfLines={1}>Sell Glass or Bottle</Text>
+                <Text style={styles.tileDesc} numberOfLines={2}>
+                  Scan a bottle QR to process a sale
+                </Text>
               </View>
             </TouchableOpacity>
 
+            {/* Tile 2: Bottle Management */}
             <TouchableOpacity
-              style={[styles.actionBtn, { backgroundColor: theme.primary }]}
+              style={styles.adminGridTile}
               onPress={() => router.push("/inventory")}
+              activeOpacity={0.85}
             >
-              <Search size={32} color="#fff" strokeWidth={1.5} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.actionTitle}>Bottle Management</Text>
-                <Text style={styles.actionDesc}>Search inventory across all stores</Text>
+              <View style={styles.tileHeaderRow}>
+                <View style={[styles.tileIconCircle, { backgroundColor: theme.primary + "15" }]}>
+                  <Search size={18} color={theme.primary} strokeWidth={2} />
+                </View>
+                <ChevronRight size={14} color="#94a3b8" />
+              </View>
+              <View style={styles.tileTextContainer}>
+                <Text style={styles.tileTitle} numberOfLines={1}>Bottle Management</Text>
+                <Text style={styles.tileDesc} numberOfLines={2}>
+                  Search inventory across all stores
+                </Text>
               </View>
             </TouchableOpacity>
           </View>
@@ -1363,22 +1391,54 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     letterSpacing: 1,
   },
-  actionBtn: {
+  // Quick Actions Single Row 2-Tile Grid
+  adminGridRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 12,
+  },
+  adminGridTile: {
+    flex: 1,
+    backgroundColor: theme.background,
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1.2,
+    borderColor: theme.border,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 2,
+    justifyContent: "space-between",
+    minHeight: 96,
+  },
+  tileHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 16,
-    borderRadius: 20,
-    padding: 20,
+    justifyContent: "space-between",
+    marginBottom: 8,
   },
-  actionTitle: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "900",
+  tileIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  actionDesc: {
-    color: "rgba(255,255,255,0.7)",
-    fontSize: 12,
+  tileTextContainer: {
     marginTop: 2,
+  },
+  tileTitle: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: theme.text,
+    marginBottom: 2,
+  },
+  tileDesc: {
+    fontSize: 10.5,
+    fontWeight: "500",
+    color: theme.textSecondary,
+    lineHeight: 14,
   },
   footerBadge: {
     marginTop: 8,
