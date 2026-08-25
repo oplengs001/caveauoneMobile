@@ -74,6 +74,9 @@ export interface FastWineItem {
   sellingPrice?: number | null;
   glassPrice?: number | null;
   carafePrice?: number | null;
+  allowGlass?: boolean;
+  allowCarafe?: boolean;
+  discontinued?: boolean;
   wineCategory?: "fast" | "fine" | "reserve" | "standard" | string | null;
   stockCount: number;
   availableBottleIds: string[];
@@ -182,7 +185,29 @@ export const getRemainingVolumeForWine = (wine: FastWineItem, currentOrder: Orde
   return Math.max(0, totalAvail - queued);
 };
 
+export const isWineEligibleForPortion = (wine: FastWineItem, portion: PortionType): boolean => {
+  if (wine.discontinued) return false;
+  if (portion === "glass") {
+    return Boolean(
+      wine.allowGlass ||
+      (wine.glassPrice != null && !isNaN(Number(wine.glassPrice)) && Number(wine.glassPrice) > 0) ||
+      wine.openBottle
+    );
+  }
+  if (portion === "carafe") {
+    return Boolean(
+      wine.allowCarafe ||
+      (wine.carafePrice != null && !isNaN(Number(wine.carafePrice)) && Number(wine.carafePrice) > 0) ||
+      wine.allowGlass ||
+      (wine.glassPrice != null && !isNaN(Number(wine.glassPrice)) && Number(wine.glassPrice) > 0)
+    );
+  }
+  // Full Bottle
+  return true;
+};
+
 export const canAddPortion = (wine: FastWineItem, portion: PortionType, currentOrder: OrderItem[]): boolean => {
+  if (!isWineEligibleForPortion(wine, portion)) return false;
   const neededVolume = portion === "glass" ? (1 / 6) : portion === "carafe" ? (2 / 6) : 1;
   const remaining = getRemainingVolumeForWine(wine, currentOrder);
   return remaining >= (neededVolume - 0.001);
@@ -358,6 +383,14 @@ export default function StoreStaffPOSTerminal() {
             }
           });
 
+          const isGlassAllowed =
+            Boolean(setting?.allowGlass) ||
+            (setting?.glassPrice != null && !isNaN(Number(setting?.glassPrice)) && Number(setting?.glassPrice) > 0);
+          const isCarafeAllowed =
+            Boolean(setting?.allowCarafe) ||
+            ((setting?.carafePrice || setting?.karafPrice) != null && !isNaN(Number(setting?.carafePrice || setting?.karafPrice)) && Number(setting?.carafePrice || setting?.karafPrice) > 0) ||
+            isGlassAllowed;
+
           return {
             id: mw.id,
             name: mw.name,
@@ -370,6 +403,9 @@ export default function StoreStaffPOSTerminal() {
             sellingPrice: setting?.sellingPrice ?? null,
             glassPrice: setting?.glassPrice ?? null,
             carafePrice: setting?.carafePrice ?? setting?.karafPrice ?? null,
+            allowGlass: isGlassAllowed,
+            allowCarafe: isCarafeAllowed,
+            discontinued: setting?.discontinued ?? false,
             wineCategory: setting?.wineCategory ?? mw.wineCategory ?? "standard",
             stockCount: wineBottles.length,
             availableBottleIds: wineBottles.map((b: any) => b.id),
@@ -385,7 +421,7 @@ export default function StoreStaffPOSTerminal() {
               : null,
           };
         })
-        .filter((w) => w.wineCategory !== "reserve");
+        .filter((w) => !w.discontinued && w.wineCategory !== "reserve");
 
       setWines(processedWines);
     } catch (error) {
@@ -405,9 +441,9 @@ export default function StoreStaffPOSTerminal() {
     await loadData();
   };
 
-  // Filtered wines
+  // Filtered wines (Filtered by active portion: By the Glass, Carafe, or Full Bottle)
   const filteredWines = useMemo(() => {
-    let result = wines;
+    let result = wines.filter((w) => isWineEligibleForPortion(w, salesTypeMode));
 
     if (tierFilter !== "all") {
       result = result.filter((w) => (w.wineCategory || "standard") === tierFilter);
@@ -440,10 +476,10 @@ export default function StoreStaffPOSTerminal() {
     });
   }, [wines, salesTypeMode, tierFilter, wineTypeFilter, searchQuery]);
 
-  // Wine Category Tier Counts
+  // Wine Category Tier Counts (Reflects active portion mode)
   const tierCounts = useMemo(() => {
     const counts: Record<string, number> = { all: 0, fast: 0, fine: 0 };
-    let base = wines;
+    let base = wines.filter((w) => isWineEligibleForPortion(w, salesTypeMode));
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       base = base.filter(
@@ -462,12 +498,12 @@ export default function StoreStaffPOSTerminal() {
       else if (cat === "fine") counts.fine = (counts.fine || 0) + 1;
     });
     return counts;
-  }, [wines, searchQuery]);
+  }, [wines, salesTypeMode, searchQuery]);
 
-  // Wine Type Counts
+  // Wine Type Counts (Reflects active portion mode and tier filter)
   const wineTypeCounts = useMemo(() => {
     const counts: Record<string, number> = { all: 0 };
-    let base = wines;
+    let base = wines.filter((w) => isWineEligibleForPortion(w, salesTypeMode));
     if (tierFilter !== "all") {
       base = base.filter((w) => (w.wineCategory || "standard") === tierFilter);
     }
@@ -488,7 +524,7 @@ export default function StoreStaffPOSTerminal() {
       counts[t] = (counts[t] || 0) + 1;
     });
     return counts;
-  }, [wines, tierFilter, searchQuery]);
+  }, [wines, salesTypeMode, tierFilter, searchQuery]);
 
   // Open Location Selection Modal before adding to service
   const handleSelectWineCard = (wine: FastWineItem) => {
@@ -658,6 +694,7 @@ export default function StoreStaffPOSTerminal() {
 
       for (const item of itemsToProcess) {
         const { wine, portion, quantity } = item;
+        const unitPrice = getItemUnitPrice(wine, portion);
 
         let glassCount = 1.0;
         let glassesDeductedPerUnit = 6;
@@ -695,9 +732,9 @@ export default function StoreStaffPOSTerminal() {
                 storeId: storeId,
                 soldById: staffToAttribute.id,
                 soldByEmail: staffToAttribute.email,
-                price: wine.price || 0,
+                price: unitPrice,
                 vatAmount: 0,
-                totalAmount: wine.price || 0,
+                totalAmount: unitPrice,
                 vatMode: "included",
                 customerId: selectedCustomer?.id || null,
                 customerName: selectedCustomer?.name || null,
@@ -738,9 +775,9 @@ export default function StoreStaffPOSTerminal() {
                 storeId: storeId,
                 soldById: staffToAttribute.id,
                 soldByEmail: staffToAttribute.email,
-                price: wine.price || 0,
+                price: unitPrice,
                 vatAmount: 0,
-                totalAmount: wine.price || 0,
+                totalAmount: unitPrice,
                 vatMode: "included",
                 customerId: selectedCustomer?.id || null,
                 customerName: selectedCustomer?.name || null,
@@ -1603,7 +1640,11 @@ export default function StoreStaffPOSTerminal() {
               <Text style={styles.emptyCatalogSub}>
                 {searchQuery
                   ? `No wines matching "${searchQuery}"`
-                  : "No inventory available in this category."}
+                  : salesTypeMode === "glass"
+                    ? "No wines configured for By the Glass serving in this store."
+                    : salesTypeMode === "carafe"
+                      ? "No wines configured for Carafe serving in this store."
+                      : "No inventory available in this category."}
               </Text>
             </View>
           ) : (

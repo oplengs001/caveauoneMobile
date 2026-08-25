@@ -845,8 +845,8 @@ export default function StoreMasterListScreen() {
       safetyStock > 0
         ? Math.min(100, (item.stockCount / safetyStock) * 100)
         : item.stockCount > 0
-        ? 100
-        : 0;
+          ? 100
+          : 0;
 
     const parPercentage =
       safetyStock > 0 ? Math.min(100, (parLevel / safetyStock) * 100) : 0;
@@ -1002,7 +1002,7 @@ export default function StoreMasterListScreen() {
             }}
           >
             {item.activeRequest.status === "outbound" ||
-            item.activeRequest.status === "converted" ? (
+              item.activeRequest.status === "converted" ? (
               <Truck size={14} color={cfg.accent} />
             ) : item.activeRequest.status === "receiving" ? (
               <CheckCircle2 size={14} color={cfg.accent} />
@@ -1013,12 +1013,12 @@ export default function StoreMasterListScreen() {
               {item.activeRequest.status === "pending"
                 ? "Request Pending Approval"
                 : item.activeRequest.status === "converted"
-                ? "Warehouse Pullout in Progress"
-                : item.activeRequest.status === "outbound"
-                ? "Stock is Outbound"
-                : item.activeRequest.status === "receiving"
-                ? "Ready to Ingress / Receive"
-                : "Active Request"}
+                  ? "Warehouse Pullout in Progress"
+                  : item.activeRequest.status === "outbound"
+                    ? "Stock is Outbound"
+                    : item.activeRequest.status === "receiving"
+                      ? "Ready to Ingress / Receive"
+                      : "Active Request"}
             </Text>
             <ChevronRight size={14} color={cfg.color} style={{ marginLeft: "auto" }} />
           </TouchableOpacity>
@@ -1233,12 +1233,12 @@ export default function StoreMasterListScreen() {
             {sortBy === "urgency"
               ? "Sort"
               : sortBy === "stock_asc"
-              ? "Stock ↑"
-              : sortBy === "stock_desc"
-              ? "Stock ↓"
-              : sortBy === "name_asc"
-              ? "A-Z"
-              : "Price ↓"}
+                ? "Stock ↑"
+                : sortBy === "stock_desc"
+                  ? "Stock ↓"
+                  : sortBy === "name_asc"
+                    ? "A-Z"
+                    : "Price ↓"}
           </Text>
         </TouchableOpacity>
       </View>
@@ -1257,16 +1257,16 @@ export default function StoreMasterListScreen() {
                   filter === "needs_reorder"
                     ? "alert-octagon-outline"
                     : filter === "stockout"
-                    ? "close-circle-outline"
-                    : filter === "par_alert"
-                    ? "lightning-bolt-outline"
-                    : filter === "under_safety"
-                    ? "shield-alert-outline"
-                    : filter === "optimal"
-                    ? "check-circle-outline"
-                    : filter === "overstock"
-                    ? "trending-up"
-                    : "cancel"
+                      ? "close-circle-outline"
+                      : filter === "par_alert"
+                        ? "lightning-bolt-outline"
+                        : filter === "under_safety"
+                          ? "shield-alert-outline"
+                          : filter === "optimal"
+                            ? "check-circle-outline"
+                            : filter === "overstock"
+                              ? "trending-up"
+                              : "cancel"
                 }
                 size={13}
                 color={theme.primary}
@@ -1275,18 +1275,18 @@ export default function StoreMasterListScreen() {
                 {filter === "needs_reorder"
                   ? "Reorder"
                   : filter === "stockout"
-                  ? "Stockout"
-                  : filter === "par_alert"
-                  ? "PAR Alert"
-                  : filter === "under_safety"
-                  ? "Under Safety"
-                  : filter === "optimal"
-                  ? "Optimal"
-                  : filter === "overstock"
-                  ? "Overstock"
-                  : filter === "discontinued"
-                  ? "Discontinued"
-                  : filter}
+                    ? "Stockout"
+                    : filter === "par_alert"
+                      ? "PAR Alert"
+                      : filter === "under_safety"
+                        ? "Under Safety"
+                        : filter === "optimal"
+                          ? "Optimal"
+                          : filter === "overstock"
+                            ? "Overstock"
+                            : filter === "discontinued"
+                              ? "Discontinued"
+                              : filter}
               </Text>
               <X size={12} color={theme.primary} />
             </TouchableOpacity>
@@ -1301,14 +1301,14 @@ export default function StoreMasterListScreen() {
                   categoryFilter === "portions"
                     ? "glass-wine"
                     : categoryFilter === "bottle_only"
-                    ? "bottle-wine-outline"
-                    : categoryFilter === "fast"
-                    ? "lightning-bolt"
-                    : categoryFilter === "fine"
-                    ? "star"
-                    : categoryFilter === "reserve"
-                    ? "lock-outline"
-                    : "bottle-wine-outline"
+                      ? "bottle-wine-outline"
+                      : categoryFilter === "fast"
+                        ? "lightning-bolt"
+                        : categoryFilter === "fine"
+                          ? "star"
+                          : categoryFilter === "reserve"
+                            ? "lock-outline"
+                            : "bottle-wine-outline"
                 }
                 size={13}
                 color={theme.primary}
@@ -1317,14 +1317,14 @@ export default function StoreMasterListScreen() {
                 {categoryFilter === "portions"
                   ? "Glass & Carafe"
                   : categoryFilter === "bottle_only"
-                  ? "Bottle Only"
-                  : categoryFilter === "fast"
-                  ? "Fast Wine"
-                  : categoryFilter === "fine"
-                  ? "Fine Wine"
-                  : categoryFilter === "reserve"
-                  ? "Reserve Wine"
-                  : "Standard"}
+                    ? "Bottle Only"
+                    : categoryFilter === "fast"
+                      ? "Fast Wine"
+                      : categoryFilter === "fine"
+                        ? "Fine Wine"
+                        : categoryFilter === "reserve"
+                          ? "Reserve Wine"
+                          : "Standard"}
               </Text>
               <X size={12} color={theme.primary} />
             </TouchableOpacity>
@@ -2115,7 +2115,7 @@ export default function StoreMasterListScreen() {
                   }}
                 >
                   {selected.activeRequest.status === "outbound" ||
-                  selected.activeRequest.status === "converted" ? (
+                    selected.activeRequest.status === "converted" ? (
                     <Truck size={18} color={theme.primary} strokeWidth={2.5} />
                   ) : selected.activeRequest.status === "receiving" ? (
                     <CheckCircle2 size={18} color={theme.primary} strokeWidth={2.5} />
