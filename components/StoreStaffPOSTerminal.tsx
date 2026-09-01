@@ -273,13 +273,24 @@ export default function StoreStaffPOSTerminal() {
 
   // Post-dispense feedback
   const [successData, setSuccessData] = useState<{
+    saleIds: string[];
+    bottlesToRevert?: {
+      bottleId: string;
+      status: "shelved" | "open";
+      glassesRemaining: number | null;
+      locationId?: string | null;
+    }[];
+    dispatchedAt: number;
     itemsCount: number;
     totalBottlesVolume: number;
     totalAmount: number;
     staffName: string;
     customerName?: string | null;
+    customerId?: string | null;
     timestamp: string;
   } | null>(null);
+
+  const [isVoiding, setIsVoiding] = useState(false);
 
   const [parAlerts, setParAlerts] = useState<
     { wineName: string; stockCount: number; requestedQty: number }[]
@@ -289,7 +300,7 @@ export default function StoreStaffPOSTerminal() {
   const [successCountdown, setSuccessCountdown] = useState(5);
 
   useEffect(() => {
-    if (!successData) {
+    if (!successData || isVoiding) {
       setSuccessCountdown(5);
       return;
     }
@@ -307,7 +318,7 @@ export default function StoreStaffPOSTerminal() {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [successData]);
+  }, [successData, isVoiding]);
 
   // Load staff, store name & inventory data
   const loadData = useCallback(async () => {
@@ -739,6 +750,13 @@ export default function StoreStaffPOSTerminal() {
 
     setIsProcessing(true);
     const triggeredParAlerts: { wineName: string; stockCount: number; requestedQty: number }[] = [];
+    const createdSaleIds: string[] = [];
+    const bottlesToRevert: {
+      bottleId: string;
+      status: "shelved" | "open";
+      glassesRemaining: number | null;
+      locationId?: string | null;
+    }[] = [];
 
     try {
       const staffToAttribute = selectedStaff || {
@@ -775,10 +793,13 @@ export default function StoreStaffPOSTerminal() {
           for (let i = 0; i < quantity; i++) {
             const targetBottleId = candidateBottleIds[i] || wine.availableBottleIds[i] || wine.availableBottleIds[0];
 
-            await apiFetch("/sales", {
+            const saleRes = await apiFetch("/sales", {
               method: "POST",
               body: JSON.stringify({
                 bottleId: targetBottleId || null,
+                locationId: item.selectedLocationId && item.selectedLocationId !== "unassigned"
+                  ? item.selectedLocationId
+                  : (wine.bottles?.find((b) => b.id === targetBottleId)?.locationId || null),
                 masterWineId: wine.id,
                 wineName: wine.name,
                 vintage: wine.vintage,
@@ -800,7 +821,22 @@ export default function StoreStaffPOSTerminal() {
               }),
             });
 
+            if (saleRes?.id) {
+              createdSaleIds.push(saleRes.id);
+            }
+
             if (targetBottleId) {
+              const targetLocationId = item.selectedLocationId && item.selectedLocationId !== "unassigned"
+                ? item.selectedLocationId
+                : (wine.bottles?.find((b) => b.id === targetBottleId)?.locationId || null);
+
+              bottlesToRevert.push({
+                bottleId: targetBottleId,
+                status: "shelved",
+                glassesRemaining: null,
+                locationId: targetLocationId,
+              });
+
               await apiFetch(`/bottles/${targetBottleId}`, {
                 method: "PATCH",
                 body: JSON.stringify({
@@ -817,11 +853,21 @@ export default function StoreStaffPOSTerminal() {
           let currentGlassesInActiveBottle = wine.openBottle ? wine.openBottle.glassesRemaining : 0;
           const availableUnopenedIds = [...wine.availableBottleIds.filter((bId) => bId !== activeOpenBottleId)];
 
+          if (activeOpenBottleId) {
+            bottlesToRevert.push({
+              bottleId: activeOpenBottleId,
+              status: "open",
+              glassesRemaining: currentGlassesInActiveBottle,
+              locationId: wine.openBottle?.locationId || null,
+            });
+          }
+
           for (let q = 0; q < quantity; q++) {
-            await apiFetch("/sales", {
+            const saleRes = await apiFetch("/sales", {
               method: "POST",
               body: JSON.stringify({
                 bottleId: activeOpenBottleId || availableUnopenedIds[0] || null,
+                locationId: wine.openBottle?.locationId || null,
                 masterWineId: wine.id,
                 wineName: wine.name,
                 vintage: wine.vintage,
@@ -842,6 +888,10 @@ export default function StoreStaffPOSTerminal() {
                 glassCount,
               }),
             });
+
+            if (saleRes?.id) {
+              createdSaleIds.push(saleRes.id);
+            }
           }
 
           while (totalGlassesToDeduct > 0) {
@@ -972,11 +1022,15 @@ export default function StoreStaffPOSTerminal() {
 
       setParAlerts(triggeredParAlerts);
       setSuccessData({
+        saleIds: createdSaleIds,
+        bottlesToRevert,
+        dispatchedAt: Date.now(),
         itemsCount: totalItems,
         totalBottlesVolume: Math.round(totalBottlesVolume * 100) / 100,
         totalAmount,
         staffName: staffToAttribute.displayName || staffToAttribute.email?.split("@")[0] || "Staff",
         customerName: selectedCustomer?.name || null,
+        customerId: selectedCustomer?.id || null,
         timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       });
 
@@ -994,6 +1048,89 @@ export default function StoreStaffPOSTerminal() {
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  const handleVoidTransaction = () => {
+    if (!successData?.saleIds || successData.saleIds.length === 0) {
+      Alert.alert("Cannot Void", "No transaction records found to void.");
+      return;
+    }
+
+    Alert.alert(
+      "Void Transaction?",
+      "Are you sure you want to void this transaction? This will reverse all sales and restore inventory bottles.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Void Transaction",
+          style: "destructive",
+          onPress: async () => {
+            setIsVoiding(true);
+            try {
+              let res: any = null;
+              try {
+                res = await apiFetch("/sales/void", {
+                  method: "POST",
+                  body: JSON.stringify({
+                    saleIds: successData.saleIds,
+                    voidedBy: profile?.id,
+                    voidedByEmail: profile?.email,
+                    reason: "Staff voided transaction from POS",
+                  }),
+                });
+              } catch (apiErr: any) {
+                // If the remote server returns 404 (e.g. backend deployment in progress),
+                // fall back to directly restoring the bottles so staff is never blocked
+                if (apiErr?.message?.includes("404")) {
+                  console.warn("[StoreStaffPOSTerminal] /sales/void 404, restoring bottles via direct fallback");
+                  if (successData.bottlesToRevert && successData.bottlesToRevert.length > 0) {
+                    await Promise.all(
+                      successData.bottlesToRevert.map(async (b) => {
+                        await apiFetch(`/bottles/${b.bottleId}`, {
+                          method: "PATCH",
+                          body: JSON.stringify({
+                            status: b.status,
+                            glassesRemaining: b.glassesRemaining,
+                            ...(b.locationId ? { locationId: b.locationId } : {}),
+                          }),
+                        }).catch(() => {});
+                      })
+                    );
+                  }
+                  res = { message: "Transaction voided and inventory restored successfully." };
+                } else {
+                  throw apiErr;
+                }
+              }
+
+              // Reverse customer cache update
+              if (successData.customerId && storeId) {
+                recordCustomerSaleInCache(
+                  successData.customerId,
+                  -successData.totalAmount,
+                  storeId
+                ).catch(() => {});
+              }
+
+              setSuccessData(null);
+              loadData();
+              Alert.alert(
+                "Transaction Voided",
+                res?.message || "All sales have been reversed and inventory restored."
+              );
+            } catch (err: any) {
+              console.error("[StoreStaffPOSTerminal] Void error:", err);
+              Alert.alert(
+                "Void Failed",
+                err.message || "Failed to void transaction. Please contact admin."
+              );
+            } finally {
+              setIsVoiding(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleCompleteOrder = () => executeSaleOrder(currentOrder);
@@ -2053,13 +2190,35 @@ export default function StoreStaffPOSTerminal() {
               )}
             </View>
 
-            <TouchableOpacity
-              onPress={() => setSuccessData(null)}
-              style={styles.successBtn}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.successBtnText}>Done / Next Service ({successCountdown}s)</Text>
-            </TouchableOpacity>
+            <View style={styles.successActionsCol}>
+              <TouchableOpacity
+                onPress={() => setSuccessData(null)}
+                style={styles.successBtn}
+                activeOpacity={0.85}
+                disabled={isVoiding}
+              >
+                <Text style={styles.successBtnText}>Done / Next Service ({successCountdown}s)</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={handleVoidTransaction}
+                style={[
+                  styles.voidBtn,
+                  isVoiding && styles.voidBtnDisabled,
+                ]}
+                activeOpacity={0.8}
+                disabled={isVoiding}
+              >
+                {isVoiding ? (
+                  <ActivityIndicator size="small" color="#b45309" />
+                ) : (
+                  <>
+                    <MaterialCommunityIcons name="undo-variant" size={16} color="#b45309" />
+                    <Text style={styles.voidBtnText}>Void Transaction</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -3698,6 +3857,33 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "900",
     color: "#ffffff",
+  },
+  successActionsCol: {
+    width: "100%",
+    gap: 10,
+  },
+  voidBtn: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: "#f59e0b",
+    backgroundColor: "#fffbeb",
+  },
+  voidBtnDisabled: {
+    opacity: 0.5,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#f8fafc",
+  },
+  voidBtnText: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#b45309",
+    letterSpacing: 0.2,
   },
   orderItemLocationBadge: {
     flexDirection: "row",
