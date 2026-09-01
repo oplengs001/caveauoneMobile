@@ -6,6 +6,7 @@ import { prefetchCustomers, recordCustomerSaleInCache } from "@/lib/customerCach
 import { AppUser, fetchStoreStaff } from "@/lib/queries/users";
 import { Customer } from "@/types";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { BlurView } from "expo-blur";
 import { Stack, useRouter } from "expo-router";
 import {
@@ -25,6 +26,8 @@ import {
   Search,
   ShoppingBag,
   SlidersHorizontal,
+  UserCheck,
+  Users,
   Wine,
   X,
   Zap
@@ -266,6 +269,7 @@ export default function StoreStaffPOSTerminal() {
   const [storeName, setStoreName] = useState<string>("Boutique Store");
   const [staffList, setStaffList] = useState<AppUser[]>([]);
   const [selectedStaff, setSelectedStaff] = useState<AppUser | null>(null);
+  const [shiftStaffIds, setShiftStaffIds] = useState<string[]>([]);
   const [isStaffAccordionOpen, setIsStaffAccordionOpen] = useState(false);
   const [staffSearchQuery, setStaffSearchQuery] = useState("");
   const [recentStaffIds, setRecentStaffIds] = useState<string[]>([]);
@@ -368,6 +372,34 @@ export default function StoreStaffPOSTerminal() {
         createdAt: new Date(),
       };
       setSelectedStaff(activeUserInStaff);
+
+      // Load On-Duty Shift Roster from AsyncStorage
+      try {
+        const storedShift = await AsyncStorage.getItem(`@caveau:pos_shift_staff_${storeId || "default"}`);
+        if (storedShift) {
+          const parsed: string[] = JSON.parse(storedShift);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            const valid = parsed.filter((id) => staff.some((s) => s.id === id));
+            if (!valid.includes(activeUserInStaff.id)) {
+              valid.unshift(activeUserInStaff.id);
+            }
+            setShiftStaffIds(valid);
+          } else {
+            setShiftStaffIds([activeUserInStaff.id]);
+          }
+        } else {
+          // Default shift: active user + first 3 other store staff
+          const otherStaff = staff.filter((s) => s.id !== activeUserInStaff.id).slice(0, 3).map((s) => s.id);
+          const initialShift = [activeUserInStaff.id, ...otherStaff];
+          setShiftStaffIds(initialShift);
+          AsyncStorage.setItem(
+            `@caveau:pos_shift_staff_${storeId || "default"}`,
+            JSON.stringify(initialShift)
+          ).catch(() => { });
+        }
+      } catch {
+        setShiftStaffIds([activeUserInStaff.id]);
+      }
 
       const [winesData, settingsData, bottlesData, locationsData] = await Promise.all([
         apiFetch("/wines"),
@@ -525,16 +557,58 @@ export default function StoreStaffPOSTerminal() {
     await loadData();
   };
 
-  // Staff Selection Handlers & Filtered Lists (Inline Accordion)
+  // Staff Selection Handlers & Filtered Lists (Inline Accordion + Shift Roster)
   const handleSelectStaff = (st: AppUser) => {
     setSelectedStaff(st);
     setRecentStaffIds((prev) => {
       const filtered = prev.filter((id) => id !== st.id);
       return [st.id, ...filtered].slice(0, 5);
     });
+    // Auto-add selected staff to shift roster if not already present
+    setShiftStaffIds((prev) => {
+      if (prev.includes(st.id)) return prev;
+      const updated = [...prev, st.id];
+      AsyncStorage.setItem(
+        `@caveau:pos_shift_staff_${storeId || "default"}`,
+        JSON.stringify(updated)
+      ).catch(() => { });
+      return updated;
+    });
     setIsStaffAccordionOpen(false);
     setStaffSearchQuery("");
   };
+
+  const toggleShiftStaff = (stId: string) => {
+    setShiftStaffIds((prev) => {
+      const isCurrentlyOnShift = prev.includes(stId);
+      let updated: string[];
+      if (isCurrentlyOnShift) {
+        if (prev.length <= 1) {
+          Alert.alert("Shift Roster", "At least one staff member must remain on shift.");
+          return prev;
+        }
+        updated = prev.filter((id) => id !== stId);
+        // If the removed staff was currently active, switch to another on-duty staff
+        if (selectedStaff?.id === stId) {
+          const nextStaff = staffList.find((s) => s.id === updated[0]);
+          if (nextStaff) setSelectedStaff(nextStaff);
+        }
+      } else {
+        updated = [...prev, stId];
+      }
+      AsyncStorage.setItem(
+        `@caveau:pos_shift_staff_${storeId || "default"}`,
+        JSON.stringify(updated)
+      ).catch(() => { });
+      return updated;
+    });
+  };
+
+  const onDutyStaff = useMemo(() => {
+    return shiftStaffIds
+      .map((id) => staffList.find((s) => s.id === id))
+      .filter((s): s is AppUser => Boolean(s));
+  }, [shiftStaffIds, staffList]);
 
   const filteredStaffList = useMemo(() => {
     let list = staffList;
@@ -550,6 +624,10 @@ export default function StoreStaffPOSTerminal() {
     return [...list].sort((a, b) => {
       if (a.id === selectedStaff?.id) return -1;
       if (b.id === selectedStaff?.id) return 1;
+      const onDutyA = shiftStaffIds.includes(a.id);
+      const onDutyB = shiftStaffIds.includes(b.id);
+      if (onDutyA && !onDutyB) return -1;
+      if (onDutyB && !onDutyA) return 1;
       const isRecentA = recentStaffIds.includes(a.id);
       const isRecentB = recentStaffIds.includes(b.id);
       if (isRecentA && !isRecentB) return -1;
@@ -558,7 +636,7 @@ export default function StoreStaffPOSTerminal() {
       const nameB = formatStaffDisplayName(b);
       return nameA.localeCompare(nameB);
     });
-  }, [staffList, staffSearchQuery, selectedStaff, recentStaffIds]);
+  }, [staffList, staffSearchQuery, selectedStaff, shiftStaffIds, recentStaffIds]);
 
   // Filtered wines (Filtered by active portion: By the Glass, Carafe, or Full Bottle)
   const filteredWines = useMemo(() => {
@@ -1385,10 +1463,8 @@ export default function StoreStaffPOSTerminal() {
         )}
       </View>
 
-      {/* Staff Selector - Inline Accordion with Active Server Status */}
+      {/* Staff Selector - Quick Switcher + Inline Accordion */}
       <View style={styles.staffSection}>
-        <Text style={styles.staffSectionLabel}>SERVED BY</Text>
-
         {/* Accordion Header (Active Server Card - Always Visible) */}
         <TouchableOpacity
           onPress={() => {
@@ -1421,7 +1497,7 @@ export default function StoreStaffPOSTerminal() {
                   ? "Store Manager"
                   : selectedStaff?.role === "admin"
                     ? "Admin"
-                    : "Store Staff"} · {isStaffAccordionOpen ? "Tap to close" : "Tap to switch server"}
+                    : "Store Staff"} · {isStaffAccordionOpen ? "Tap to close roster" : "Tap to manage shift"}
               </Text>
             </View>
           </View>
@@ -1435,9 +1511,103 @@ export default function StoreStaffPOSTerminal() {
           </View>
         </TouchableOpacity>
 
+        {/* ── 1-TAP QUICK SWITCHER (Always Visible, Wraps & Fills Downward) ─── */}
+        <View style={styles.quickStaffBarContainer}>
+          <View style={styles.quickStaffContainer}>
+            {onDutyStaff.map((st) => {
+              const isSelected = selectedStaff?.id === st.id;
+              const displayName = formatStaffDisplayName(st);
+              const initial = displayName[0]?.toUpperCase() || "S";
+              const firstName = displayName.split(" ")[0] || displayName;
+
+              return (
+                <TouchableOpacity
+                  key={st.id}
+                  onPress={() => {
+                    setSelectedStaff(st);
+                    setRecentStaffIds((prev) => [st.id, ...prev.filter((id) => id !== st.id)].slice(0, 5));
+                  }}
+                  activeOpacity={0.75}
+                  style={[
+                    styles.quickStaffChip,
+                    isSelected && styles.quickStaffChipSelected,
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.quickStaffChipAvatar,
+                      isSelected ? styles.quickStaffChipAvatarSelected : styles.quickStaffChipAvatarDefault,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.quickStaffChipAvatarText,
+                        isSelected ? styles.quickStaffChipAvatarTextSelected : styles.quickStaffChipAvatarTextDefault,
+                      ]}
+                    >
+                      {initial}
+                    </Text>
+                  </View>
+                  <Text
+                    style={[
+                      styles.quickStaffChipName,
+                      isSelected && styles.quickStaffChipNameSelected,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {firstName}
+                  </Text>
+                  {isSelected && <View style={styles.quickStaffActiveDot} />}
+                </TouchableOpacity>
+              );
+            })}
+
+            {/* Quick "+ Roster" button */}
+            <TouchableOpacity
+              onPress={() => setIsStaffAccordionOpen((prev) => !prev)}
+              style={[
+                styles.quickStaffAddBtn,
+                isStaffAccordionOpen && styles.quickStaffAddBtnActive,
+              ]}
+              activeOpacity={0.8}
+            >
+              <Plus size={11} color={isStaffAccordionOpen ? "#ffffff" : MAROON.primary} strokeWidth={2.5} />
+              <Text style={[styles.quickStaffAddText, isStaffAccordionOpen && { color: "#ffffff" }]}>
+                Roster
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
         {/* Accordion Expanded Body */}
         {isStaffAccordionOpen && (
           <View style={styles.staffAccordionBody}>
+            {/* Shift Roster Sub-bar inside Accordion */}
+            <View style={styles.accordionRosterHeader}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                <Users size={12} color={MAROON.primary} />
+                <Text style={styles.accordionRosterTitle}>
+                  {onDutyStaff.length} On Duty Today ({staffList.length} total)
+                </Text>
+              </View>
+              {shiftStaffIds.length > 1 && (
+                <TouchableOpacity
+                  onPress={() => {
+                    if (selectedStaff) {
+                      setShiftStaffIds([selectedStaff.id]);
+                      AsyncStorage.setItem(
+                        `@caveau:pos_shift_staff_${storeId || "default"}`,
+                        JSON.stringify([selectedStaff.id])
+                      ).catch(() => { });
+                    }
+                  }}
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                >
+                  <Text style={styles.accordionRosterReset}>Reset to Me</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
             {/* Search Input - Always Retained */}
             <View style={styles.staffAccordionSearchBox}>
               <Search size={14} color="#94a3b8" />
@@ -1478,18 +1648,14 @@ export default function StoreStaffPOSTerminal() {
                 <View style={styles.staffAccordionListWrap}>
                   {filteredStaffList.map((st) => {
                     const isSelected = selectedStaff?.id === st.id;
+                    const isOnShift = shiftStaffIds.includes(st.id);
                     const name = formatStaffDisplayName(st);
                     const initial = name[0]?.toUpperCase() || "S";
-                    const isRecent = recentStaffIds.includes(st.id);
 
                     return (
                       <TouchableOpacity
                         key={st.id}
-                        onPress={() => {
-                          handleSelectStaff(st);
-                          setIsStaffAccordionOpen(false);
-                          setStaffSearchQuery("");
-                        }}
+                        onPress={() => handleSelectStaff(st)}
                         style={[
                           styles.staffAccordionItem,
                           isSelected && styles.staffAccordionItemSelected,
@@ -1528,10 +1694,38 @@ export default function StoreStaffPOSTerminal() {
                               : st.role === "admin"
                                 ? "Admin"
                                 : "Store Staff"}
-                            {isRecent && !isSelected ? " · On Shift" : ""}
+                            {isOnShift && !isSelected ? " · On Duty" : ""}
                           </Text>
                         </View>
 
+                        {/* On-Duty Quick Shift Toggle */}
+                        <TouchableOpacity
+                          onPress={(e) => {
+                            e.stopPropagation();
+                            toggleShiftStaff(st.id);
+                          }}
+                          style={[
+                            styles.shiftToggleBtn,
+                            isOnShift && styles.shiftToggleBtnActive,
+                          ]}
+                          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                        >
+                          <UserCheck
+                            size={11}
+                            color={isOnShift ? "#059669" : "#94a3b8"}
+                            strokeWidth={isOnShift ? 2.5 : 2}
+                          />
+                          <Text
+                            style={[
+                              styles.shiftToggleBtnText,
+                              isOnShift && styles.shiftToggleBtnTextActive,
+                            ]}
+                          >
+                            {isOnShift ? "On Duty" : "+ Shift"}
+                          </Text>
+                        </TouchableOpacity>
+
+                        {/* Active Selection Indicator */}
                         {isSelected ? (
                           <View style={styles.staffItemCheck}>
                             <Check size={12} color="#ffffff" strokeWidth={3} />
@@ -3864,6 +4058,149 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: "#cbd5e1",
     backgroundColor: "#ffffff",
+  },
+  // ── Quick Staff Switcher (Always Visible, Fills Downward) ──
+  quickStaffBarContainer: {
+    marginTop: 6,
+    marginBottom: 6,
+  },
+  quickStaffContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: 6,
+  },
+  quickStaffChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderWidth: 1.5,
+    borderColor: "#e2e8f0",
+    gap: 5,
+    elevation: 1,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+  },
+  quickStaffChipSelected: {
+    backgroundColor: MAROON.primary,
+    borderColor: MAROON.primary,
+    elevation: 2,
+    shadowColor: MAROON.primary,
+    shadowOpacity: 0.25,
+  },
+  quickStaffChipAvatar: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  quickStaffChipAvatarDefault: {
+    backgroundColor: "#f1f5f9",
+  },
+  quickStaffChipAvatarSelected: {
+    backgroundColor: "rgba(255, 255, 255, 0.25)",
+  },
+  quickStaffChipAvatarText: {
+    fontSize: 10,
+    fontWeight: "900",
+  },
+  quickStaffChipAvatarTextDefault: {
+    color: "#475569",
+  },
+  quickStaffChipAvatarTextSelected: {
+    color: "#ffffff",
+  },
+  quickStaffChipName: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#334155",
+  },
+  quickStaffChipNameSelected: {
+    color: "#ffffff",
+    fontWeight: "800",
+  },
+  quickStaffActiveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#10b981",
+    marginLeft: 2,
+  },
+  quickStaffAddBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    borderStyle: "dashed",
+    backgroundColor: "#f8fafc",
+  },
+  quickStaffAddBtnActive: {
+    backgroundColor: MAROON.primary,
+    borderColor: MAROON.primary,
+    borderStyle: "solid",
+  },
+  quickStaffAddText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: MAROON.primary,
+  },
+  // ── Accordion Shift Roster Header & Item Toggles ──
+  accordionRosterHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    marginBottom: 6,
+    backgroundColor: "#f8fafc",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#f1f5f9",
+  },
+  accordionRosterTitle: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#475569",
+  },
+  accordionRosterReset: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: MAROON.primary,
+  },
+  shiftToggleBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingVertical: 3,
+    paddingHorizontal: 6,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#ffffff",
+    marginRight: 6,
+  },
+  shiftToggleBtnActive: {
+    borderColor: "#a7f3d0",
+    backgroundColor: "#ecfdf5",
+  },
+  shiftToggleBtnText: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: "#64748b",
+  },
+  shiftToggleBtnTextActive: {
+    color: "#059669",
+    fontWeight: "800",
   },
   orderItemsList: {
     flex: 1,
