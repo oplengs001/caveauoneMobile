@@ -1,4 +1,11 @@
 import { apiFetch } from "@/lib/api";
+import {
+  appendCustomerToCache,
+  getCachedCustomers,
+  getCachedProducers,
+  setCachedCustomers,
+  setCachedProducers,
+} from "@/lib/customerCache";
 import { Customer } from "@/types";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
@@ -99,6 +106,7 @@ export default function CustomerPickerModal({
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [availableProducers, setAvailableProducers] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Form State
   const [newName, setNewName] = useState("");
@@ -115,8 +123,31 @@ export default function CustomerPickerModal({
 
   const [savingNew, setSavingNew] = useState(false);
 
+  // Pre-warm state from cache as soon as modal is mounted
+  useEffect(() => {
+    getCachedCustomers(storeId).then((cached) => {
+      if (cached?.data && cached.data.length > 0) {
+        setCustomers(cached.data);
+        setLoading(false);
+      }
+    });
+    getCachedProducers().then((cached) => {
+      if (cached?.data && cached.data.length > 0) {
+        setAvailableProducers(cached.data);
+      }
+    });
+  }, [storeId]);
+
   const fetchMasterProducers = useCallback(async () => {
     try {
+      // 1. Check cache first
+      const cached = await getCachedProducers();
+      if (cached) {
+        setAvailableProducers(cached.data);
+        if (!cached.isStale) return; // Cache is fresh
+      }
+
+      // 2. Fetch fresh in background
       const data = await apiFetch("/producers").catch(() => apiFetch("/wines"));
       let uniqueProducers: string[] = [];
       if (Array.isArray(data)) {
@@ -140,25 +171,54 @@ export default function CustomerPickerModal({
           )
         ) as string[];
       }
-      setAvailableProducers(uniqueProducers.sort());
+      const sorted = uniqueProducers.sort();
+      setAvailableProducers(sorted);
+      await setCachedProducers(sorted);
     } catch (e) {
       console.error("[CustomerPickerModal] Failed to fetch master wine producers", e);
     }
   }, []);
 
-  const fetchCustomers = useCallback(async () => {
-    setLoading(true);
-    try {
-      const url = storeId ? `/customers?storeId=${storeId}` : `/customers`;
-      const data = await apiFetch(url);
-      const list: Customer[] = Array.isArray(data) ? data : data.customers || [];
-      setCustomers(list);
-    } catch (err) {
-      console.error("[CustomerPickerModal] Failed to fetch customers", err);
-    } finally {
-      setLoading(false);
-    }
-  }, [storeId]);
+  const fetchCustomers = useCallback(
+    async (forceRefresh = false) => {
+      let hasCachedData = false;
+
+      // 1. Check cache first if not forcing refresh
+      if (!forceRefresh) {
+        const cached = await getCachedCustomers(storeId);
+        if (cached) {
+          setCustomers(cached.data);
+          setLoading(false);
+          hasCachedData = true;
+          if (!cached.isStale) {
+            return; // Cache is fresh (< 5 mins), return instantly!
+          }
+          // Cache is stale: background revalidation
+          setIsRefreshing(true);
+        }
+      }
+
+      if (!hasCachedData) {
+        setLoading(true);
+      } else {
+        setIsRefreshing(true);
+      }
+
+      try {
+        const url = storeId ? `/customers?storeId=${storeId}` : `/customers`;
+        const data = await apiFetch(url);
+        const list: Customer[] = Array.isArray(data) ? data : data.customers || [];
+        setCustomers(list);
+        await setCachedCustomers(list, storeId);
+      } catch (err) {
+        console.error("[CustomerPickerModal] Failed to fetch customers", err);
+      } finally {
+        setLoading(false);
+        setIsRefreshing(false);
+      }
+    },
+    [storeId]
+  );
 
   useEffect(() => {
     if (isOpen) {
@@ -235,7 +295,13 @@ export default function CustomerPickerModal({
         }),
       });
 
-      onSelectCustomer(newCustomer as Customer);
+      const savedCustomer = newCustomer as Customer;
+      await appendCustomerToCache(savedCustomer, storeId);
+      setCustomers((prev) => [
+        savedCustomer,
+        ...prev.filter((c) => c.id !== savedCustomer.id),
+      ]);
+      onSelectCustomer(savedCustomer);
       onClose();
     } catch (err: any) {
       console.error("[CustomerPickerModal] Error creating customer", err);
@@ -304,14 +370,19 @@ export default function CustomerPickerModal({
             size={18}
             color={activeTab === "search" ? MAROON.primary : "#64748b"}
           />
-          <Text
-            style={[
-              styles.tabBtnText,
-              activeTab === "search" && { color: MAROON.primary, fontWeight: "900" },
-            ]}
-          >
-            Client Directory ({customers.length})
-          </Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+            <Text
+              style={[
+                styles.tabBtnText,
+                activeTab === "search" && { color: MAROON.primary, fontWeight: "900" },
+              ]}
+            >
+              Client Directory ({customers.length})
+            </Text>
+            {isRefreshing && (
+              <ActivityIndicator size={12} color={MAROON.primary} />
+            )}
+          </View>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -376,6 +447,8 @@ export default function CustomerPickerModal({
               keyboardShouldPersistTaps="handled"
               contentContainerStyle={{ gap: 8, paddingBottom: 8 }}
               style={{ flex: 1 }}
+              refreshing={isRefreshing}
+              onRefresh={() => fetchCustomers(true)}
               renderItem={({ item }) => {
                 const isSelected = selectedCustomerId === item.id;
                 const initial = (item.name || "C").trim().charAt(0).toUpperCase();

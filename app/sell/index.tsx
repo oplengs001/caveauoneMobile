@@ -5,6 +5,7 @@ import VatBreakdownCard, { formatCurrency } from "@/components/VatBreakdownCard"
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { apiFetch } from "@/lib/api";
+import { prefetchCustomers, recordCustomerSaleInCache } from "@/lib/customerCache";
 import { Customer, InventoryBottle, MasterWine } from "@/types";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -137,6 +138,12 @@ export default function SellScreen() {
       }
     }
   }, [wineId, masterWines]);
+
+  useEffect(() => {
+    if (profile?.locationId) {
+      prefetchCustomers(profile.locationId).catch(() => {});
+    }
+  }, [profile?.locationId]);
 
   const filteredWines = useMemo(() => {
     let available = masterWines;
@@ -471,6 +478,9 @@ export default function SellScreen() {
       }
 
       await AsyncStorage.setItem("forceDashboardRefresh", "true");
+      if (selectedCustomer?.id) {
+        recordCustomerSaleInCache(selectedCustomer.id, totalAmount, profile?.locationId).catch(() => {});
+      }
       setStep("success");
     } catch (err) {
       console.error(err);

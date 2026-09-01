@@ -2,6 +2,7 @@ import CustomerPickerModal from "@/components/CustomerPickerModal";
 import { useAuth } from "@/context/AuthContext";
 import { apiFetch } from "@/lib/api";
 import { clearToken } from "@/lib/auth";
+import { prefetchCustomers, recordCustomerSaleInCache } from "@/lib/customerCache";
 import { AppUser, fetchStoreStaff } from "@/lib/queries/users";
 import { Customer } from "@/types";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -315,6 +316,10 @@ export default function StoreStaffPOSTerminal() {
           : Promise.resolve([]),
         apiFetch("/locations").catch(() => []),
       ]);
+
+      if (storeId) {
+        prefetchCustomers(storeId).catch(() => {});
+      }
 
       const locs: any[] = Array.isArray(locationsData)
         ? locationsData
@@ -950,6 +955,10 @@ export default function StoreStaffPOSTerminal() {
         customerName: selectedCustomer?.name || null,
         timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       });
+
+      if (selectedCustomer?.id) {
+        recordCustomerSaleInCache(selectedCustomer.id, totalAmount, storeId).catch(() => {});
+      }
 
       setSelectedCustomer(null);
       setCurrentOrder([]);
