@@ -15,6 +15,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
   RefreshControl,
   SafeAreaView,
   ScrollView,
@@ -700,7 +701,11 @@ export default function StaffDashboardScreen() {
 
                 <View style={[styles.portionCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
                   <View style={[styles.portionIconWrap, { backgroundColor: "#d9770615" }]}>
-                    <MaterialCommunityIcons name="cup-water" size={18} color="#d97706" />
+                    <Image
+                      source={require("@/assets/images/carafe.png")}
+                      style={{ width: 18, height: 18, tintColor: "#d97706" }}
+                      resizeMode="contain"
+                    />
                   </View>
                   <Text style={[styles.portionCount, { color: theme.text }]}>
                     {salesDashboardMetrics.portionCounts.carafe}

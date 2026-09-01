@@ -37,6 +37,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -2103,10 +2104,14 @@ export default function StoreStaffPOSTerminal() {
                     salesTypeMode === "carafe" && styles.portionSegmentIconBoxActive,
                   ]}
                 >
-                  <MaterialCommunityIcons
-                    name="cup-water"
-                    size={26}
-                    color={salesTypeMode === "carafe" ? "#ffffff" : MAROON.primary}
+                  <Image
+                    source={require("@/assets/images/carafe.png")}
+                    style={{
+                      width: 26,
+                      height: 26,
+                      tintColor: salesTypeMode === "carafe" ? "#ffffff" : MAROON.primary,
+                    }}
+                    resizeMode="contain"
                   />
                 </View>
                 <View style={{ flex: 1 }}>

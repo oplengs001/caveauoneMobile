@@ -36,6 +36,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -2161,10 +2162,10 @@ export default function StoreMasterListScreen() {
                         {/* Carafe */}
                         <View style={styles.pricingHalf}>
                           <View style={styles.pricingHalfHeader}>
-                            <MaterialCommunityIcons
-                              name="cup-water"
-                              size={14}
-                              color="#0284c7"
+                            <Image
+                              source={require("@/assets/images/carafe.png")}
+                              style={{ width: 14, height: 14, tintColor: "#0284c7" }}
+                              resizeMode="contain"
                             />
                             <Text style={[styles.pricingHalfLabel, { color: "#0284c7" }]}>
                               Carafe Price (2/6)
