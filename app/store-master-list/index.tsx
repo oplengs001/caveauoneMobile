@@ -1067,6 +1067,429 @@ export default function StoreMasterListScreen() {
     );
   };
 
+  // ─── MODAL RENDER HELPERS (REUSABLE IN PORTRAIT & LANDSCAPE) ──────────
+  const renderStockStrip = () => (
+    <View style={[styles.stockStrip, isLandscape && { marginBottom: 10, paddingVertical: 8 }]}>
+      <View style={styles.stockStripLeft}>
+        <Text style={[styles.stockStripNum, isLandscape && { fontSize: 24 }]}>
+          {selected?.stockCount !== undefined
+            ? selected.stockCount % 1 === 0
+              ? selected.stockCount
+              : selected.stockCount.toFixed(2)
+            : 0}
+        </Text>
+        <View>
+          <Text style={styles.stockStripLabel}>BOTTLES IN STORE</Text>
+          <Text style={styles.stockStripSub}>
+            {selected?.openGlassesCount && selected.openGlassesCount > 0
+              ? `${selected.fullBottlesCount} sealed · ${selected.openGlassesCount}/6 glass open`
+              : `${selected?.fullBottlesCount ?? 0} sealed bottles`}
+          </Text>
+        </View>
+      </View>
+      {selected && (
+        <View
+          style={[
+            styles.statusChip,
+            { backgroundColor: STATUS_CONFIG[selected.status].bg },
+          ]}
+        >
+          <View
+            style={[
+              styles.statusChipDot,
+              { backgroundColor: STATUS_CONFIG[selected.status].accent },
+            ]}
+          />
+          <Text
+            style={[
+              styles.statusChipText,
+              { color: STATUS_CONFIG[selected.status].color },
+            ]}
+          >
+            {STATUS_CONFIG[selected.status].label}
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+
+  const renderTargetsGrid = () => (
+    <View style={[styles.targetGrid, isLandscape && { marginBottom: 8 }]}>
+      {/* PAR Alert Tile */}
+      <View style={[styles.targetTile, styles.targetTileLeft, isLandscape && { padding: 10 }]}>
+        <View style={styles.targetTileHeader}>
+          <AlertTriangle size={13} color="#ea580c" />
+          <Text style={[styles.targetTileLabel, { color: "#ea580c" }]}>
+            PAR ALERT
+          </Text>
+        </View>
+        <Text style={styles.targetTileHint}>Reorder trigger level</Text>
+        <View style={[styles.stepperContainer, { marginTop: isLandscape ? 6 : 10 }]}>
+          <TouchableOpacity style={styles.stepperBtn} onPress={() => stepPar(-1)}>
+            <Minus size={15} color="#ea580c" />
+          </TouchableOpacity>
+          <TextInput
+            style={[styles.input, styles.inputStepper]}
+            value={sheetPar}
+            onChangeText={setSheetPar}
+            keyboardType="number-pad"
+            placeholder="0"
+            placeholderTextColor="#94a3b8"
+          />
+          <TouchableOpacity style={styles.stepperBtn} onPress={() => stepPar(1)}>
+            <Plus size={15} color="#ea580c" />
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Safety Target Tile */}
+      <View style={[styles.targetTile, styles.targetTileRight, isLandscape && { padding: 10 }]}>
+        <View style={styles.targetTileHeader}>
+          <ShieldCheck size={13} color={theme.primary} />
+          <Text style={[styles.targetTileLabel, { color: theme.primary }]}>
+            SAFETY TARGET
+          </Text>
+        </View>
+        <Text style={styles.targetTileHint}>Ideal replenishment level</Text>
+        <View style={[styles.stepperContainer, { marginTop: isLandscape ? 6 : 10 }]}>
+          <TouchableOpacity style={styles.stepperBtn} onPress={() => stepSafety(-1)}>
+            <Minus size={15} color={theme.primary} />
+          </TouchableOpacity>
+          <TextInput
+            style={[styles.input, styles.inputStepper]}
+            value={sheetSafety}
+            onChangeText={setSheetSafety}
+            keyboardType="number-pad"
+            placeholder="0"
+            placeholderTextColor="#94a3b8"
+          />
+          <TouchableOpacity style={styles.stepperBtn} onPress={() => stepSafety(1)}>
+            <Plus size={15} color={theme.primary} />
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
+  );
+
+  const renderStatusPill = () => {
+    const safetyNum = parseInt(sheetSafety, 10) || 0;
+    const parNum = parseInt(sheetPar, 10) || 0;
+    const stock = selected?.stockCount ?? 0;
+    const deficit = Math.ceil(Math.max(0, safetyNum - stock));
+    const valid = safetyNum >= parNum || (safetyNum === 0 && parNum === 0);
+    if (!sheetSafety && !sheetPar) return null;
+    return (
+      <View
+        style={[
+          styles.statusPill,
+          isLandscape && { paddingVertical: 6, marginBottom: 8 },
+          !valid
+            ? { backgroundColor: "#fef3c7", borderColor: "#fde68a" }
+            : deficit > 0
+              ? { backgroundColor: "#fef2f2", borderColor: "#fecaca" }
+              : { backgroundColor: "#f0fdf4", borderColor: "#bbf7d0" },
+        ]}
+      >
+        <Text
+          style={[
+            styles.statusPillText,
+            !valid
+              ? { color: "#92400e" }
+              : deficit > 0
+                ? { color: "#991b1b" }
+                : { color: "#166534" },
+          ]}
+        >
+          {!valid
+            ? "⚠️  Safety Target must be ≥ PAR level"
+            : deficit > 0
+              ? `↓ ${deficit} bottle${deficit !== 1 ? "s" : ""} deficit  ·  Target (${safetyNum}) − Stock (${stock % 1 === 0 ? stock : stock.toFixed(1)}) = ${deficit}`
+              : `✓ Healthy stock balance  ·  Target (${safetyNum}) met`}
+        </Text>
+      </View>
+    );
+  };
+
+  const renderServingMode = () => (
+    <View style={{ paddingVertical: isLandscape ? 8 : 12 }}>
+      <Text style={styles.fieldLabel}>SERVING MODE</Text>
+      <Text style={styles.fieldHint}>How this wine is sold at POS</Text>
+      <View style={[styles.servingToggle, { marginTop: isLandscape ? 6 : 10 }]}>
+        <TouchableOpacity
+          style={[
+            styles.servingToggleBtn,
+            !sheetAllowGlass && styles.servingToggleBtnActive,
+          ]}
+          onPress={() => {
+            setSheetAllowGlass(false);
+            setSheetAllowCarafe(false);
+            setSheetGlassPrice("");
+            setSheetCarafePrice("");
+          }}
+        >
+          <MaterialCommunityIcons
+            name="bottle-wine-outline"
+            size={14}
+            color={!sheetAllowGlass ? theme.primary : theme.textSecondary}
+          />
+          <Text
+            style={[
+              styles.servingToggleBtnText,
+              !sheetAllowGlass && styles.servingToggleBtnTextActive,
+            ]}
+          >
+            Bottle Only
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.servingToggleBtn,
+            sheetAllowGlass && styles.servingToggleBtnActive,
+          ]}
+          onPress={() => {
+            setSheetAllowGlass(true);
+            setSheetAllowCarafe(true);
+          }}
+        >
+          <MaterialCommunityIcons
+            name="glass-wine"
+            size={14}
+            color={sheetAllowGlass ? "#be185d" : theme.textSecondary}
+          />
+          <Text
+            style={[
+              styles.servingToggleBtnText,
+              sheetAllowGlass && {
+                color: "#be185d",
+                fontWeight: "800",
+              },
+            ]}
+          >
+            Glass & Carafe
+          </Text>
+        </TouchableOpacity>
+      </View>
+      {sheetAllowGlass && (
+        <Text style={[styles.fieldHint, { marginTop: 4, color: "#be185d" + "99" }]}>
+          Glass & carafe prices visible in pricing below
+        </Text>
+      )}
+    </View>
+  );
+
+  const renderCategorySelector = () => (
+    <View style={{ paddingVertical: isLandscape ? 8 : 12 }}>
+      <Text style={styles.fieldLabel}>WINE CATEGORY</Text>
+      <Text style={styles.fieldHint}>
+        Menu prominence and staff priority level
+      </Text>
+      <View style={styles.categorySelectorGrid}>
+        {[
+          { id: "none", label: "Standard", icon: null, color: theme.textSecondary },
+          { id: "fun", label: "Fun Wine", icon: Zap, color: "#d97706", bg: "#fef3c7" },
+          { id: "fine", label: "Fine Wine", icon: Star, color: "#be185d", bg: "#fce7f3" },
+          {
+            id: "reserve",
+            label: "Reserve Wine",
+            icon: Ghost,
+            color: "#4338ca",
+            bg: "#e0e7ff",
+          },
+        ].map((cat) => {
+          const isSelected = sheetWineCategory === cat.id;
+          const Icon = cat.icon;
+          return (
+            <TouchableOpacity
+              key={cat.id}
+              onPress={() => setSheetWineCategory(cat.id as any)}
+              style={[
+                styles.catSelectBtn,
+                {
+                  borderColor: isSelected ? cat.color : theme.border,
+                  backgroundColor: isSelected
+                    ? (cat as any).bg || theme.card
+                    : "transparent",
+                },
+              ]}
+            >
+              {Icon && (
+                <Icon
+                  size={14}
+                  color={isSelected ? cat.color : theme.textSecondary}
+                />
+              )}
+              <Text
+                style={{
+                  fontSize: 12,
+                  fontWeight: isSelected ? "800" : "500",
+                  color: isSelected ? cat.color : theme.textSecondary,
+                }}
+              >
+                {cat.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
+  );
+
+  const renderDiscontinuedRow = () => (
+    <View style={[styles.settingRow, isLandscape && { paddingVertical: 8 }]}>
+      <View style={styles.settingTextContainer}>
+        <Text style={styles.fieldLabel}>DISCONTINUED / INACTIVE</Text>
+        <Text style={styles.fieldHint}>
+          Stop reorder alerts and auto-replenishment requests.
+        </Text>
+      </View>
+      <Switch
+        value={sheetDiscontinued}
+        onValueChange={setSheetDiscontinued}
+        trackColor={{ false: "#e2e8f0", true: "#ef444460" }}
+        thumbColor={sheetDiscontinued ? "#ef4444" : "#94a3b8"}
+      />
+    </View>
+  );
+
+  const renderPricingCard = () => (
+    <View style={[styles.settingsCard, !isLandscape && { marginTop: 14 }]}>
+      <View style={{ flexDirection: "column", gap: isLandscape ? 8 : 12, paddingVertical: isLandscape ? 10 : 14 }}>
+        {/* Pricing Header + VAT toggle */}
+        <View
+          style={{
+            flexDirection: "row",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <View style={styles.settingTextContainer}>
+            <Text style={styles.fieldLabel}>RETAIL PRICING</Text>
+            <Text style={styles.fieldHint}>
+              Bottle{sheetAllowGlass ? ", glass (1/6) & carafe (2/6)" : " price"}
+            </Text>
+          </View>
+          <View style={styles.vatToggleContainer}>
+            <TouchableOpacity
+              onPress={() => setSheetVatMode("excluded")}
+              style={[
+                styles.vatPill,
+                sheetVatMode === "excluded" && styles.vatPillActive,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.vatPillText,
+                  sheetVatMode === "excluded" && styles.vatPillTextActive,
+                ]}
+              >
+                EX VAT
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setSheetVatMode("included")}
+              style={[
+                styles.vatPill,
+                sheetVatMode === "included" && styles.vatPillActive,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.vatPillText,
+                  sheetVatMode === "included" && styles.vatPillTextActive,
+                ]}
+              >
+                INC VAT
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Bottle Price — full row */}
+        <View style={styles.priceRow}>
+          <View style={styles.priceRowTitleGroup}>
+            <View style={styles.priceIconBadge}>
+              <MaterialCommunityIcons
+                name="bottle-wine-outline"
+                size={16}
+                color={theme.primary}
+              />
+            </View>
+            <View>
+              <Text style={styles.priceRowLabel}>Bottle Retail</Text>
+              <Text style={styles.priceRowSubLabel}>Full 75cl Bottle</Text>
+            </View>
+          </View>
+          <View style={styles.priceInputContainer}>
+            <Text style={styles.currencyPrefix}>₱</Text>
+            <TextInput
+              style={[styles.input, styles.inputPrice]}
+              value={sheetSellingPrice}
+              onChangeText={setSheetSellingPrice}
+              keyboardType="decimal-pad"
+              placeholder="0.00"
+              placeholderTextColor="#94a3b8"
+            />
+          </View>
+        </View>
+
+        {/* Glass & Carafe — side by side when active */}
+        {sheetAllowGlass && (
+          <View style={styles.pricingHalfRow}>
+            {/* Glass */}
+            <View style={styles.pricingHalf}>
+              <View style={styles.pricingHalfHeader}>
+                <MaterialCommunityIcons
+                  name="glass-wine"
+                  size={14}
+                  color="#be185d"
+                />
+                <Text style={[styles.pricingHalfLabel, { color: "#be185d" }]}>
+                  Glass Price (1/6)
+                </Text>
+              </View>
+              <View style={[styles.priceInputContainer, { width: "100%" }]}>
+                <Text style={styles.currencyPrefix}>₱</Text>
+                <TextInput
+                  style={[styles.input, styles.inputPrice, { flex: 1 }]}
+                  value={sheetGlassPrice}
+                  onChangeText={setSheetGlassPrice}
+                  keyboardType="decimal-pad"
+                  placeholder="0.00"
+                  placeholderTextColor="#94a3b8"
+                />
+              </View>
+            </View>
+
+            {/* Carafe */}
+            <View style={styles.pricingHalf}>
+              <View style={styles.pricingHalfHeader}>
+                <Image
+                  source={require("@/assets/images/carafe.png")}
+                  style={{ width: 14, height: 14, tintColor: "#0284c7" }}
+                  resizeMode="contain"
+                />
+                <Text style={[styles.pricingHalfLabel, { color: "#0284c7" }]}>
+                  Carafe Price (2/6)
+                </Text>
+              </View>
+              <View style={[styles.priceInputContainer, { width: "100%" }]}>
+                <Text style={styles.currencyPrefix}>₱</Text>
+                <TextInput
+                  style={[styles.input, styles.inputPrice, { flex: 1 }]}
+                  value={sheetCarafePrice}
+                  onChangeText={setSheetCarafePrice}
+                  keyboardType="decimal-pad"
+                  placeholder="0.00"
+                  placeholderTextColor="#94a3b8"
+                />
+              </View>
+            </View>
+          </View>
+        )}
+      </View>
+    </View>
+  );
+
   return (
     <SafeAreaView style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
@@ -1707,45 +2130,58 @@ export default function StoreMasterListScreen() {
           <View
             style={[
               styles.sheetOverlay,
-              isWide
-                ? { justifyContent: "center", alignItems: "center", padding: 24 }
-                : { justifyContent: "flex-end" },
+              isLandscape
+                ? { justifyContent: "center", alignItems: "center", padding: 12 }
+                : isWide
+                  ? { justifyContent: "center", alignItems: "center", padding: 24 }
+                  : { justifyContent: "flex-end" },
             ]}
           >
             <View
               style={[
                 styles.sheet,
-                isWide
+                isLandscape
                   ? {
-                    borderRadius: 24,
-                    maxWidth: 580,
+                    borderRadius: 20,
+                    maxWidth: Math.min(width - 24, 940),
                     width: "100%",
-                    maxHeight: "90%",
+                    maxHeight: isCompactHeight ? "98%" : "92%",
                     alignSelf: "center",
+                    paddingHorizontal: 18,
+                    paddingTop: 12,
+                    paddingBottom: 12,
                   }
-                  : {
-                    borderTopLeftRadius: 28,
-                    borderTopRightRadius: 28,
-                    maxWidth: 540,
-                    width: "100%",
-                    alignSelf: "center",
-                    maxHeight: "94%",
-                  },
+                  : isWide
+                    ? {
+                      borderRadius: 24,
+                      maxWidth: 580,
+                      width: "100%",
+                      maxHeight: "90%",
+                      alignSelf: "center",
+                    }
+                    : {
+                      borderTopLeftRadius: 28,
+                      borderTopRightRadius: 28,
+                      maxWidth: 540,
+                      width: "100%",
+                      alignSelf: "center",
+                      maxHeight: "94%",
+                    },
               ]}
             >
-              <View style={styles.sheetHandle} />
+              {!isLandscape && <View style={styles.sheetHandle} />}
 
               {/* ── COMPACT HEADER ── */}
-              <View style={styles.sheetHeader}>
+              <View style={[styles.sheetHeader, isLandscape && { marginBottom: 8 }]}>
                 <View style={{ flex: 1, paddingRight: 8 }}>
                   <View style={styles.modalHeaderEyebrow}>
                     <SlidersHorizontal size={11} color={theme.primary} strokeWidth={2.2} />
                     <Text style={styles.modalHeaderEyebrowText}>CELLAR INVENTORY SETTINGS</Text>
                   </View>
-                  <Text style={styles.sheetWineName} numberOfLines={2}>
+                  <Text style={[styles.sheetWineName, isLandscape && { fontSize: 16, marginBottom: 1 }]} numberOfLines={isLandscape ? 1 : 2}>
                     {selected?.masterWine.name}
                   </Text>
-                  <Text style={styles.sheetWineMeta}>
+                  <Text style={styles.sheetWineMeta} numberOfLines={1}>
                     {[
                       selected?.masterWine.vintage,
                       selected?.masterWine.producer,
@@ -1760,442 +2196,59 @@ export default function StoreMasterListScreen() {
                 </TouchableOpacity>
               </View>
 
-              {/* ── STOCK SNAPSHOT STRIP ── */}
-              <View style={styles.stockStrip}>
-                <View style={styles.stockStripLeft}>
-                  <Text style={styles.stockStripNum}>
-                    {selected?.stockCount !== undefined
-                      ? selected.stockCount % 1 === 0
-                        ? selected.stockCount
-                        : selected.stockCount.toFixed(2)
-                      : 0}
-                  </Text>
-                  <View>
-                    <Text style={styles.stockStripLabel}>BOTTLES IN STORE</Text>
-                    <Text style={styles.stockStripSub}>
-                      {selected?.openGlassesCount && selected.openGlassesCount > 0
-                        ? `${selected.fullBottlesCount} sealed · ${selected.openGlassesCount}/6 glass open`
-                        : `${selected?.fullBottlesCount ?? 0} sealed bottles`}
-                    </Text>
-                  </View>
-                </View>
-                {selected && (
-                  <View
-                    style={[
-                      styles.statusChip,
-                      { backgroundColor: STATUS_CONFIG[selected.status].bg },
-                    ]}
-                  >
-                    <View
-                      style={[
-                        styles.statusChipDot,
-                        { backgroundColor: STATUS_CONFIG[selected.status].accent },
-                      ]}
-                    />
-                    <Text
-                      style={[
-                        styles.statusChipText,
-                        { color: STATUS_CONFIG[selected.status].color },
-                      ]}
-                    >
-                      {STATUS_CONFIG[selected.status].label}
-                    </Text>
-                  </View>
-                )}
-              </View>
-
               <ScrollView
                 showsVerticalScrollIndicator={false}
                 style={{ flexGrow: 1 }}
+                contentContainerStyle={isLandscape ? { paddingBottom: 6 } : undefined}
                 keyboardShouldPersistTaps="handled"
               >
-                {/* ── INVENTORY TARGETS: 2-COLUMN GRID ── */}
-                <View style={styles.targetGrid}>
-                  {/* PAR Alert Tile */}
-                  <View style={[styles.targetTile, styles.targetTileLeft]}>
-                    <View style={styles.targetTileHeader}>
-                      <AlertTriangle size={13} color="#ea580c" />
-                      <Text style={[styles.targetTileLabel, { color: "#ea580c" }]}>
-                        PAR ALERT
-                      </Text>
-                    </View>
-                    <Text style={styles.targetTileHint}>Reorder trigger level</Text>
-                    <View style={[styles.stepperContainer, { marginTop: 10 }]}>
-                      <TouchableOpacity style={styles.stepperBtn} onPress={() => stepPar(-1)}>
-                        <Minus size={15} color="#ea580c" />
-                      </TouchableOpacity>
-                      <TextInput
-                        style={[styles.input, styles.inputStepper]}
-                        value={sheetPar}
-                        onChangeText={setSheetPar}
-                        keyboardType="number-pad"
-                        placeholder="0"
-                        placeholderTextColor="#94a3b8"
-                      />
-                      <TouchableOpacity style={styles.stepperBtn} onPress={() => stepPar(1)}>
-                        <Plus size={15} color="#ea580c" />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-
-                  {/* Safety Target Tile */}
-                  <View style={[styles.targetTile, styles.targetTileRight]}>
-                    <View style={styles.targetTileHeader}>
-                      <ShieldCheck size={13} color={theme.primary} />
-                      <Text style={[styles.targetTileLabel, { color: theme.primary }]}>
-                        SAFETY TARGET
-                      </Text>
-                    </View>
-                    <Text style={styles.targetTileHint}>Ideal replenishment level</Text>
-                    <View style={[styles.stepperContainer, { marginTop: 10 }]}>
-                      <TouchableOpacity style={styles.stepperBtn} onPress={() => stepSafety(-1)}>
-                        <Minus size={15} color={theme.primary} />
-                      </TouchableOpacity>
-                      <TextInput
-                        style={[styles.input, styles.inputStepper]}
-                        value={sheetSafety}
-                        onChangeText={setSheetSafety}
-                        keyboardType="number-pad"
-                        placeholder="0"
-                        placeholderTextColor="#94a3b8"
-                      />
-                      <TouchableOpacity style={styles.stepperBtn} onPress={() => stepSafety(1)}>
-                        <Plus size={15} color={theme.primary} />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                </View>
-
-                {/* ── INLINE DEFICIT / BALANCE STATUS PILL ── */}
-                {(() => {
-                  const safetyNum = parseInt(sheetSafety, 10) || 0;
-                  const parNum = parseInt(sheetPar, 10) || 0;
-                  const stock = selected?.stockCount ?? 0;
-                  const deficit = Math.ceil(Math.max(0, safetyNum - stock));
-                  const valid = safetyNum >= parNum || (safetyNum === 0 && parNum === 0);
-                  if (!sheetSafety && !sheetPar) return null;
-                  return (
-                    <View
-                      style={[
-                        styles.statusPill,
-                        !valid
-                          ? { backgroundColor: "#fef3c7", borderColor: "#fde68a" }
-                          : deficit > 0
-                            ? { backgroundColor: "#fef2f2", borderColor: "#fecaca" }
-                            : { backgroundColor: "#f0fdf4", borderColor: "#bbf7d0" },
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.statusPillText,
-                          !valid
-                            ? { color: "#92400e" }
-                            : deficit > 0
-                              ? { color: "#991b1b" }
-                              : { color: "#166534" },
-                        ]}
-                      >
-                        {!valid
-                          ? `⚠️  Safety Target must be ≥ PAR level`
-                          : deficit > 0
-                            ? `↓ ${deficit} bottle${deficit !== 1 ? "s" : ""} deficit  ·  Target (${safetyNum}) − Stock (${stock % 1 === 0 ? stock : stock.toFixed(1)}) = ${deficit}`
-                            : `✓ Healthy stock balance  ·  Target (${safetyNum}) met`}
-                      </Text>
-                    </View>
-                  );
-                })()}
-
-                {/* ── UNIFIED: SERVING MODE + CATEGORY + DISCONTINUED ── */}
-                <View style={[styles.settingsCard, { marginTop: 14 }]}>
-                  {/* Section A: Serving Mode */}
-                  <View style={{ paddingVertical: 12 }}>
-                    <Text style={styles.fieldLabel}>SERVING MODE</Text>
-                    <Text style={styles.fieldHint}>How this wine is sold at POS</Text>
-                    <View style={[styles.servingToggle, { marginTop: 10 }]}>
-                      <TouchableOpacity
-                        style={[
-                          styles.servingToggleBtn,
-                          !sheetAllowGlass && styles.servingToggleBtnActive,
-                        ]}
-                        onPress={() => {
-                          setSheetAllowGlass(false);
-                          setSheetAllowCarafe(false);
-                          setSheetGlassPrice("");
-                          setSheetCarafePrice("");
-                        }}
-                      >
-                        <MaterialCommunityIcons
-                          name="bottle-wine-outline"
-                          size={14}
-                          color={!sheetAllowGlass ? theme.primary : theme.textSecondary}
-                        />
-                        <Text
-                          style={[
-                            styles.servingToggleBtnText,
-                            !sheetAllowGlass && styles.servingToggleBtnTextActive,
-                          ]}
-                        >
-                          Bottle Only
-                        </Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[
-                          styles.servingToggleBtn,
-                          sheetAllowGlass && styles.servingToggleBtnActive,
-                        ]}
-                        onPress={() => {
-                          setSheetAllowGlass(true);
-                          setSheetAllowCarafe(true);
-                        }}
-                      >
-                        <MaterialCommunityIcons
-                          name="glass-wine"
-                          size={14}
-                          color={sheetAllowGlass ? "#be185d" : theme.textSecondary}
-                        />
-                        <Text
-                          style={[
-                            styles.servingToggleBtnText,
-                            sheetAllowGlass && {
-                              color: "#be185d",
-                              fontWeight: "800",
-                            },
-                          ]}
-                        >
-                          Glass & Carafe
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                    {sheetAllowGlass && (
-                      <Text style={[styles.fieldHint, { marginTop: 6, color: "#be185d" + "99" }]}>
-                        Glass & carafe prices visible in pricing below
-                      </Text>
-                    )}
-                  </View>
-
-                  <View style={styles.divider} />
-
-                  {/* Section B: Wine Category */}
-                  <View style={{ paddingVertical: 12 }}>
-                    <Text style={styles.fieldLabel}>WINE CATEGORY</Text>
-                    <Text style={styles.fieldHint}>
-                      Menu prominence and staff priority level
-                    </Text>
-                    <View style={styles.categorySelectorGrid}>
-                      {[
-                        { id: "none", label: "Standard", icon: null, color: theme.textSecondary },
-                        { id: "fun", label: "Fun Wine", icon: Zap, color: "#d97706", bg: "#fef3c7" },
-                        { id: "fine", label: "Fine Wine", icon: Star, color: "#be185d", bg: "#fce7f3" },
-                        {
-                          id: "reserve",
-                          label: "Reserve Wine",
-                          icon: Ghost,
-                          color: "#4338ca",
-                          bg: "#e0e7ff",
-                        },
-                      ].map((cat) => {
-                        const isSelected = sheetWineCategory === cat.id;
-                        const Icon = cat.icon;
-                        return (
-                          <TouchableOpacity
-                            key={cat.id}
-                            onPress={() => setSheetWineCategory(cat.id as any)}
-                            style={[
-                              styles.catSelectBtn,
-                              {
-                                borderColor: isSelected ? cat.color : theme.border,
-                                backgroundColor: isSelected
-                                  ? (cat as any).bg || theme.card
-                                  : "transparent",
-                              },
-                            ]}
-                          >
-                            {Icon && (
-                              <Icon
-                                size={14}
-                                color={isSelected ? cat.color : theme.textSecondary}
-                              />
-                            )}
-                            <Text
-                              style={{
-                                fontSize: 12,
-                                fontWeight: isSelected ? "800" : "500",
-                                color: isSelected ? cat.color : theme.textSecondary,
-                              }}
-                            >
-                              {cat.label}
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-                  </View>
-
-                  <View style={styles.divider} />
-
-                  {/* Section C: Discontinued */}
-                  <View style={styles.settingRow}>
-                    <View style={styles.settingTextContainer}>
-                      <Text style={styles.fieldLabel}>DISCONTINUED / INACTIVE</Text>
-                      <Text style={styles.fieldHint}>
-                        Stop reorder alerts and auto-replenishment requests.
-                      </Text>
-                    </View>
-                    <Switch
-                      value={sheetDiscontinued}
-                      onValueChange={setSheetDiscontinued}
-                      trackColor={{ false: "#e2e8f0", true: "#ef444460" }}
-                      thumbColor={sheetDiscontinued ? "#ef4444" : "#94a3b8"}
-                    />
-                  </View>
-                </View>
-
-                {/* ── RETAIL PRICING ── */}
-                <View style={[styles.settingsCard, { marginTop: 14 }]}>
-                  <View style={{ flexDirection: "column", gap: 12, paddingVertical: 14 }}>
-                    {/* Pricing Header + VAT toggle */}
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                      }}
-                    >
-                      <View style={styles.settingTextContainer}>
-                        <Text style={styles.fieldLabel}>RETAIL PRICING</Text>
-                        <Text style={styles.fieldHint}>
-                          Bottle{sheetAllowGlass ? ", glass (1/6) & carafe (2/6)" : " price"}
-                        </Text>
-                      </View>
-                      <View style={styles.vatToggleContainer}>
-                        <TouchableOpacity
-                          onPress={() => setSheetVatMode("excluded")}
-                          style={[
-                            styles.vatPill,
-                            sheetVatMode === "excluded" && styles.vatPillActive,
-                          ]}
-                        >
-                          <Text
-                            style={[
-                              styles.vatPillText,
-                              sheetVatMode === "excluded" && styles.vatPillTextActive,
-                            ]}
-                          >
-                            EX VAT
-                          </Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          onPress={() => setSheetVatMode("included")}
-                          style={[
-                            styles.vatPill,
-                            sheetVatMode === "included" && styles.vatPillActive,
-                          ]}
-                        >
-                          <Text
-                            style={[
-                              styles.vatPillText,
-                              sheetVatMode === "included" && styles.vatPillTextActive,
-                            ]}
-                          >
-                            INC VAT
-                          </Text>
-                        </TouchableOpacity>
+                {isLandscape ? (
+                  <View style={styles.landscapeColumnsRow}>
+                    {/* Left Column: Inventory Targets & Controls */}
+                    <View style={styles.landscapeCol}>
+                      {renderStockStrip()}
+                      {renderTargetsGrid()}
+                      {renderStatusPill()}
+                      <View style={styles.settingsCard}>
+                        {renderDiscontinuedRow()}
                       </View>
                     </View>
 
-                    {/* Bottle Price — full row */}
-                    <View style={styles.priceRow}>
-                      <View style={styles.priceRowTitleGroup}>
-                        <View style={styles.priceIconBadge}>
-                          <MaterialCommunityIcons
-                            name="bottle-wine-outline"
-                            size={16}
-                            color={theme.primary}
-                          />
-                        </View>
-                        <View>
-                          <Text style={styles.priceRowLabel}>Bottle Retail</Text>
-                          <Text style={styles.priceRowSubLabel}>Full 75cl Bottle</Text>
-                        </View>
+                    {/* Right Column: POS Serving Mode, Category & Pricing */}
+                    <View style={styles.landscapeCol}>
+                      <View style={styles.settingsCard}>
+                        {renderServingMode()}
+                        <View style={styles.divider} />
+                        {renderCategorySelector()}
                       </View>
-                      <View style={styles.priceInputContainer}>
-                        <Text style={styles.currencyPrefix}>₱</Text>
-                        <TextInput
-                          style={[styles.input, styles.inputPrice]}
-                          value={sheetSellingPrice}
-                          onChangeText={setSheetSellingPrice}
-                          keyboardType="decimal-pad"
-                          placeholder="0.00"
-                          placeholderTextColor="#94a3b8"
-                        />
+                      <View style={{ marginTop: 10 }}>
+                        {renderPricingCard()}
                       </View>
                     </View>
-
-                    {/* Glass & Carafe — side by side when active */}
-                    {sheetAllowGlass && (
-                      <View style={styles.pricingHalfRow}>
-                        {/* Glass */}
-                        <View style={styles.pricingHalf}>
-                          <View style={styles.pricingHalfHeader}>
-                            <MaterialCommunityIcons
-                              name="glass-wine"
-                              size={14}
-                              color="#be185d"
-                            />
-                            <Text style={[styles.pricingHalfLabel, { color: "#be185d" }]}>
-                              Glass Price (1/6)
-                            </Text>
-                          </View>
-                          <View style={[styles.priceInputContainer, { width: "100%" }]}>
-                            <Text style={styles.currencyPrefix}>₱</Text>
-                            <TextInput
-                              style={[styles.input, styles.inputPrice, { flex: 1 }]}
-                              value={sheetGlassPrice}
-                              onChangeText={setSheetGlassPrice}
-                              keyboardType="decimal-pad"
-                              placeholder="0.00"
-                              placeholderTextColor="#94a3b8"
-                            />
-                          </View>
-                        </View>
-
-                        {/* Carafe */}
-                        <View style={styles.pricingHalf}>
-                          <View style={styles.pricingHalfHeader}>
-                            <Image
-                              source={require("@/assets/images/carafe.png")}
-                              style={{ width: 14, height: 14, tintColor: "#0284c7" }}
-                              resizeMode="contain"
-                            />
-                            <Text style={[styles.pricingHalfLabel, { color: "#0284c7" }]}>
-                              Carafe Price (2/6)
-                            </Text>
-                          </View>
-                          <View style={[styles.priceInputContainer, { width: "100%" }]}>
-                            <Text style={styles.currencyPrefix}>₱</Text>
-                            <TextInput
-                              style={[styles.input, styles.inputPrice, { flex: 1 }]}
-                              value={sheetCarafePrice}
-                              onChangeText={setSheetCarafePrice}
-                              keyboardType="decimal-pad"
-                              placeholder="0.00"
-                              placeholderTextColor="#94a3b8"
-                            />
-                          </View>
-                        </View>
-                      </View>
-                    )}
                   </View>
-                </View>
-
-                <View style={{ height: 24 }} />
+                ) : (
+                  <>
+                    {renderStockStrip()}
+                    {renderTargetsGrid()}
+                    {renderStatusPill()}
+                    <View style={[styles.settingsCard, { marginTop: 14 }]}>
+                      {renderServingMode()}
+                      <View style={styles.divider} />
+                      {renderCategorySelector()}
+                      <View style={styles.divider} />
+                      {renderDiscontinuedRow()}
+                    </View>
+                    {renderPricingCard()}
+                  </>
+                )}
+                <View style={{ height: isLandscape ? 10 : 24 }} />
               </ScrollView>
 
               {/* ── PINNED BOTTOM ACTIONS ── */}
-              <View style={styles.sheetActionRow}>
+              <View style={[styles.sheetActionRow, isLandscape && styles.sheetActionRowLandscape]}>
                 {selected?.activeRequest ? (
                   <TouchableOpacity
-                    style={[styles.requestBtn, { flex: 1, marginTop: 0 }]}
+                    style={[styles.requestBtn, { flex: 1, marginTop: 0 }, isLandscape && styles.btnLandscape]}
                     onPress={() => {
                       closeSheet();
                       router.push(`/wine-requests/${selected.activeRequest!.id}`);
@@ -2203,13 +2256,13 @@ export default function StoreMasterListScreen() {
                   >
                     {selected.activeRequest.status === "outbound" ||
                       selected.activeRequest.status === "converted" ? (
-                      <Truck size={16} color={theme.primary} strokeWidth={2.5} />
+                      <Truck size={15} color={theme.primary} strokeWidth={2.5} />
                     ) : selected.activeRequest.status === "receiving" ? (
-                      <CheckCircle2 size={16} color={theme.primary} strokeWidth={2.5} />
+                      <CheckCircle2 size={15} color={theme.primary} strokeWidth={2.5} />
                     ) : (
-                      <Clock size={16} color={theme.primary} strokeWidth={2.5} />
+                      <Clock size={15} color={theme.primary} strokeWidth={2.5} />
                     )}
-                    <Text style={styles.requestBtnText}>VIEW ACTIVE REQUEST</Text>
+                    <Text style={[styles.requestBtnText, isLandscape && { fontSize: 12 }]}>VIEW ACTIVE REQUEST</Text>
                   </TouchableOpacity>
                 ) : (
                   selected &&
@@ -2219,6 +2272,7 @@ export default function StoreMasterListScreen() {
                       style={[
                         styles.requestBtn,
                         { flex: 1, marginTop: 0 },
+                        isLandscape && styles.btnLandscape,
                         requesting && styles.btnDisabled,
                       ]}
                       onPress={handleRequestStock}
@@ -2228,8 +2282,8 @@ export default function StoreMasterListScreen() {
                         <ActivityIndicator color={theme.primary} />
                       ) : (
                         <>
-                          <TrendingUp size={16} color={theme.primary} strokeWidth={2.5} />
-                          <Text style={styles.requestBtnText}>
+                          <TrendingUp size={15} color={theme.primary} strokeWidth={2.5} />
+                          <Text style={[styles.requestBtnText, isLandscape && { fontSize: 12 }]}>
                             REQUEST {selected.requestedQty} BOTTLES
                           </Text>
                         </>
@@ -2242,6 +2296,7 @@ export default function StoreMasterListScreen() {
                   style={[
                     styles.saveBtn,
                     { flex: 1, marginTop: 0 },
+                    isLandscape && styles.btnLandscape,
                     saving && styles.btnDisabled,
                   ]}
                   onPress={handleSaveSettings}
@@ -2250,7 +2305,7 @@ export default function StoreMasterListScreen() {
                   {saving ? (
                     <ActivityIndicator color="#fff" />
                   ) : (
-                    <Text style={styles.saveBtnText}>SAVE SETTINGS</Text>
+                    <Text style={[styles.saveBtnText, isLandscape && { fontSize: 12 }]}>SAVE SETTINGS</Text>
                   )}
                 </TouchableOpacity>
               </View>
@@ -2266,9 +2321,15 @@ export default function StoreMasterListScreen() {
         transparent
         onRequestClose={() => setIsBatchConfirmVisible(false)}
       >
-        <View style={styles.sheetOverlay}>
-          <View style={[styles.sheet, { maxHeight: "80%" }]}>
-            <View style={styles.sheetHandle} />
+        <View style={[styles.sheetOverlay, isLandscape && { justifyContent: "center", alignItems: "center", padding: 16 }]}>
+          <View
+            style={[
+              styles.sheet,
+              { maxHeight: isLandscape ? "90%" : "80%" },
+              isLandscape && { maxWidth: 680, width: "100%", borderRadius: 20, alignSelf: "center" },
+            ]}
+          >
+            {!isLandscape && <View style={styles.sheetHandle} />}
             <View style={styles.sheetHeader}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.sheetWineName}>Confirm Batch Replenishment</Text>
@@ -3793,6 +3854,23 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: theme.border,
     marginTop: 4,
+  },
+  sheetActionRowLandscape: {
+    paddingTop: 10,
+    paddingBottom: 10,
+    marginTop: 0,
+  },
+  btnLandscape: {
+    height: 42,
+    borderRadius: 12,
+  },
+  landscapeColumnsRow: {
+    flexDirection: "row",
+    gap: 14,
+    alignItems: "flex-start",
+  },
+  landscapeCol: {
+    flex: 1,
   },
 
   // ─── ATELIER LUXURY CONTROLS ─────────────────────────────────────────
