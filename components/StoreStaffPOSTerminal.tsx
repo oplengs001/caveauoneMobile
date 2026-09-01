@@ -537,6 +537,52 @@ export default function StoreStaffPOSTerminal() {
     });
   }, [wines, salesTypeMode, tierFilter, wineTypeFilter, searchQuery]);
 
+  // Group filtered wines by wine type in canonical sequence
+  const groupedWines = useMemo(() => {
+    const groupsMap = new Map<string, FastWineItem[]>();
+
+    filteredWines.forEach((wine) => {
+      const type = wine.wineType || "Red Wine";
+      if (!groupsMap.has(type)) {
+        groupsMap.set(type, []);
+      }
+      groupsMap.get(type)!.push(wine);
+    });
+
+    const canonicalOrder = ["Red Wine", "Sparkling", "White Wine", "Rosé", "Sweet Wine"];
+    const groups: { wineType: string; wines: FastWineItem[] }[] = [];
+
+    canonicalOrder.forEach((type) => {
+      if (groupsMap.has(type) && groupsMap.get(type)!.length > 0) {
+        groups.push({
+          wineType: type,
+          wines: groupsMap.get(type)!,
+        });
+        groupsMap.delete(type);
+      }
+    });
+
+    // Add any remaining custom types
+    groupsMap.forEach((groupWines, type) => {
+      if (groupWines.length > 0) {
+        groups.push({ wineType: type, wines: groupWines });
+      }
+    });
+
+    return groups;
+  }, [filteredWines]);
+
+  // Card size calculation for multi-column grid
+  const cardSize = useMemo(() => {
+    const cols = isTabletLandscape ? 3 : 2;
+    const catalogPad = 32; // 16px each side
+    const dockW = isTabletLandscape ? 68 : 0;
+    const panelW = isTabletLandscape ? (isSidebarCollapsed ? 52 : 360) : 0;
+    const cardGap = 10;
+    const totalGap = cardGap * (cols + 1);
+    return Math.floor((width - dockW - panelW - catalogPad - totalGap) / cols);
+  }, [width, isTabletLandscape, isSidebarCollapsed]);
+
   // Wine Category Tier Counts (Reflects active portion mode)
   const tierCounts = useMemo(() => {
     const counts: Record<string, number> = { all: 0, fun: 0, fine: 0 };
@@ -1918,10 +1964,9 @@ export default function StoreStaffPOSTerminal() {
             </View>
           ) : (
             <FlatList
-              data={filteredWines}
-              keyExtractor={(item) => item.id}
-              numColumns={isTabletLandscape ? 3 : 2}
-              key={isTabletLandscape ? "grid-3-landscape" : "grid-2-portrait"}
+              data={groupedWines}
+              keyExtractor={(group) => group.wineType}
+              key={isTabletLandscape ? "groups-3-landscape" : "groups-2-portrait"}
               contentContainerStyle={[
                 styles.cardsGridContent,
                 !isTabletLandscape && currentOrder.length > 0 && { paddingBottom: 110 },
@@ -1935,76 +1980,126 @@ export default function StoreStaffPOSTerminal() {
                   tintColor={MAROON.primary}
                 />
               }
-              renderItem={({ item }) => {
-                const typeTheme = getWineTypeTheme(item.wineType, item.name, item.rawType);
-
-                // Responsive card width calculation
-                const cols = isTabletLandscape ? 3 : 2;
-                const catalogPad = 32; // 16px each side
-                const dockW = isTabletLandscape ? 68 : 0;
-                const panelW = isTabletLandscape
-                  ? isSidebarCollapsed ? 52 : 360
-                  : 0;
-                const cardGap = 10;
-                const totalGap = cardGap * (cols + 1);
-                const cardSize = Math.floor((width - dockW - panelW - catalogPad - totalGap) / cols);
-
-                const vintagePrefix = item.vintage ? `${item.vintage} ` : "";
-                const fullWineTitle = `${vintagePrefix}${item.name}`;
-                const canAdd = canAddPortion(item, salesTypeMode, currentOrder);
-                const isOutOfStock = item.stockCount === 0;
+              renderItem={({ item: group }) => {
+                const groupTheme = getWineTypeTheme(group.wineType);
 
                 return (
-                  <TouchableOpacity
-                    onPress={() => handleSelectWineCard(item)}
-                    disabled={!canAdd}
-                    activeOpacity={0.85}
-                    style={[
-                      styles.oversizedCard,
-                      {
-                        width: cardSize,
-                        borderColor: canAdd ? typeTheme.color : "#e2e8f0",
-                        backgroundColor: canAdd ? typeTheme.bg : "#f8fafc",
-                        opacity: canAdd ? 1 : 0.45,
-                      },
-                    ]}
-                  >
-                    {/* Floating Bubbles on Sparkling Wine Tiles */}
-                    {canAdd && (item.wineType || "").toLowerCase().includes("sparkling") && (
-                      <View style={styles.sparklingBubbleContainer} pointerEvents="none">
-                        <View style={[styles.bubbleDot, styles.bubble1]} />
-                        <View style={[styles.bubbleDot, styles.bubble2]} />
-                        <View style={[styles.bubbleDot, styles.bubble3]} />
-                        <View style={[styles.bubbleDot, styles.bubble4]} />
-                      </View>
-                    )}
-
-                    {/* Out of Stock Overlay Badge */}
-                    {!canAdd && (
-                      <View style={styles.outOfStockBadge}>
-                        <Text style={styles.outOfStockBadgeText}>
-                          {isOutOfStock ? "OUT OF STOCK" : "MAX QUEUED"}
+                  <View style={styles.wineTypeSection}>
+                    {/* Section Header */}
+                    <View style={styles.sectionHeaderRow}>
+                      <View
+                        style={[
+                          styles.sectionHeaderBadge,
+                          {
+                            backgroundColor: groupTheme.bg,
+                            borderColor: groupTheme.color,
+                          },
+                        ]}
+                      >
+                        <View
+                          style={[
+                            styles.sectionHeaderDot,
+                            { backgroundColor: groupTheme.color },
+                          ]}
+                        />
+                        <Text
+                          style={[
+                            styles.sectionHeaderTitle,
+                            { color: groupTheme.accent },
+                          ]}
+                        >
+                          {group.wineType.toUpperCase()}
                         </Text>
+                        <View
+                          style={[
+                            styles.sectionHeaderCountBadge,
+                            { backgroundColor: groupTheme.color },
+                          ]}
+                        >
+                          <Text style={styles.sectionHeaderCountText}>
+                            {group.wines.length}
+                          </Text>
+                        </View>
                       </View>
-                    )}
-
-                    {/* Card Content: Producer in ALL CAPS, Vintage then Wine Name */}
-                    <View style={styles.cardInfo}>
-                      <Text style={[styles.cardProducer, !canAdd && { color: "#94a3b8" }]} numberOfLines={1}>
-                        {(item.producer || "Boutique Selection").toUpperCase()}
-                      </Text>
-                      <Text style={[styles.cardTitle, !canAdd && { color: "#94a3b8" }]} numberOfLines={3}>
-                        {fullWineTitle}
-                      </Text>
+                      <View
+                        style={[
+                          styles.sectionHeaderLine,
+                          { backgroundColor: groupTheme.color + "33" },
+                        ]}
+                      />
                     </View>
 
-                    {/* Fixed Lower Right Ghost Icon for Reserve Wine */}
-                    {item.wineCategory === "reserve" && (
-                      <View style={styles.cardReserveGhostBadge} pointerEvents="none">
-                        <MaterialCommunityIcons name="ghost" size={14} color="#4338ca" />
-                      </View>
-                    )}
-                  </TouchableOpacity>
+                    {/* Wine Cards Grid for this group */}
+                    <View style={styles.sectionCardsGrid}>
+                      {group.wines.map((item) => {
+                        const typeTheme = getWineTypeTheme(item.wineType, item.name, item.rawType);
+                        const vintagePrefix = item.vintage ? `${item.vintage} ` : "";
+                        const fullWineTitle = `${vintagePrefix}${item.name}`;
+                        const canAdd = canAddPortion(item, salesTypeMode, currentOrder);
+                        const isOutOfStock = item.stockCount === 0;
+
+                        return (
+                          <TouchableOpacity
+                            key={item.id}
+                            onPress={() => handleSelectWineCard(item)}
+                            disabled={!canAdd}
+                            activeOpacity={0.85}
+                            style={[
+                              styles.oversizedCard,
+                              {
+                                width: cardSize,
+                                borderColor: canAdd ? typeTheme.color : "#e2e8f0",
+                                backgroundColor: canAdd ? typeTheme.bg : "#f8fafc",
+                                opacity: canAdd ? 1 : 0.45,
+                              },
+                            ]}
+                          >
+                            {/* Floating Bubbles on Sparkling Wine Tiles */}
+                            {canAdd && (item.wineType || "").toLowerCase().includes("sparkling") && (
+                              <View style={styles.sparklingBubbleContainer} pointerEvents="none">
+                                <View style={[styles.bubbleDot, styles.bubble1]} />
+                                <View style={[styles.bubbleDot, styles.bubble2]} />
+                                <View style={[styles.bubbleDot, styles.bubble3]} />
+                                <View style={[styles.bubbleDot, styles.bubble4]} />
+                              </View>
+                            )}
+
+                            {/* Out of Stock Overlay Badge */}
+                            {!canAdd && (
+                              <View style={styles.outOfStockBadge}>
+                                <Text style={styles.outOfStockBadgeText}>
+                                  {isOutOfStock ? "OUT OF STOCK" : "MAX QUEUED"}
+                                </Text>
+                              </View>
+                            )}
+
+                            {/* Card Content: Producer in ALL CAPS, Vintage then Wine Name */}
+                            <View style={styles.cardInfo}>
+                              <Text
+                                style={[styles.cardProducer, !canAdd && { color: "#94a3b8" }]}
+                                numberOfLines={1}
+                              >
+                                {(item.producer || "Boutique Selection").toUpperCase()}
+                              </Text>
+                              <Text
+                                style={[styles.cardTitle, !canAdd && { color: "#94a3b8" }]}
+                                numberOfLines={3}
+                              >
+                                {fullWineTitle}
+                              </Text>
+                            </View>
+
+                            {/* Fixed Lower Right Ghost Icon for Reserve Wine */}
+                            {item.wineCategory === "reserve" && (
+                              <View style={styles.cardReserveGhostBadge} pointerEvents="none">
+                                <MaterialCommunityIcons name="ghost" size={14} color="#4338ca" />
+                              </View>
+                            )}
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
                 );
               }}
             />
@@ -3014,6 +3109,56 @@ const styles = StyleSheet.create({
   categoryPillBadgeText: {
     fontSize: 10,
     fontWeight: "900",
+  },
+
+  // Wine Type Group Sections
+  wineTypeSection: {
+    marginBottom: 16,
+  },
+  sectionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+    marginTop: 6,
+    gap: 8,
+  },
+  sectionHeaderBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    gap: 6,
+  },
+  sectionHeaderDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  sectionHeaderTitle: {
+    fontSize: 12,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+  },
+  sectionHeaderCountBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 8,
+  },
+  sectionHeaderCountText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#ffffff",
+  },
+  sectionHeaderLine: {
+    flex: 1,
+    height: 1.5,
+    borderRadius: 1,
+  },
+  sectionCardsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
   },
 
   // Oversized Cards Grid

@@ -167,8 +167,10 @@ export default function StoreMasterListScreen() {
   const { profile, loading: authLoading } = useAuth();
   const router = useRouter();
   const storeId = profile?.locationId ?? "";
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
+  const isLandscape = width > height;
   const isWide = width >= 600;
+  const isCompactHeight = height < 520;
 
   const [entries, setEntries] = useState<WineEntry[]>([]);
   const [loading, setLoading] = useState(true);
