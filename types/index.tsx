@@ -150,6 +150,8 @@ export interface DeliveryItem {
   ingressedQty: number;
   skippedQty?: number;
   bottleIds: string[];
+  confirmedAt?: any;
+  wineCategory?: string;
 }
 
 export interface Delivery {
@@ -160,6 +162,8 @@ export interface Delivery {
   status: "dispatched" | "receiving" | "ingress_complete" | "cancelled";
   items: DeliveryItem[];
   totalBottles: number;
+  confirmedAt?: any;
+  confirmedBy?: string;
   createdAt: any;
   updatedAt: any;
 }

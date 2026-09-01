@@ -2,11 +2,12 @@ import { Colors } from "@/constants/theme";
 import { apiFetch } from "@/lib/api";
 import { formatDate } from "@/lib/utils/format";
 import { InventoryBottle, Delivery } from "@/types";
+import { useAuth } from "@/context/AuthContext";
+import { logActivity } from "@/lib/utils/activityLogger";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import {
   ArrowLeft,
-  Ban,
   CheckCircle2,
   Clock,
   Package,
@@ -33,6 +34,7 @@ export default function DeliveryDetail() {
     openScanner?: string;
   }>();
   const router = useRouter();
+  const { profile } = useAuth();
 
   const [scanning, setScanning] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
@@ -147,19 +149,53 @@ export default function DeliveryDetail() {
       });
 
       const newItems = [...delivery.items];
+      const existingBottleIds = Array.isArray(item.bottleIds) ? item.bottleIds : [];
+      const updatedBottleIds = existingBottleIds.includes(data)
+        ? existingBottleIds
+        : [...existingBottleIds, data];
+
       newItems[itemIndex] = {
         ...item,
         ingressedQty: (item.ingressedQty || 0) + 1,
+        bottleIds: updatedBottleIds,
+        confirmedAt: new Date().toISOString(),
       };
       const allReceived = newItems.every((i) => (i.ingressedQty || 0) + (i.skippedQty || 0) >= i.qty);
       const newStatus = allReceived ? "ingress_complete" : "receiving";
 
+      const patchPayload: Record<string, any> = {
+        items: newItems,
+        status: newStatus,
+      };
+      if (allReceived) {
+        patchPayload.confirmedAt = new Date().toISOString();
+        patchPayload.confirmedBy = profile?.email || "Store Staff";
+      }
+
       await apiFetch(`/deliveries/${delivery.id}`, {
         method: "PATCH",
-        body: JSON.stringify({
-          items: newItems,
-          status: newStatus,
-        }),
+        body: JSON.stringify(patchPayload),
+      });
+
+      // Log the intake operation
+      logActivity({
+        action: newStatus === "ingress_complete" ? "DELIVERY_INGRESS_COMPLETE" : "DELIVERY_BOTTLE_RECEIVED",
+        entity: "deliveries",
+        entityId: delivery.id,
+        summary: `Received bottle ${data} (${item.wineName}) for delivery ${delivery.id}${
+          newStatus === "ingress_complete" ? " — all items received" : ""
+        }`,
+        details: {
+          bottleId: data,
+          wineName: item.wineName,
+          ingressedQty: (item.ingressedQty || 0) + 1,
+          targetQty: item.qty,
+          deliveryStatus: newStatus,
+          storeId: delivery.storeId,
+        },
+        performedBy: profile?.email || "unknown",
+        performedByRole: profile?.role || "store",
+        source: (profile?.role as any) || "store",
       });
 
       const scannedBottleId = data;
@@ -276,16 +312,41 @@ export default function DeliveryDetail() {
       newItems[itemIndex] = {
         ...item,
         ingressedQty: currentIngressed + receiveToAdd,
+        confirmedAt: new Date().toISOString(),
       };
       const allReceived = newItems.every((i) => (i.ingressedQty || 0) >= i.qty);
       const newStatus = allReceived ? "ingress_complete" : "receiving";
 
+      const patchPayload: Record<string, any> = {
+        items: newItems,
+        status: newStatus,
+      };
+      if (allReceived) {
+        patchPayload.confirmedAt = new Date().toISOString();
+        patchPayload.confirmedBy = profile?.email || "Store Staff";
+      }
+
       await apiFetch(`/deliveries/${delivery.id}`, {
         method: "PATCH",
-        body: JSON.stringify({
-          items: newItems,
-          status: newStatus,
-        }),
+        body: JSON.stringify(patchPayload),
+      });
+
+      logActivity({
+        action: newStatus === "ingress_complete" ? "DELIVERY_INGRESS_COMPLETE" : "DELIVERY_MANUAL_RECEIVE",
+        entity: "deliveries",
+        entityId: delivery.id,
+        summary: `Manually received ${receiveToAdd} unit(s) of ${item.wineName} for delivery ${delivery.id}`,
+        details: {
+          wineName: item.wineName,
+          ingressedQty: currentIngressed + receiveToAdd,
+          targetQty: item.qty,
+          deliveryStatus: newStatus,
+          storeId: delivery.storeId,
+          manual: true,
+        },
+        performedBy: profile?.email || "unknown",
+        performedByRole: profile?.role || "store",
+        source: (profile?.role as any) || "store",
       });
 
       Alert.alert(
