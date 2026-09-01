@@ -285,6 +285,30 @@ export default function StoreStaffPOSTerminal() {
     { wineName: string; stockCount: number; requestedQty: number }[]
   >([]);
 
+  // Auto-close countdown timer for sales confirmation modal (5 seconds)
+  const [successCountdown, setSuccessCountdown] = useState(5);
+
+  useEffect(() => {
+    if (!successData) {
+      setSuccessCountdown(5);
+      return;
+    }
+
+    setSuccessCountdown(5);
+    const timer = setInterval(() => {
+      setSuccessCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          setSuccessData(null);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [successData]);
+
   // Load staff, store name & inventory data
   const loadData = useCallback(async () => {
     try {
@@ -1983,6 +2007,13 @@ export default function StoreStaffPOSTerminal() {
               {successData?.itemsCount} item(s) dispensed and inventory deducted.
             </Text>
 
+            <View style={styles.successAutoCloseBadge}>
+              <MaterialCommunityIcons name="timer-outline" size={13} color="#059669" />
+              <Text style={styles.successAutoCloseText}>
+                Auto-closing in {successCountdown}s
+              </Text>
+            </View>
+
             <View style={styles.successSummary}>
               <View style={styles.successRow}>
                 <Text style={styles.successLabel}>Total Amount:</Text>
@@ -2027,7 +2058,7 @@ export default function StoreStaffPOSTerminal() {
               style={styles.successBtn}
               activeOpacity={0.85}
             >
-              <Text style={styles.successBtnText}>Done / Next Service</Text>
+              <Text style={styles.successBtnText}>Done / Next Service ({successCountdown}s)</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -3592,6 +3623,23 @@ const styles = StyleSheet.create({
     color: "#71717a",
     textAlign: "center",
     marginTop: 4,
+  },
+  successAutoCloseBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "#ecfdf5",
+    borderColor: "#a7f3d0",
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+    marginTop: 8,
+  },
+  successAutoCloseText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#059669",
   },
   successSummary: {
     width: "100%",
