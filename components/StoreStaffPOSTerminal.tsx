@@ -69,6 +69,7 @@ export interface FunWineItem {
   producer?: string;
   format?: string;
   sku?: string;
+  rawType?: string | null;
   wineType?: string;
   price?: number;
   sellingPrice?: number | null;
@@ -102,12 +103,25 @@ export interface OrderItem {
   selectedLocationName?: string;
 }
 
-const normalizeWineType = (rawType?: string | null): string => {
-  if (!rawType) return "Red Wine";
-  const t = rawType.toLowerCase();
-  if (t.includes("sparkling") || t.includes("champagne") || t.includes("prosecco") || t.includes("cava")) {
+const normalizeWineType = (rawType?: string | null, wineName?: string | null): string => {
+  const t = (rawType || "").toLowerCase();
+  const n = (wineName || "").toLowerCase();
+
+  // If type OR name indicates sparkling / champagne / prosecco / cava:
+  // e.g. Sparkling Red, Sparkling White, Sparkling Rosé are ALL grouped under "Sparkling"
+  if (
+    t.includes("sparkling") ||
+    t.includes("champagne") ||
+    t.includes("prosecco") ||
+    t.includes("cava") ||
+    n.includes("sparkling") ||
+    n.includes("champagne") ||
+    n.includes("prosecco") ||
+    n.includes("cava")
+  ) {
     return "Sparkling";
   }
+
   if (t.includes("white")) {
     return "White Wine";
   }
@@ -120,7 +134,7 @@ const normalizeWineType = (rawType?: string | null): string => {
   if (t.includes("red")) {
     return "Red Wine";
   }
-  return rawType;
+  return rawType || "Red Wine";
 };
 
 // Maroon color palette constants
@@ -401,7 +415,8 @@ export default function StoreStaffPOSTerminal() {
             producer: mw.producer,
             format: mw.format,
             sku: mw.sku,
-            wineType: normalizeWineType(mw.type),
+            rawType: mw.type,
+            wineType: normalizeWineType(mw.type, mw.name),
             price: mw.price,
             sellingPrice: setting?.sellingPrice ?? null,
             glassPrice: setting?.glassPrice ?? null,
@@ -464,7 +479,8 @@ export default function StoreStaffPOSTerminal() {
           (w.producer && w.producer.toLowerCase().includes(q)) ||
           (w.vintage && w.vintage.toLowerCase().includes(q)) ||
           (w.sku && w.sku.toLowerCase().includes(q)) ||
-          (w.wineType && w.wineType.toLowerCase().includes(q))
+          (w.wineType && w.wineType.toLowerCase().includes(q)) ||
+          (w.rawType && w.rawType.toLowerCase().includes(q))
       );
     }
 
@@ -969,20 +985,55 @@ export default function StoreStaffPOSTerminal() {
   };
 
   // Sommelier Wine Type Color Theme helper (White = Yellow, Sweet = Orange, Red = Crimson, Rose = Pink)
-  const getWineTypeTheme = (wineType?: string) => {
+  const getWineTypeTheme = (wineType?: string, wineName?: string, rawType?: string | null) => {
     const t = (wineType || "").toLowerCase();
-    const isSparkling = t.includes("sparkling") || t.includes("champagne") || t.includes("prosecco") || t.includes("cava");
-    const isRose = t.includes("ros");
-    const isSweet = t.includes("sweet") || t.includes("dessert");
-    const isWhite = t.includes("white");
+    const n = (wineName || "").toLowerCase();
+    const raw = (rawType || "").toLowerCase();
+    const combined = `${t} ${n} ${raw}`;
 
-    // 1. Rosé (including Sparkling Rosé) -> Pink
+    const isSparkling =
+      combined.includes("sparkling") ||
+      combined.includes("champagne") ||
+      combined.includes("prosecco") ||
+      combined.includes("cava");
+    const isRose = combined.includes("rose") || combined.includes("rosé");
+    const isSweet = combined.includes("sweet") || combined.includes("dessert");
+    const isRed = combined.includes("red");
+    const isWhite = combined.includes("white");
+
+    // If Sparkling (Sparkling Rosé -> Pink, Sparkling Red -> Red, Sparkling White -> Yellow)
+    if (isSparkling) {
+      if (isRose) {
+        return {
+          bg: "#fce7f3",
+          accent: "#9d174d",
+          color: "#ec4899",
+          tag: "SPARKLING ROSÉ",
+        };
+      }
+      if (isRed) {
+        return {
+          bg: "#fee2e2",
+          accent: "#991b1b",
+          color: "#dc2626",
+          tag: "SPARKLING RED",
+        };
+      }
+      return {
+        bg: "#fef9c3",
+        accent: "#854d0e",
+        color: "#eab308",
+        tag: "SPARKLING",
+      };
+    }
+
+    // 1. Rosé -> Pink
     if (isRose) {
       return {
         bg: "#fce7f3",
         accent: "#9d174d",
         color: "#ec4899",
-        tag: isSparkling ? "SPARKLING ROSÉ" : "ROSÉ",
+        tag: "ROSÉ",
       };
     }
     // 2. Sweet / Dessert -> Orange
@@ -994,13 +1045,13 @@ export default function StoreStaffPOSTerminal() {
         tag: "SWEET",
       };
     }
-    // 3. White / Sparkling White -> Yellow
-    if (isWhite || isSparkling) {
+    // 3. White -> Yellow
+    if (isWhite) {
       return {
         bg: "#fef9c3",
         accent: "#854d0e",
         color: "#eab308",
-        tag: isSparkling ? "SPARKLING" : "WHITE",
+        tag: "WHITE",
       };
     }
     // 4. Default / Red -> Crimson Red
@@ -1124,7 +1175,7 @@ export default function StoreStaffPOSTerminal() {
         ) : (
           <View style={{ gap: 10, paddingVertical: 6 }}>
             {currentOrder.map((item, idx) => {
-              const typeTheme = getWineTypeTheme(item.wine.wineType);
+              const typeTheme = getWineTypeTheme(item.wine.wineType, item.wine.name, item.wine.rawType);
               const portionTag =
                 item.portion === "glass"
                   ? "1 Glass (1/6 btl)"
@@ -1443,7 +1494,7 @@ export default function StoreStaffPOSTerminal() {
                       salesTypeMode === "glass" && styles.portionSegmentTitleActive,
                     ]}
                   >
-                    By the Glass
+                    Glass
                   </Text>
                   <Text
                     style={[
@@ -1628,12 +1679,12 @@ export default function StoreStaffPOSTerminal() {
           {/* ── WINE TYPE CATEGORY PILLS (Full Width) ──────────────────────── */}
           <View style={styles.wineTypeFilterContainer}>
             {([
-              { key: "all", label: "All", activeBg: MAROON.primary, activeText: "#ffffff", activeBorder: MAROON.primary },
-              { key: "Red Wine", label: "Red", activeBg: "#dc2626", activeText: "#ffffff", activeBorder: "#b91c1c" },
-              { key: "White Wine", label: "White", activeBg: "#eab308", activeText: "#ffffff", activeBorder: "#ca8a04" },
-              { key: "Sparkling", label: "Sparkling", activeBg: "#ca8a04", activeText: "#ffffff", activeBorder: "#a16207" },
-              { key: "Rosé", label: "Rosé", activeBg: "#ec4899", activeText: "#ffffff", activeBorder: "#db2777" },
-              { key: "Sweet Wine", label: "Sweet", activeBg: "#ea580c", activeText: "#ffffff", activeBorder: "#c2410c" },
+              { key: "all", label: "All", color: "#18181b", defaultBg: "#f4f4f5", activeBg: "#18181b", activeText: "#ffffff" },
+              { key: "Red Wine", label: "Red", color: "#dc2626", defaultBg: "#fee2e2", activeBg: "#dc2626", activeText: "#ffffff" },
+              { key: "Sparkling", label: "Sparkling", color: "#ca8a04", defaultBg: "#fef9c3", activeBg: "#ca8a04", activeText: "#ffffff" },
+              { key: "White Wine", label: "White", color: "#eab308", defaultBg: "#fef9c3", activeBg: "#eab308", activeText: "#18181b" },
+              { key: "Rosé", label: "Rosé", color: "#ec4899", defaultBg: "#fce7f3", activeBg: "#ec4899", activeText: "#ffffff" },
+              { key: "Sweet Wine", label: "Sweet", color: "#ea580c", defaultBg: "#ffedd5", activeBg: "#ea580c", activeText: "#ffffff" },
             ] as const).map((pill) => {
               const count = wineTypeCounts[pill.key] ?? 0;
               if (pill.key !== "all" && count === 0) return null;
@@ -1644,16 +1695,19 @@ export default function StoreStaffPOSTerminal() {
                   onPress={() => setWineTypeFilter(pill.key)}
                   style={[
                     styles.categoryPill,
-                    isActive
-                      ? { backgroundColor: pill.activeBg, borderColor: pill.activeBorder }
-                      : styles.categoryPillInactive,
+                    {
+                      borderColor: pill.color,
+                      borderWidth: 2,
+                      backgroundColor: isActive ? pill.activeBg : pill.defaultBg,
+                    },
                   ]}
                   activeOpacity={0.8}
                 >
                   <Text
                     style={[
                       styles.categoryPillText,
-                      isActive ? { color: pill.activeText, fontWeight: "900" } : {},
+                      { color: isActive ? pill.activeText : "#18181b" },
+                      isActive && { fontWeight: "900" },
                     ]}
                     numberOfLines={1}
                   >
@@ -1686,7 +1740,7 @@ export default function StoreStaffPOSTerminal() {
                 {searchQuery
                   ? `No wines matching "${searchQuery}"`
                   : salesTypeMode === "glass"
-                    ? "No wines configured for By the Glass serving in this store."
+                    ? "No wines configured for Glass serving in this store."
                     : salesTypeMode === "carafe"
                       ? "No wines configured for Carafe serving in this store."
                       : "No inventory available in this category."}
@@ -1712,7 +1766,7 @@ export default function StoreStaffPOSTerminal() {
                 />
               }
               renderItem={({ item }) => {
-                const typeTheme = getWineTypeTheme(item.wineType);
+                const typeTheme = getWineTypeTheme(item.wineType, item.name, item.rawType);
 
                 // Responsive card width calculation
                 const cols = isTabletLandscape ? 3 : 2;
@@ -2046,7 +2100,7 @@ export default function StoreStaffPOSTerminal() {
 
                 {/* Selected Wine Snapshot */}
                 {locationModalWine && (() => {
-                  const typeTheme = getWineTypeTheme(locationModalWine.wineType);
+                  const typeTheme = getWineTypeTheme(locationModalWine.wineType, locationModalWine.name, locationModalWine.rawType);
                   const unitPrice = getItemUnitPrice(locationModalWine, locationModalPortion);
 
                   return (

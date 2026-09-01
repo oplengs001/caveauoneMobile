@@ -572,7 +572,17 @@ export default function InventoryScreen() {
 
     if (filterType) {
       filteredBottles = filteredBottles.filter((b) => {
-        const raw = b.masterWineData?.type;
+        const raw = b.masterWineData?.type || "";
+        const name = b.masterWineData?.name || "";
+        if (filterType.toLowerCase().includes("sparkling")) {
+          const combined = `${raw} ${name}`.toLowerCase();
+          return (
+            combined.includes("sparkling") ||
+            combined.includes("champagne") ||
+            combined.includes("prosecco") ||
+            combined.includes("cava")
+          );
+        }
         const normalized = raw === "Dessert" ? "Sweet Wine" : raw;
         return normalized === filterType;
       });
@@ -894,10 +904,10 @@ export default function InventoryScreen() {
               {[
                 null,
                 "Red Wine",
-                "White wine",
-                "Sweet Wine",
                 "Sparkling wine",
+                "White wine",
                 "Rose wine",
+                "Sweet Wine",
               ].map((type) => {
                 const badge = type ? getWineTypeBadge(type) : null;
                 return (
