@@ -12,8 +12,10 @@ import {
   AlertCircle,
   Check,
   CheckCircle2,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   Droplets,
   LogOut,
   Minus,
@@ -243,6 +245,9 @@ export default function StoreStaffPOSTerminal() {
   const [storeName, setStoreName] = useState<string>("Boutique Store");
   const [staffList, setStaffList] = useState<AppUser[]>([]);
   const [selectedStaff, setSelectedStaff] = useState<AppUser | null>(null);
+  const [isStaffAccordionOpen, setIsStaffAccordionOpen] = useState(false);
+  const [staffSearchQuery, setStaffSearchQuery] = useState("");
+  const [recentStaffIds, setRecentStaffIds] = useState<string[]>([]);
   const [wines, setWines] = useState<FastWineItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -498,6 +503,41 @@ export default function StoreStaffPOSTerminal() {
     setRefreshing(true);
     await loadData();
   };
+
+  // Staff Selection Handlers & Filtered Lists (Inline Accordion)
+  const handleSelectStaff = (st: AppUser) => {
+    setSelectedStaff(st);
+    setRecentStaffIds((prev) => {
+      const filtered = prev.filter((id) => id !== st.id);
+      return [st.id, ...filtered].slice(0, 5);
+    });
+    setIsStaffAccordionOpen(false);
+    setStaffSearchQuery("");
+  };
+
+  const filteredStaffList = useMemo(() => {
+    let list = staffList;
+    if (staffSearchQuery.trim()) {
+      const q = staffSearchQuery.toLowerCase();
+      list = staffList.filter(
+        (s) =>
+          (s.displayName && s.displayName.toLowerCase().includes(q)) ||
+          (s.email && s.email.toLowerCase().includes(q)) ||
+          (s.role && s.role.toLowerCase().includes(q))
+      );
+    }
+    return [...list].sort((a, b) => {
+      if (a.id === selectedStaff?.id) return -1;
+      if (b.id === selectedStaff?.id) return 1;
+      const isRecentA = recentStaffIds.includes(a.id);
+      const isRecentB = recentStaffIds.includes(b.id);
+      if (isRecentA && !isRecentB) return -1;
+      if (isRecentB && !isRecentA) return 1;
+      const nameA = a.displayName || a.email || "";
+      const nameB = b.displayName || b.email || "";
+      return nameA.localeCompare(nameB);
+    });
+  }, [staffList, staffSearchQuery, selectedStaff, recentStaffIds]);
 
   // Filtered wines (Filtered by active portion: By the Glass, Carafe, or Full Bottle)
   const filteredWines = useMemo(() => {
@@ -1324,58 +1364,168 @@ export default function StoreStaffPOSTerminal() {
         )}
       </View>
 
-      {/* Staff Selector - Display All Pill Buttons (Non-scrollable) */}
+      {/* Staff Selector - Inline Accordion with Active Server Status */}
       <View style={styles.staffSection}>
         <Text style={styles.staffSectionLabel}>SERVED BY</Text>
-        <View style={styles.staffPillsWrap}>
-          {(staffList.length > 0 ? staffList : selectedStaff ? [selectedStaff] : []).map((st) => {
-            const isSelected = selectedStaff?.id === st.id;
-            const name = st.displayName || st.email?.split("@")[0] || "Staff";
-            const initial = name[0].toUpperCase();
 
-            return (
-              <TouchableOpacity
-                key={st.id}
-                onPress={() => setSelectedStaff(st)}
-                style={[
-                  styles.staffPillBtn,
-                  isSelected ? styles.staffPillBtnActive : styles.staffPillBtnInactive,
-                ]}
-                activeOpacity={0.8}
-              >
-                <View
-                  style={[
-                    styles.staffPillAvatar,
-                    isSelected ? styles.staffPillAvatarActive : styles.staffPillAvatarInactive,
-                  ]}
+        {/* Accordion Header (Active Server Card - Always Visible) */}
+        <TouchableOpacity
+          onPress={() => {
+            setIsStaffAccordionOpen((prev) => !prev);
+          }}
+          style={[
+            styles.staffAccordionHeader,
+            isStaffAccordionOpen && styles.staffAccordionHeaderOpen,
+          ]}
+          activeOpacity={0.8}
+        >
+          <View style={styles.staffHeaderLeft}>
+            <View style={styles.staffHeaderAvatar}>
+              <Text style={styles.staffHeaderAvatarText}>
+                {(selectedStaff?.displayName || selectedStaff?.email || "S")[0].toUpperCase()}
+              </Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                <Text style={styles.staffHeaderName} numberOfLines={1}>
+                  {selectedStaff?.displayName || selectedStaff?.email?.split("@")[0] || "Staff Member"}
+                </Text>
+                <View style={styles.activeServerPill}>
+                  <View style={styles.activeServerDot} />
+                  <Text style={styles.activeServerPillText}>Active</Text>
+                </View>
+              </View>
+              <Text style={styles.staffHeaderRole} numberOfLines={1}>
+                {selectedStaff?.role === "store_manager"
+                  ? "Store Manager"
+                  : selectedStaff?.role === "admin"
+                    ? "Admin"
+                    : "Store Staff"} · {isStaffAccordionOpen ? "Tap to close" : "Tap to switch server"}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.staffAccordionChevron}>
+            {isStaffAccordionOpen ? (
+              <ChevronUp size={18} color={MAROON.primary} strokeWidth={2.5} />
+            ) : (
+              <ChevronDown size={18} color={MAROON.primary} strokeWidth={2.5} />
+            )}
+          </View>
+        </TouchableOpacity>
+
+        {/* Accordion Expanded Body */}
+        {isStaffAccordionOpen && (
+          <View style={styles.staffAccordionBody}>
+            {/* Search Input - Always Retained */}
+            <View style={styles.staffAccordionSearchBox}>
+              <Search size={14} color="#94a3b8" />
+              <TextInput
+                style={styles.staffAccordionSearchInput}
+                placeholder="Search staff by name or email..."
+                placeholderTextColor="#94a3b8"
+                value={staffSearchQuery}
+                onChangeText={setStaffSearchQuery}
+                clearButtonMode="while-editing"
+                autoCorrect={false}
+                autoCapitalize="none"
+              />
+              {staffSearchQuery.length > 0 && (
+                <TouchableOpacity
+                  onPress={() => setStaffSearchQuery("")}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
-                  <Text
-                    style={[
-                      styles.staffPillAvatarText,
-                      isSelected ? styles.staffPillAvatarTextActive : styles.staffPillAvatarTextInactive,
-                    ]}
-                  >
-                    {initial}
+                  <X size={13} color="#94a3b8" />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Scrollable Staff List */}
+            <ScrollView
+              style={styles.staffAccordionScroll}
+              showsVerticalScrollIndicator={true}
+              nestedScrollEnabled={true}
+              keyboardShouldPersistTaps="handled"
+            >
+              {filteredStaffList.length === 0 ? (
+                <View style={styles.staffAccordionEmpty}>
+                  <Text style={styles.staffAccordionEmptyText}>
+                    {`No staff matching "${staffSearchQuery}"`}
                   </Text>
                 </View>
-                <Text
-                  style={[
-                    styles.staffPillText,
-                    isSelected ? styles.staffPillTextActive : styles.staffPillTextInactive,
-                  ]}
-                  numberOfLines={1}
-                >
-                  {name}
-                </Text>
-                {isSelected && (
-                  <View style={styles.staffPillCheckCircle}>
-                    <Check size={11} color={MAROON.primary} strokeWidth={3.5} />
-                  </View>
-                )}
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+              ) : (
+                <View style={styles.staffAccordionListWrap}>
+                  {filteredStaffList.map((st) => {
+                    const isSelected = selectedStaff?.id === st.id;
+                    const name = st.displayName || st.email?.split("@")[0] || "Staff";
+                    const initial = name[0].toUpperCase();
+                    const isRecent = recentStaffIds.includes(st.id);
+
+                    return (
+                      <TouchableOpacity
+                        key={st.id}
+                        onPress={() => {
+                          handleSelectStaff(st);
+                          setIsStaffAccordionOpen(false);
+                          setStaffSearchQuery("");
+                        }}
+                        style={[
+                          styles.staffAccordionItem,
+                          isSelected && styles.staffAccordionItemSelected,
+                        ]}
+                        activeOpacity={0.75}
+                      >
+                        <View
+                          style={[
+                            styles.staffItemAvatar,
+                            isSelected ? styles.staffItemAvatarSelected : styles.staffItemAvatarDefault,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.staffItemAvatarText,
+                              isSelected ? styles.staffItemAvatarTextSelected : styles.staffItemAvatarTextDefault,
+                            ]}
+                          >
+                            {initial}
+                          </Text>
+                        </View>
+
+                        <View style={{ flex: 1, paddingHorizontal: 8 }}>
+                          <Text
+                            style={[
+                              styles.staffItemName,
+                              isSelected && styles.staffItemNameSelected,
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {name}
+                          </Text>
+                          <Text style={styles.staffItemRole} numberOfLines={1}>
+                            {st.role === "store_manager"
+                              ? "Store Manager"
+                              : st.role === "admin"
+                                ? "Admin"
+                                : "Store Staff"}
+                            {isRecent && !isSelected ? " · On Shift" : ""}
+                          </Text>
+                        </View>
+
+                        {isSelected ? (
+                          <View style={styles.staffItemCheck}>
+                            <Check size={12} color="#ffffff" strokeWidth={3} />
+                          </View>
+                        ) : (
+                          <View style={styles.staffItemRadio} />
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
+            </ScrollView>
+          </View>
+        )}
       </View>
 
       {/* Service Items List */}
@@ -3482,7 +3632,7 @@ const styles = StyleSheet.create({
     color: "#71717a",
     marginTop: 1,
   },
-  // Staff Selector Pills
+  // Staff Selector - Inline Accordion with Active Server Status
   staffSection: {
     marginBottom: 8,
   },
@@ -3493,84 +3643,208 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
     marginBottom: 6,
   },
-  staffPillsWrap: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    width: "100%",
-  },
-  staffPillBtn: {
-    flex: 1,
-    minWidth: "47%",
+  staffAccordionHeader: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 16,
+    justifyContent: "space-between",
+    backgroundColor: "#ffffff",
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
     borderWidth: 1.5,
-    gap: 8,
-    elevation: 2,
+    borderColor: "#e2e8f0",
+    elevation: 1,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 3,
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
   },
-  staffPillBtnActive: {
-    backgroundColor: MAROON.primary,
+  staffAccordionHeaderOpen: {
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
     borderColor: MAROON.primary,
+    backgroundColor: MAROON.ultraLight,
+    borderBottomWidth: 1,
+  },
+  staffHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+  },
+  staffHeaderAvatar: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: MAROON.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  staffHeaderAvatarText: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#ffffff",
+  },
+  staffHeaderName: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#18181b",
+    maxWidth: 130,
+  },
+  activeServerPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#ecfdf5",
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#a7f3d0",
+  },
+  activeServerDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: "#10b981",
+  },
+  activeServerPillText: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: "#059669",
+    letterSpacing: 0.2,
+  },
+  staffHeaderRole: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#71717a",
+    marginTop: 1,
+  },
+  staffAccordionChevron: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#f1f5f9",
+    marginLeft: 6,
+  },
+  staffAccordionBody: {
+    backgroundColor: "#ffffff",
+    borderBottomLeftRadius: 14,
+    borderBottomRightRadius: 14,
+    borderWidth: 1.5,
+    borderTopWidth: 0,
+    borderColor: MAROON.primary,
+    padding: 8,
     elevation: 3,
     shadowColor: MAROON.primary,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
   },
-  staffPillBtnInactive: {
-    backgroundColor: "#ffffff",
+  staffAccordionSearchBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f8fafc",
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    gap: 6,
+    borderWidth: 1,
     borderColor: "#e2e8f0",
+    marginBottom: 6,
   },
-  staffPillAvatar: {
+  staffAccordionSearchInput: {
+    flex: 1,
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#18181b",
+    padding: 0,
+  },
+  staffAccordionScroll: {
+    maxHeight: 180,
+  },
+  staffAccordionEmpty: {
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  staffAccordionEmptyText: {
+    fontSize: 11,
+    color: "#94a3b8",
+    fontWeight: "600",
+  },
+  staffAccordionListWrap: {
+    gap: 4,
+  },
+  staffAccordionItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#f1f5f9",
+    backgroundColor: "#ffffff",
+  },
+  staffAccordionItemSelected: {
+    backgroundColor: MAROON.ultraLight,
+    borderColor: MAROON.border,
+  },
+  staffItemAvatar: {
     width: 24,
     height: 24,
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
   },
-  staffPillAvatarActive: {
-    backgroundColor: "#ffffff",
+  staffItemAvatarDefault: {
+    backgroundColor: "#f1f5f9",
   },
-  staffPillAvatarInactive: {
-    backgroundColor: MAROON.ultraLight,
+  staffItemAvatarSelected: {
+    backgroundColor: MAROON.primary,
   },
-  staffPillAvatarText: {
-    fontSize: 11,
+  staffItemAvatarText: {
+    fontSize: 10,
     fontWeight: "900",
   },
-  staffPillAvatarTextActive: {
-    color: MAROON.primary,
+  staffItemAvatarTextDefault: {
+    color: "#64748b",
   },
-  staffPillAvatarTextInactive: {
-    color: MAROON.primary,
-  },
-  staffPillText: {
-    fontSize: 13,
-    fontWeight: "700",
-    flexShrink: 1,
-  },
-  staffPillTextActive: {
+  staffItemAvatarTextSelected: {
     color: "#ffffff",
+  },
+  staffItemName: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#18181b",
+  },
+  staffItemNameSelected: {
+    color: MAROON.primary,
     fontWeight: "900",
   },
-  staffPillTextInactive: {
-    color: "#3f3f46",
+  staffItemRole: {
+    fontSize: 9.5,
+    color: "#71717a",
+    marginTop: 0.5,
   },
-  staffPillCheckCircle: {
+  staffItemCheck: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: MAROON.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  staffItemRadio: {
     width: 16,
     height: 16,
     borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: "#cbd5e1",
     backgroundColor: "#ffffff",
-    alignItems: "center",
-    justifyContent: "center",
   },
   orderItemsList: {
     flex: 1,
