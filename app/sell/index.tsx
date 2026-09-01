@@ -6,6 +6,7 @@ import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { apiFetch } from "@/lib/api";
 import { Customer, InventoryBottle, MasterWine } from "@/types";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
@@ -82,7 +83,7 @@ export default function SellScreen() {
   // Sell Form
   const [salePrice, setSalePrice] = useState("");
   const [storeVatMode, setStoreVatMode] = useState<"included" | "excluded">("excluded");
-  const [wineCategory, setWineCategory] = useState<"fast" | "fine" | "reserve" | null>(null);
+  const [wineCategory, setWineCategory] = useState<"fun" | "fine" | "reserve" | null>(null);
   const [priceError, setPriceError] = useState<string | null>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
@@ -493,20 +494,21 @@ export default function SellScreen() {
       <View style={{
         flexDirection: "row",
         alignItems: "center",
-        padding: 16,
-        backgroundColor: theme.primary + "15",
-        borderColor: theme.primary + "40",
+        padding: 10,
+        paddingHorizontal: 12,
+        backgroundColor: theme.primary + "12",
+        borderColor: theme.primary + "30",
         borderWidth: 1,
-        borderRadius: 16,
-        marginBottom: 24,
-        gap: 16,
+        borderRadius: 12,
+        marginBottom: 14,
+        gap: 10,
       }}>
-        <View style={[styles.wineIconContainer, { backgroundColor: theme.primary + "20" }]}>
-          <Wine size={20} color={theme.primary} />
+        <View style={[styles.wineIconContainer, { backgroundColor: theme.primary + "20", width: 34, height: 34, borderRadius: 9 }]}>
+          <Wine size={16} color={theme.primary} />
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={[styles.wineName, { color: theme.text }]} numberOfLines={1}>{selectedWine.name}</Text>
-          <Text style={[styles.wineSub, { color: theme.textSecondary }]}>
+          <Text style={[styles.wineName, { color: theme.text, fontSize: 13.5, marginBottom: 1 }]} numberOfLines={1}>{selectedWine.name}</Text>
+          <Text style={[styles.wineSub, { color: theme.textSecondary, fontSize: 11.5 }]}>
             {selectedWine.vintage}
             {selectedWine.producer ? ` • ${selectedWine.producer}` : ""}
             {selectedWine.format ? ` • ${selectedWine.format}` : ""}
@@ -517,30 +519,34 @@ export default function SellScreen() {
   };
   const renderSearch = () => (
     <View style={styles.content}>
-      <Text style={[styles.headerText, { color: theme.text }]}>Select Wine</Text>
+      <Text style={[styles.headerText, { color: theme.text, fontSize: 26, marginBottom: 12 }]}>Select Wine</Text>
 
       {/* Portion Indicator Badge */}
       <View style={{
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "space-between",
-        marginBottom: 20,
+        marginBottom: 16,
         backgroundColor: theme.primary + "12",
         paddingHorizontal: 14,
         paddingVertical: 10,
         borderRadius: 14,
-        borderWidth: 1,
+        borderWidth: 1.2,
         borderColor: theme.primary + "30",
       }}>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-          <Text style={{ fontSize: 20 }}>
-            {saleType === "glass" ? "🍷" : saleType === "carafe" ? "🫗" : "🍾"}
-          </Text>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+          <View style={{ width: 38, height: 38, borderRadius: 10, backgroundColor: theme.primary + "20", alignItems: "center", justifyContent: "center" }}>
+            <MaterialCommunityIcons
+              name={saleType === "glass" ? "glass-wine" : saleType === "carafe" ? "flask-round-bottom-outline" : "bottle-wine"}
+              size={22}
+              color={theme.primary}
+            />
+          </View>
           <View>
-            <Text style={{ fontSize: 10, fontWeight: "800", color: theme.primary, textTransform: "uppercase", letterSpacing: 0.5 }}>
+            <Text style={{ fontSize: 10.5, fontWeight: "900", color: theme.primary, textTransform: "uppercase", letterSpacing: 0.5 }}>
               Selling Portion
             </Text>
-            <Text style={{ fontSize: 14, fontWeight: "700", color: theme.text }}>
+            <Text style={{ fontSize: 15, fontWeight: "800", color: theme.text, marginTop: 1 }}>
               {saleType === "glass" ? "Glass (1/6 Bottle)" : saleType === "carafe" ? "Carafe (2/6 Bottle)" : "Whole Bottle"}
             </Text>
           </View>
@@ -549,22 +555,22 @@ export default function SellScreen() {
           onPress={() => setStep("portion")}
           style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: theme.primary }}
         >
-          <Text style={{ fontSize: 12, fontWeight: "700", color: "#fff" }}>Change</Text>
+          <Text style={{ fontSize: 12, fontWeight: "800", color: "#fff" }}>Change</Text>
         </TouchableOpacity>
       </View>
 
       <View style={[styles.searchBox, { backgroundColor: theme.card, borderColor: theme.border }]}>
-        <Search size={20} color={theme.textSecondary} />
+        <Search size={18} color={theme.textSecondary} />
         <TextInput
-          style={[styles.searchInput, { color: theme.text }]}
-          placeholder="Search by name, producer, SKU, or vintage..."
+          style={[styles.searchInput, { color: theme.text, fontSize: 15 }]}
+          placeholder="Search name, producer, SKU..."
           placeholderTextColor={theme.textSecondary}
           value={searchQuery}
           onChangeText={setSearchQuery}
         />
         {searchQuery.length > 0 && (
           <TouchableOpacity onPress={() => setSearchQuery("")}>
-            <X size={20} color={theme.textSecondary} />
+            <X size={18} color={theme.textSecondary} />
           </TouchableOpacity>
         )}
       </View>
@@ -580,21 +586,23 @@ export default function SellScreen() {
             <TouchableOpacity
               style={[styles.wineRow, { borderBottomColor: theme.border }]}
               onPress={() => handleSelectWine(w)}
+              activeOpacity={0.8}
             >
-              <View style={styles.wineIconContainer}>
-                <Wine size={20} color={theme.primary} />
+              <View style={[styles.wineIconContainer, { backgroundColor: theme.primary + "12" }]}>
+                <Wine size={18} color={theme.primary} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.wineName, { color: theme.text }]}>{w.name}</Text>
-                <Text style={[styles.wineSub, { color: theme.textSecondary }]}>
+                <Text style={[styles.wineName, { color: theme.text, fontSize: 15 }]} numberOfLines={1}>{w.name}</Text>
+                <Text style={[styles.wineSub, { color: theme.textSecondary, fontSize: 12.5 }]} numberOfLines={1}>
                   {w.vintage}
                   {w.producer ? ` • ${w.producer}` : ""}
                   {w.format ? ` • ${w.format}` : ""}
                 </Text>
                 {openBtl && (
-                  <View style={{ marginTop: 4, alignSelf: "flex-start", backgroundColor: "#3b82f615", borderColor: "#3b82f640", borderWidth: 1, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 5, marginTop: 4, alignSelf: "flex-start", backgroundColor: "#3b82f615", borderColor: "#3b82f640", borderWidth: 1, paddingHorizontal: 8, paddingVertical: 2.5, borderRadius: 6 }}>
+                    <MaterialCommunityIcons name="glass-wine" size={13} color="#2563eb" />
                     <Text style={{ fontSize: 11, fontWeight: "700", color: "#2563eb" }}>
-                      🍷 Open bottle ({openBtl.glassesRemaining ?? 6}/6 glasses left)
+                      Open bottle ({openBtl.glassesRemaining ?? 6}/6 glasses left)
                     </Text>
                   </View>
                 )}
@@ -608,51 +616,96 @@ export default function SellScreen() {
 
   const renderPortion = () => (
     <View style={styles.content}>
-      <Text style={[styles.headerText, { color: theme.text, marginBottom: 8 }]}>What are you selling?</Text>
-      <Text style={[styles.subText, { color: theme.textSecondary, marginBottom: 24 }]}>
-        Select the serving portion to begin.
-      </Text>
+      <View style={{ marginBottom: 18 }}>
+        <Text style={[styles.headerText, { color: theme.text, fontSize: 30, fontWeight: "900", letterSpacing: -0.8, marginBottom: 4 }]}>
+          What are you selling?
+        </Text>
+        <Text style={[styles.subText, { color: theme.textSecondary, fontSize: 16, fontWeight: "500" }]}>
+          Select serving portion to begin the transaction.
+        </Text>
+      </View>
 
-      <View style={{ gap: 14, marginTop: 10 }}>
+      <View style={{ gap: 14, marginTop: 4 }}>
+        {/* Whole Bottle */}
         <TouchableOpacity
-          style={[styles.verifyOptionBtn, { backgroundColor: theme.card, borderColor: theme.border, padding: 18 }]}
+          style={[
+            styles.bigPortionCard,
+            {
+              backgroundColor: theme.card,
+              borderColor: theme.border,
+            },
+          ]}
           onPress={() => handleSelectPortion("bottle")}
+          activeOpacity={0.82}
         >
-          <View style={[styles.verifyIconBox, { backgroundColor: theme.primary + "20", width: 50, height: 50, borderRadius: 25 }]}>
-            <Text style={{ fontSize: 24 }}>🍾</Text>
+          <View style={[styles.bigPortionIconBox, { backgroundColor: theme.primary + "18" }]}>
+            <MaterialCommunityIcons name="bottle-wine" size={36} color={theme.primary} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={[styles.verifyOptionTitle, { color: theme.text, fontSize: 17 }]}>Whole Bottle</Text>
-            <Text style={[styles.verifyOptionDesc, { color: theme.textSecondary, fontSize: 13 }]}>Sell a full bottle (1.0 bottle)</Text>
-          </View>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.verifyOptionBtn, { backgroundColor: theme.card, borderColor: theme.border, padding: 18 }]}
-          onPress={() => handleSelectPortion("glass")}
-        >
-          <View style={[styles.verifyIconBox, { backgroundColor: theme.primary + "20", width: 50, height: 50, borderRadius: 25 }]}>
-            <Text style={{ fontSize: 24 }}>🍷</Text>
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.verifyOptionTitle, { color: theme.text, fontSize: 17 }]}>Glass (1/6 Bottle)</Text>
-            <Text style={[styles.verifyOptionDesc, { color: theme.textSecondary, fontSize: 13 }]}>
-              Pour 1 glass (applies to 75cl bottles)
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+              <Text style={[styles.bigPortionTitle, { color: theme.text, fontSize: 22, fontWeight: "900" }]}>Whole Bottle</Text>
+              <View style={[styles.bigPortionBadge, { backgroundColor: theme.primary + "20" }]}>
+                <Text style={[styles.bigPortionBadgeText, { color: theme.primary, fontSize: 12.5, fontWeight: "900" }]}>1.0 BTL</Text>
+              </View>
+            </View>
+            <Text style={[styles.bigPortionDesc, { color: theme.textSecondary, fontSize: 14.5, fontWeight: "500" }]}>
+              Standard sealed 750ml bottle sale
             </Text>
           </View>
         </TouchableOpacity>
 
+        {/* Glass */}
         <TouchableOpacity
-          style={[styles.verifyOptionBtn, { backgroundColor: theme.card, borderColor: theme.border, padding: 18 }]}
-          onPress={() => handleSelectPortion("carafe")}
+          style={[
+            styles.bigPortionCard,
+            {
+              backgroundColor: theme.card,
+              borderColor: theme.border,
+            },
+          ]}
+          onPress={() => handleSelectPortion("glass")}
+          activeOpacity={0.82}
         >
-          <View style={[styles.verifyIconBox, { backgroundColor: theme.primary + "20", width: 50, height: 50, borderRadius: 25 }]}>
-            <Text style={{ fontSize: 24 }}>🫗</Text>
+          <View style={[styles.bigPortionIconBox, { backgroundColor: "#8b5cf618" }]}>
+            <MaterialCommunityIcons name="glass-wine" size={36} color="#8b5cf6" />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={[styles.verifyOptionTitle, { color: theme.text, fontSize: 17 }]}>Carafe (2/6 Bottle)</Text>
-            <Text style={[styles.verifyOptionDesc, { color: theme.textSecondary, fontSize: 13 }]}>
-              Pour 2 glasses / carafe (applies to 75cl bottles)
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+              <Text style={[styles.bigPortionTitle, { color: theme.text, fontSize: 22, fontWeight: "900" }]}>By The Glass</Text>
+              <View style={[styles.bigPortionBadge, { backgroundColor: "#8b5cf620" }]}>
+                <Text style={[styles.bigPortionBadgeText, { color: "#8b5cf6", fontSize: 12.5, fontWeight: "900" }]}>1/6 BTL</Text>
+              </View>
+            </View>
+            <Text style={[styles.bigPortionDesc, { color: theme.textSecondary, fontSize: 14.5, fontWeight: "500" }]}>
+              Single pour (1/6 portion from open bottle)
+            </Text>
+          </View>
+        </TouchableOpacity>
+
+        {/* Carafe */}
+        <TouchableOpacity
+          style={[
+            styles.bigPortionCard,
+            {
+              backgroundColor: theme.card,
+              borderColor: theme.border,
+            },
+          ]}
+          onPress={() => handleSelectPortion("carafe")}
+          activeOpacity={0.82}
+        >
+          <View style={[styles.bigPortionIconBox, { backgroundColor: "#06b6d418" }]}>
+            <MaterialCommunityIcons name="flask-round-bottom-outline" size={36} color="#0891b2" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+              <Text style={[styles.bigPortionTitle, { color: theme.text, fontSize: 22, fontWeight: "900" }]}>Carafe</Text>
+              <View style={[styles.bigPortionBadge, { backgroundColor: "#06b6d420" }]}>
+                <Text style={[styles.bigPortionBadgeText, { color: "#0891b2", fontSize: 12.5, fontWeight: "900" }]}>2/6 BTL</Text>
+              </View>
+            </View>
+            <Text style={[styles.bigPortionDesc, { color: theme.textSecondary, fontSize: 14.5, fontWeight: "500" }]}>
+              Double pour / 2 glasses serving carafe
             </Text>
           </View>
         </TouchableOpacity>
@@ -662,14 +715,14 @@ export default function SellScreen() {
 
   const renderLocate = () => (
     <View style={styles.content}>
-      <Text style={[styles.headerText, { color: theme.text, marginBottom: 24 }]}>Locate Bottles</Text>
+      <Text style={[styles.headerText, { color: theme.text, marginBottom: 14 }]}>Locate Bottles</Text>
       {renderSelectedWineSummary()}
 
       {isFetchingLocations ? (
         <ActivityIndicator size="large" color={theme.primary} style={{ marginTop: 40 }} />
       ) : bottlesList.length === 0 ? (
         <View style={styles.emptyState}>
-          <AlertCircle size={48} color={theme.danger} />
+          <AlertCircle size={40} color={theme.danger} />
           <Text style={[styles.emptyTitle, { color: theme.text }]}>Out of Stock</Text>
           <Text style={[styles.emptySub, { color: theme.textSecondary }]}>
             There are no available bottles for this wine in your store.
@@ -682,10 +735,10 @@ export default function SellScreen() {
         <View style={{ flex: 1 }}>
           <View style={[styles.locateCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
             <Text style={[styles.locateTitle, { color: theme.text }]}>Found {bottlesList.length} Bottle(s)</Text>
-            <View style={{ height: 1, backgroundColor: theme.border, marginVertical: 12 }} />
+            <View style={{ height: 1, backgroundColor: theme.border, marginVertical: 8 }} />
             {Object.entries(groupedLocations).map(([locName, count]) => (
               <View key={locName} style={styles.locRow}>
-                <MapPin size={16} color={theme.primary} />
+                <MapPin size={14} color={theme.primary} />
                 <Text style={[styles.locName, { color: theme.text }]}>{locName}</Text>
                 <View style={{ flex: 1 }} />
                 <Text style={[styles.locCount, { color: theme.textSecondary }]}>{count} btl</Text>
@@ -693,7 +746,7 @@ export default function SellScreen() {
             ))}
           </View>
           <View style={{ flex: 1 }} />
-          <View style={{ gap: 10 }}>
+          <View style={{ gap: 8 }}>
             <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: theme.primary }]} onPress={() => setStep("verify")}>
               <Text style={styles.primaryBtnText}>Proceed to Verify (Scan QR / AI)</Text>
             </TouchableOpacity>
@@ -718,20 +771,20 @@ export default function SellScreen() {
 
     return (
       <View style={styles.content}>
-        <Text style={[styles.headerText, { color: theme.text, marginBottom: 24 }]}>Verify Bottle</Text>
+        <Text style={[styles.headerText, { color: theme.text, marginBottom: 14 }]}>Verify Bottle</Text>
         {renderSelectedWineSummary()}
-        <Text style={[styles.subText, { color: theme.textSecondary, marginBottom: 16 }]}>
+        <Text style={[styles.subText, { color: theme.textSecondary, marginBottom: 12 }]}>
           You grabbed a bottle. How do you want to verify it?
         </Text>
 
         {isCameraActive ? (
           !hasCameraPermission ? (
             <View style={{ alignItems: "center", justifyContent: "center", paddingVertical: 20 }}>
-              <View style={[styles.wineIconContainer, { width: 64, height: 64, borderRadius: 32, backgroundColor: theme.primary + "1A", marginBottom: 16 }]}>
-                <Camera size={32} color={theme.primary} />
+              <View style={[styles.wineIconContainer, { width: 48, height: 48, borderRadius: 24, backgroundColor: theme.primary + "1A", marginBottom: 12 }]}>
+                <Camera size={24} color={theme.primary} />
               </View>
-              <Text style={[styles.headerText, { color: theme.text, textAlign: "center", fontSize: 20 }]}>Camera Access Needed</Text>
-              <Text style={[styles.subText, { color: theme.textSecondary, textAlign: "center", marginBottom: 20 }]}>
+              <Text style={[styles.headerText, { color: theme.text, textAlign: "center", fontSize: 16 }]}>Camera Access Needed</Text>
+              <Text style={[styles.subText, { color: theme.textSecondary, textAlign: "center", marginBottom: 16 }]}>
                 We need camera access to scan QR codes.
               </Text>
               <TouchableOpacity
@@ -754,10 +807,10 @@ export default function SellScreen() {
                 <Text style={styles.primaryBtnText}>Grant Camera Permission</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={{ marginTop: 12, padding: 10 }}
+                style={{ marginTop: 10, padding: 8 }}
                 onPress={() => setIsCameraActive(false)}
               >
-                <Text style={{ color: theme.textSecondary, fontSize: 13, fontWeight: "600" }}>Cancel Scan</Text>
+                <Text style={{ color: theme.textSecondary, fontSize: 12, fontWeight: "600" }}>Cancel Scan</Text>
               </TouchableOpacity>
             </View>
           ) : (
@@ -771,7 +824,7 @@ export default function SellScreen() {
                 style={styles.closeCameraBtn}
                 onPress={() => setIsCameraActive(false)}
               >
-                <X size={24} color="#fff" />
+                <X size={20} color="#fff" />
               </TouchableOpacity>
               <View style={styles.qrOverlay}>
                 <View style={styles.qrTarget} />
@@ -795,9 +848,10 @@ export default function SellScreen() {
                   setIsCameraActive(true);
                 }
               }}
+              activeOpacity={0.85}
             >
-              <View style={[styles.verifyIconBox, { backgroundColor: theme.primary + "20" }]}>
-                <Scan size={24} color={theme.primary} />
+              <View style={[styles.verifyIconBox, { backgroundColor: theme.primary + "18" }]}>
+                <Scan size={18} color={theme.primary} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.verifyOptionTitle, { color: theme.text }]}>Scan QR Code</Text>
@@ -808,9 +862,10 @@ export default function SellScreen() {
             <TouchableOpacity
               style={[styles.verifyOptionBtn, { backgroundColor: theme.card, borderColor: theme.border }]}
               onPress={() => setIsLabelModalOpen(true)}
+              activeOpacity={0.85}
             >
-              <View style={[styles.verifyIconBox, { backgroundColor: theme.primary + "20" }]}>
-                <Camera size={24} color={theme.primary} />
+              <View style={[styles.verifyIconBox, { backgroundColor: theme.primary + "18" }]}>
+                <Camera size={18} color={theme.primary} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.verifyOptionTitle, { color: theme.text }]}>Scan Label (AI)</Text>
@@ -827,13 +882,14 @@ export default function SellScreen() {
                   Alert.alert("No Bottle", "No bottle available to select.");
                 }
               }}
+              activeOpacity={0.85}
             >
-              <View style={[styles.verifyIconBox, { backgroundColor: theme.primary + "20" }]}>
-                <CheckCircle2 size={24} color={theme.primary} />
+              <View style={[styles.verifyIconBox, { backgroundColor: theme.primary + "18" }]}>
+                <CheckCircle2 size={18} color={theme.primary} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.verifyOptionTitle, { color: theme.text }]}>Quick Select / Skip Scan</Text>
-                <Text style={[styles.verifyOptionDesc, { color: theme.textSecondary }]}>Auto-select available bottle and proceed to price & sale.</Text>
+                <Text style={[styles.verifyOptionDesc, { color: theme.textSecondary }]}>Auto-select available bottle and proceed to sale.</Text>
               </View>
             </TouchableOpacity>
           </View>
@@ -863,16 +919,16 @@ export default function SellScreen() {
 
   const renderSell = () => (
     <ScrollView style={styles.content}>
-      <Text style={[styles.headerText, { color: theme.text, marginBottom: 24 }]}>Finalize Sale</Text>
+      <Text style={[styles.headerText, { color: theme.text, marginBottom: 14 }]}>Finalize Sale</Text>
       {renderSelectedWineSummary()}
 
       {selectedWine?.format === "75cl" && (
         <View style={styles.sellSection}>
           <View style={styles.sellSectionHeader}>
             <Wine size={15} color={theme.primary} />
-            <Text style={[styles.sellSectionTitle, { color: theme.text }]}>Serving Portion</Text>
+            <Text style={[styles.sellSectionTitle, { color: theme.text, fontSize: 12.5 }]}>Serving Portion</Text>
           </View>
-          <View style={{ flexDirection: "row", gap: 8, marginTop: 8 }}>
+          <View style={{ flexDirection: "row", gap: 10, marginTop: 6 }}>
             <TouchableOpacity
               onPress={() => setSaleType("bottle")}
               style={{
@@ -883,13 +939,18 @@ export default function SellScreen() {
                 borderWidth: 1.5,
                 borderColor: saleType === "bottle" ? theme.primary : theme.border,
                 backgroundColor: saleType === "bottle" ? theme.primary + "15" : theme.card,
+                gap: 4,
               }}
             >
-              <Text style={{ fontSize: 18 }}>🍾</Text>
-              <Text style={{ fontSize: 13, fontWeight: "700", color: saleType === "bottle" ? theme.primary : theme.text, marginTop: 4 }}>
+              <MaterialCommunityIcons
+                name="bottle-wine"
+                size={24}
+                color={saleType === "bottle" ? theme.primary : theme.textSecondary}
+              />
+              <Text style={{ fontSize: 13.5, fontWeight: "800", color: saleType === "bottle" ? theme.primary : theme.text }}>
                 Bottle
               </Text>
-              <Text style={{ fontSize: 10, color: theme.textSecondary }}>1.0 bottle</Text>
+              <Text style={{ fontSize: 11, fontWeight: "600", color: theme.textSecondary }}>1.0 bottle</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -902,13 +963,18 @@ export default function SellScreen() {
                 borderWidth: 1.5,
                 borderColor: saleType === "glass" ? theme.primary : theme.border,
                 backgroundColor: saleType === "glass" ? theme.primary + "15" : theme.card,
+                gap: 4,
               }}
             >
-              <Text style={{ fontSize: 18 }}>🍷</Text>
-              <Text style={{ fontSize: 13, fontWeight: "700", color: saleType === "glass" ? theme.primary : theme.text, marginTop: 4 }}>
+              <MaterialCommunityIcons
+                name="glass-wine"
+                size={24}
+                color={saleType === "glass" ? theme.primary : theme.textSecondary}
+              />
+              <Text style={{ fontSize: 13.5, fontWeight: "800", color: saleType === "glass" ? theme.primary : theme.text }}>
                 Glass
               </Text>
-              <Text style={{ fontSize: 10, color: theme.textSecondary }}>1/6 bottle</Text>
+              <Text style={{ fontSize: 11, fontWeight: "600", color: theme.textSecondary }}>1/6 bottle</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -921,27 +987,33 @@ export default function SellScreen() {
                 borderWidth: 1.5,
                 borderColor: saleType === "carafe" ? theme.primary : theme.border,
                 backgroundColor: saleType === "carafe" ? theme.primary + "15" : theme.card,
+                gap: 4,
               }}
             >
-              <Text style={{ fontSize: 18 }}>🫗</Text>
-              <Text style={{ fontSize: 13, fontWeight: "700", color: saleType === "carafe" ? theme.primary : theme.text, marginTop: 4 }}>
+              <MaterialCommunityIcons
+                name="flask-round-bottom-outline"
+                size={24}
+                color={saleType === "carafe" ? theme.primary : theme.textSecondary}
+              />
+              <Text style={{ fontSize: 13.5, fontWeight: "800", color: saleType === "carafe" ? theme.primary : theme.text }}>
                 Carafe
               </Text>
-              <Text style={{ fontSize: 10, color: theme.textSecondary }}>2/6 bottle</Text>
+              <Text style={{ fontSize: 11, fontWeight: "600", color: theme.textSecondary }}>2/6 bottle</Text>
             </TouchableOpacity>
           </View>
 
           {saleType !== "bottle" && (
-            <View style={{ marginTop: 12, padding: 12, backgroundColor: theme.primary + "10", borderRadius: 10, borderWidth: 1, borderColor: theme.primary + "30" }}>
-              {openBottle ? (
-                <Text style={{ fontSize: 12, color: theme.primary, fontWeight: "600" }}>
-                  🍷 Pouring from open bottle ({openBottle.bottleId || openBottle.readableId} — {openBottle.glassesRemaining ?? 6} glasses remaining)
-                </Text>
-              ) : (
-                <Text style={{ fontSize: 12, color: theme.primary, fontWeight: "600" }}>
-                  🍾 Auto-selected bottle ({selectedBottleId ? (bottlesList.find(b => b.bottleId === selectedBottleId)?.readableId || selectedBottleId) : "initial bottle"}) to open for this pour.
-                </Text>
-              )}
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 10, padding: 10, backgroundColor: theme.primary + "12", borderRadius: 10, borderWidth: 1, borderColor: theme.primary + "30" }}>
+              <MaterialCommunityIcons
+                name={saleType === "glass" ? "glass-wine" : "flask-round-bottom-outline"}
+                size={18}
+                color={theme.primary}
+              />
+              <Text style={{ fontSize: 12.5, color: theme.primary, fontWeight: "700", flex: 1 }}>
+                {openBottle
+                  ? `Pouring from open bottle (${openBottle.bottleId || openBottle.readableId} — ${openBottle.glassesRemaining ?? 6} glasses remaining)`
+                  : `Auto-selected bottle (${selectedBottleId ? (bottlesList.find(b => b.bottleId === selectedBottleId)?.readableId || selectedBottleId) : "initial bottle"}) to open for this pour.`}
+              </Text>
             </View>
           )}
         </View>
@@ -949,32 +1021,32 @@ export default function SellScreen() {
 
       <View style={styles.sellSection}>
         <View style={styles.sellSectionHeader}>
-          <Tag size={15} color={theme.primary} />
+          <Tag size={14} color={theme.primary} />
           <Text style={[styles.sellSectionTitle, { color: theme.text }]}>Sale Price</Text>
           <View style={{ flex: 1 }} />
-          {wineCategory !== "fast" && (
-            <View style={{ flexDirection: "row", backgroundColor: theme.primary + "1A", borderRadius: 8, padding: 2 }}>
+          {wineCategory !== "fun" && (
+            <View style={{ flexDirection: "row", backgroundColor: theme.primary + "1A", borderRadius: 7, padding: 2 }}>
               <TouchableOpacity
                 onPress={() => setStoreVatMode("excluded")}
                 style={{
-                  paddingHorizontal: 10,
-                  paddingVertical: 4,
-                  borderRadius: 6,
+                  paddingHorizontal: 8,
+                  paddingVertical: 3,
+                  borderRadius: 5,
                   backgroundColor: storeVatMode === "excluded" ? theme.card : "transparent",
                 }}
               >
-                <Text style={{ fontSize: 10, fontWeight: "800", color: storeVatMode === "excluded" ? theme.primary : theme.primary + "80" }}>EX VAT</Text>
+                <Text style={{ fontSize: 9.5, fontWeight: "800", color: storeVatMode === "excluded" ? theme.primary : theme.primary + "80" }}>EX VAT</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={() => setStoreVatMode("included")}
                 style={{
-                  paddingHorizontal: 10,
-                  paddingVertical: 4,
-                  borderRadius: 6,
+                  paddingHorizontal: 8,
+                  paddingVertical: 3,
+                  borderRadius: 5,
                   backgroundColor: storeVatMode === "included" ? theme.card : "transparent",
                 }}
               >
-                <Text style={{ fontSize: 10, fontWeight: "800", color: storeVatMode === "included" ? theme.primary : theme.primary + "80" }}>INC VAT</Text>
+                <Text style={{ fontSize: 9.5, fontWeight: "800", color: storeVatMode === "included" ? theme.primary : theme.primary + "80" }}>INC VAT</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -994,32 +1066,32 @@ export default function SellScreen() {
             }}
           />
         </View>
-        {priceError && <Text style={{ color: theme.danger, fontSize: 12, marginTop: 8 }}>{priceError}</Text>}
+        {priceError && <Text style={{ color: theme.danger, fontSize: 11, marginTop: 4 }}>{priceError}</Text>}
       </View>
 
       <VatBreakdownCard
         basePrice={salePrice}
         theme={theme}
-        isFastMoving={wineCategory === "fast"}
+        isFastMoving={wineCategory === "fun"}
         vatMode={storeVatMode}
       />
 
       <View style={styles.sellSection}>
         <View style={styles.sellSectionHeader}>
-          <User size={15} color={theme.textSecondary} />
+          <User size={14} color={theme.textSecondary} />
           <Text style={[styles.sellSectionTitle, { color: theme.text }]}>Customer (optional)</Text>
         </View>
 
         {selectedCustomer ? (
           <View style={[styles.buyerInput, { backgroundColor: theme.primary + "1A", borderColor: theme.primary + "40" }]}>
-            <View style={{ flexDirection: "row", alignItems: "center", flex: 1, gap: 10 }}>
-              <User size={16} color={theme.primary} />
-              <Text style={{ fontSize: 16, fontWeight: "700", color: theme.primary }} numberOfLines={1}>
+            <View style={{ flexDirection: "row", alignItems: "center", flex: 1, gap: 8 }}>
+              <User size={15} color={theme.primary} />
+              <Text style={{ fontSize: 13.5, fontWeight: "700", color: theme.primary }} numberOfLines={1}>
                 {selectedCustomer.name}
               </Text>
             </View>
             <TouchableOpacity onPress={() => setSelectedCustomer(null)} style={{ padding: 4 }}>
-              <X size={20} color={theme.primary} />
+              <X size={16} color={theme.primary} />
             </TouchableOpacity>
           </View>
         ) : (
@@ -1027,14 +1099,14 @@ export default function SellScreen() {
             onPress={() => setIsCustomerModalOpen(true)}
             style={[styles.buyerInput, { backgroundColor: theme.card, borderColor: theme.border }]}
           >
-            <Text style={{ fontSize: 15, color: theme.textSecondary, fontWeight: "600" }}>Select or add customer...</Text>
-            <Plus size={20} color={theme.textSecondary} />
+            <Text style={{ fontSize: 13, color: theme.textSecondary, fontWeight: "600" }}>Select or add customer...</Text>
+            <Plus size={16} color={theme.textSecondary} />
           </TouchableOpacity>
         )}
       </View>
 
       <TouchableOpacity
-        style={[styles.primaryBtn, { backgroundColor: theme.primary, marginTop: 24, opacity: isProcessing ? 0.7 : 1 }]}
+        style={[styles.primaryBtn, { backgroundColor: theme.primary, marginTop: 16, opacity: isProcessing ? 0.7 : 1 }]}
         onPress={handleMarkAsSold}
         disabled={isProcessing}
       >
@@ -1078,11 +1150,11 @@ export default function SellScreen() {
 
     return (
       <View style={[styles.content, { alignItems: "center", justifyContent: "center" }]}>
-        <CheckCircle2 size={80} color={theme.primary} />
-        <Text style={[styles.headerText, { color: theme.text, marginTop: 24 }]}>
-          {saleType === "glass" ? "Glass Sold! 🍷" : saleType === "carafe" ? "Carafe Sold! 🫗" : "Bottle Sold! 🍾"}
+        <CheckCircle2 size={56} color={theme.primary} />
+        <Text style={[styles.headerText, { color: theme.text, marginTop: 16, fontSize: 24 }]}>
+          {saleType === "glass" ? "Glass Sold!" : saleType === "carafe" ? "Carafe Sold!" : "Bottle Sold!"}
         </Text>
-        <Text style={[styles.subText, { color: theme.textSecondary, textAlign: "center", marginBottom: 24 }]}>
+        <Text style={[styles.subText, { color: theme.textSecondary, textAlign: "center", marginBottom: 16, fontSize: 14 }]}>
           {saleType === "glass"
             ? "1 glass (1/6 bottle) has been recorded."
             : saleType === "carafe"
@@ -1096,36 +1168,41 @@ export default function SellScreen() {
             alignItems: "center",
             backgroundColor: "#fff7ed",
             borderColor: "#ea580c",
-            borderWidth: 1.5,
-            borderRadius: 16,
-            padding: 14,
-            marginBottom: 20,
+            borderWidth: 1,
+            borderRadius: 12,
+            padding: 10,
+            marginBottom: 14,
             width: "100%",
-            gap: 12,
+            gap: 10,
           }}>
-            <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: "rgba(234, 88, 12, 0.15)", alignItems: "center", justifyContent: "center" }}>
-              <AlertCircle size={20} color="#ea580c" />
+            <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: "rgba(234, 88, 12, 0.15)", alignItems: "center", justifyContent: "center" }}>
+              <AlertCircle size={16} color="#ea580c" />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 12, fontWeight: "900", color: "#c2410c", textTransform: "uppercase", letterSpacing: 0.5 }}>
+              <Text style={{ fontSize: 11, fontWeight: "900", color: "#c2410c", textTransform: "uppercase", letterSpacing: 0.4 }}>
                 PAR Alert — Restock Requested
               </Text>
-              <Text style={{ fontSize: 11, fontWeight: "600", color: "#9a3412", marginTop: 2 }}>
+              <Text style={{ fontSize: 10.5, fontWeight: "600", color: "#9a3412", marginTop: 1 }}>
                 Stock hit PAR level ({parAlertInfo.stockCount} btl left). Auto-requested {parAlertInfo.requestedQty} bottle(s) of {parAlertInfo.wineName} from warehouse.
               </Text>
             </View>
             <TouchableOpacity onPress={() => setParAlertInfo(null)} style={{ padding: 4 }}>
-              <X size={18} color="#ea580c" />
+              <X size={16} color="#ea580c" />
             </TouchableOpacity>
           </View>
         )}
 
         <View style={[styles.successCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-          <Text style={[styles.wineName, { color: theme.text, textAlign: "center" }]}>{selectedWine?.name}</Text>
+          <Text style={[styles.wineName, { color: theme.text, textAlign: "center", fontSize: 16 }]} numberOfLines={1}>{selectedWine?.name}</Text>
           <View style={{ flexDirection: "row", justifyContent: "center", marginTop: 6, gap: 6 }}>
-            <View style={{ backgroundColor: theme.primary + "1A", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 }}>
-              <Text style={{ fontSize: 11, fontWeight: "700", color: theme.primary }}>
-                {saleType === "glass" ? "🍷 Glass (1/6)" : saleType === "carafe" ? "🫗 Carafe (2/6)" : "🍾 Whole Bottle"}
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: theme.primary + "1A", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 }}>
+              <MaterialCommunityIcons
+                name={saleType === "glass" ? "glass-wine" : saleType === "carafe" ? "flask-round-bottom-outline" : "bottle-wine"}
+                size={15}
+                color={theme.primary}
+              />
+              <Text style={{ fontSize: 12, fontWeight: "800", color: theme.primary }}>
+                {saleType === "glass" ? "Glass (1/6)" : saleType === "carafe" ? "Carafe (2/6)" : "Whole Bottle"}
               </Text>
             </View>
           </View>
@@ -1148,7 +1225,7 @@ export default function SellScreen() {
           </View>
         </View>
 
-        <View style={{ width: "100%", gap: 12, marginTop: 32 }}>
+        <View style={{ width: "100%", gap: 8, marginTop: 20 }}>
           <TouchableOpacity
             style={[styles.primaryBtn, { backgroundColor: theme.primary, width: "100%" }]}
             onPress={handleSellAnother}
@@ -1203,41 +1280,41 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    height: 56,
+    height: 48,
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     borderBottomWidth: 1,
   },
   backBtn: {
-    padding: 8,
+    padding: 6,
   },
   content: {
     flex: 1,
-    padding: 24,
+    padding: 16,
   },
   headerText: {
-    fontSize: 32,
+    fontSize: 20,
     fontWeight: "900",
-    letterSpacing: -1,
-    marginBottom: 8,
+    letterSpacing: -0.5,
+    marginBottom: 4,
   },
   subText: {
-    fontSize: 16,
+    fontSize: 12.5,
   },
   searchBox: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
     borderWidth: 1,
-    marginBottom: 24,
-    gap: 12,
+    marginBottom: 14,
+    gap: 8,
   },
   searchInput: {
     flex: 1,
-    fontSize: 16,
+    fontSize: 13.5,
     fontWeight: "600",
   },
   listArea: {
@@ -1246,120 +1323,120 @@ const styles = StyleSheet.create({
   wineRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 16,
+    paddingVertical: 10,
     borderBottomWidth: 1,
-    gap: 16,
+    gap: 10,
   },
   wineIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     backgroundColor: "rgba(0,0,0,0.05)",
     alignItems: "center",
     justifyContent: "center",
   },
   wineName: {
-    fontSize: 16,
+    fontSize: 13.5,
     fontWeight: "800",
-    marginBottom: 4,
+    marginBottom: 2,
   },
   wineSub: {
-    fontSize: 14,
+    fontSize: 11.5,
   },
   emptyState: {
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 40,
+    paddingVertical: 32,
   },
   emptyTitle: {
-    fontSize: 20,
+    fontSize: 16,
     fontWeight: "800",
-    marginTop: 16,
-    marginBottom: 8,
+    marginTop: 12,
+    marginBottom: 6,
   },
   emptySub: {
-    fontSize: 15,
+    fontSize: 12.5,
     textAlign: "center",
-    marginBottom: 32,
+    marginBottom: 20,
   },
   primaryBtn: {
     width: "100%",
-    paddingVertical: 18,
-    borderRadius: 16,
+    paddingVertical: 13,
+    borderRadius: 12,
     alignItems: "center",
   },
   primaryBtnText: {
     color: "#fff",
-    fontSize: 16,
+    fontSize: 13.5,
     fontWeight: "800",
     textTransform: "uppercase",
-    letterSpacing: 1,
+    letterSpacing: 0.8,
   },
   locateCard: {
     borderWidth: 1,
-    borderRadius: 16,
-    padding: 20,
+    borderRadius: 14,
+    padding: 14,
   },
   locateTitle: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: "800",
     textTransform: "uppercase",
-    letterSpacing: 1,
+    letterSpacing: 0.8,
   },
   locRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 12,
-    gap: 12,
+    paddingVertical: 8,
+    gap: 8,
   },
   locName: {
-    fontSize: 16,
+    fontSize: 13.5,
     fontWeight: "700",
   },
   locCount: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: "600",
   },
   verifyOptions: {
-    gap: 16,
+    gap: 10,
   },
   verifyOptionBtn: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 20,
+    padding: 12,
     borderWidth: 1,
-    borderRadius: 16,
-    gap: 16,
+    borderRadius: 14,
+    gap: 12,
   },
   verifyIconBox: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
+    width: 40,
+    height: 40,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
   },
   verifyOptionTitle: {
-    fontSize: 18,
+    fontSize: 14,
     fontWeight: "800",
-    marginBottom: 4,
+    marginBottom: 2,
   },
   verifyOptionDesc: {
-    fontSize: 14,
+    fontSize: 11.5,
   },
   qrCameraContainer: {
     flex: 1,
-    borderRadius: 24,
+    borderRadius: 18,
     overflow: "hidden",
     position: "relative",
   },
   closeCameraBtn: {
     position: "absolute",
-    top: 16,
-    right: 16,
+    top: 12,
+    right: 12,
     zIndex: 10,
-    padding: 12,
+    padding: 10,
     backgroundColor: "rgba(0,0,0,0.5)",
-    borderRadius: 24,
+    borderRadius: 20,
   },
   qrOverlay: {
     position: "absolute",
@@ -1370,70 +1447,70 @@ const styles = StyleSheet.create({
     pointerEvents: "none",
   },
   qrTarget: {
-    width: 250,
-    height: 250,
+    width: 200,
+    height: 200,
     borderWidth: 2,
     borderColor: "#fff",
-    borderRadius: 24,
+    borderRadius: 18,
   },
   qrHint: {
     color: "#fff",
-    marginTop: 24,
-    fontSize: 16,
+    marginTop: 16,
+    fontSize: 14,
     fontWeight: "700",
   },
   sellSection: {
-    marginBottom: 24,
+    marginBottom: 16,
   },
   sellSectionHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    marginBottom: 12,
+    gap: 6,
+    marginBottom: 8,
   },
   sellSectionTitle: {
-    fontSize: 14,
+    fontSize: 11.5,
     fontWeight: "800",
     textTransform: "uppercase",
-    letterSpacing: 1,
+    letterSpacing: 0.6,
   },
   priceInputWrapper: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
-    height: 64,
+    paddingHorizontal: 12,
+    height: 48,
     borderWidth: 1,
-    borderRadius: 16,
+    borderRadius: 12,
   },
   currencySymbol: {
-    fontSize: 24,
+    fontSize: 18,
     fontWeight: "600",
-    marginRight: 8,
+    marginRight: 6,
   },
   priceInput: {
     flex: 1,
-    fontSize: 32,
+    fontSize: 22,
     fontWeight: "900",
     height: "100%",
   },
   buyerInput: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
-    height: 64,
+    paddingHorizontal: 12,
+    height: 46,
     borderWidth: 1,
-    borderRadius: 16,
+    borderRadius: 12,
   },
   successCard: {
     width: "100%",
-    padding: 24,
+    padding: 16,
     borderWidth: 1,
-    borderRadius: 24,
+    borderRadius: 18,
   },
   saleSummaryRow: {
     flexDirection: "row",
-    marginTop: 24,
-    paddingTop: 24,
+    marginTop: 14,
+    paddingTop: 14,
     borderTopWidth: 1,
   },
   saleSummaryItem: {
@@ -1441,13 +1518,53 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   saleSummaryLabel: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "900",
-    letterSpacing: 1,
-    marginBottom: 4,
+    letterSpacing: 0.8,
+    marginBottom: 2,
   },
   saleSummaryValue: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "800",
+  },
+  bigPortionCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 18,
+    borderWidth: 1.5,
+    borderRadius: 18,
+    gap: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  bigPortionIconBox: {
+    width: 62,
+    height: 62,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  bigPortionTitle: {
+    fontSize: 22,
+    fontWeight: "900",
+    letterSpacing: -0.3,
+  },
+  bigPortionDesc: {
+    fontSize: 14.5,
+    fontWeight: "500",
+    lineHeight: 20,
+  },
+  bigPortionBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  bigPortionBadgeText: {
+    fontSize: 12.5,
+    fontWeight: "900",
+    letterSpacing: 0.5,
   },
 });

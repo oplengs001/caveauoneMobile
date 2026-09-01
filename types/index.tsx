@@ -23,7 +23,7 @@ export interface MasterWine {
   sku?: string;
   format?: string;
   grapeVariety?: string;
-  wineCategory?: "fast" | "fine" | "reserve" | null;
+  wineCategory?: "fun" | "fine" | "reserve" | null;
 }
 
 export interface InventoryBottle {
@@ -231,7 +231,7 @@ export interface StoreWineSetting {
   discontinued: boolean;
   createdAt: any;
   updatedAt: any;
-  wineCategory?: "fast" | "fine" | "reserve" | null;
+  wineCategory?: "fun" | "fine" | "reserve" | null;
   sellingPrice?: number;
   glassPrice?: number;
   carafePrice?: number;

@@ -62,7 +62,7 @@ export interface WineBottleDetail {
   glassesRemaining?: number;
 }
 
-export interface FastWineItem {
+export interface FunWineItem {
   id: string;
   name: string;
   vintage?: string;
@@ -77,7 +77,7 @@ export interface FastWineItem {
   allowGlass?: boolean;
   allowCarafe?: boolean;
   discontinued?: boolean;
-  wineCategory?: "fast" | "fine" | "reserve" | "standard" | string | null;
+  wineCategory?: "fun" | "fine" | "reserve" | "standard" | string | null;
   stockCount: number;
   availableBottleIds: string[];
   bottles?: WineBottleDetail[];
@@ -89,6 +89,8 @@ export interface FastWineItem {
     glassesRemaining: number;
   } | null;
 }
+
+export type FastWineItem = FunWineItem;
 
 export type PortionType = "glass" | "carafe" | "bottle";
 
@@ -470,15 +472,17 @@ export default function StoreStaffPOSTerminal() {
         if (a.openBottle && !b.openBottle) return -1;
         if (!a.openBottle && b.openBottle) return 1;
       }
-      if (a.wineCategory === "fast" && b.wineCategory !== "fast") return -1;
-      if (b.wineCategory === "fast" && a.wineCategory !== "fast") return 1;
+      const isFunA = a.wineCategory === "fun" || a.wineCategory === "fast";
+      const isFunB = b.wineCategory === "fun" || b.wineCategory === "fast";
+      if (isFunA && !isFunB) return -1;
+      if (isFunB && !isFunA) return 1;
       return a.name.localeCompare(b.name);
     });
   }, [wines, salesTypeMode, tierFilter, wineTypeFilter, searchQuery]);
 
   // Wine Category Tier Counts (Reflects active portion mode)
   const tierCounts = useMemo(() => {
-    const counts: Record<string, number> = { all: 0, fast: 0, fine: 0 };
+    const counts: Record<string, number> = { all: 0, fun: 0, fine: 0 };
     let base = wines.filter((w) => isWineEligibleForPortion(w, salesTypeMode));
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -494,7 +498,7 @@ export default function StoreStaffPOSTerminal() {
     counts.all = base.length;
     base.forEach((w) => {
       const cat = w.wineCategory || "standard";
-      if (cat === "fast") counts.fast = (counts.fast || 0) + 1;
+      if (cat === "fun" || cat === "fast") counts.fun = (counts.fun || 0) + 1;
       else if (cat === "fine") counts.fine = (counts.fine || 0) + 1;
     });
     return counts;
@@ -505,7 +509,11 @@ export default function StoreStaffPOSTerminal() {
     const counts: Record<string, number> = { all: 0 };
     let base = wines.filter((w) => isWineEligibleForPortion(w, salesTypeMode));
     if (tierFilter !== "all") {
-      base = base.filter((w) => (w.wineCategory || "standard") === tierFilter);
+      base = base.filter((w) => {
+        const cat = w.wineCategory || "standard";
+        if (tierFilter === "fun") return cat === "fun" || cat === "fast";
+        return cat === tierFilter;
+      });
     }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -1525,11 +1533,11 @@ export default function StoreStaffPOSTerminal() {
             )}
           </View>
 
-          {/* ── WINE CATEGORY TIER FILTER (Fast vs Fine) ─── */}
+          {/* ── WINE CATEGORY TIER FILTER (Fun vs Fine) ─── */}
           <View style={styles.tierFilterContainer}>
             {([
               { key: "all", label: "All Wines", icon: "view-grid-outline" as const },
-              { key: "fast", label: "Fast Wine", icon: "lightning-bolt-outline" as const },
+              { key: "fun", label: "Fun Wine", icon: "party-popper" as const },
               { key: "fine", label: "Fine Wine", icon: "diamond-stone" as const },
             ] as const).map((tier) => {
               const count = tierCounts[tier.key] ?? 0;

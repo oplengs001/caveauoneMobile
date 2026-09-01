@@ -32,16 +32,16 @@ export default function StaffDashboardScreen() {
   const theme = Colors.store;
 
   const [salesPeriod, setSalesPeriod] = useState<"today" | "week" | "all">("today");
-  const [selectedCategoryTab, setSelectedCategoryTab] = useState<"fast" | "fine" | "reserve" | "standard">("fast");
+  const [selectedCategoryTab, setSelectedCategoryTab] = useState<"fun" | "fine" | "reserve" | "standard">("fun");
   const [loadingSales, setLoadingSales] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const [salesDashboardMetrics, setSalesDashboardMetrics] = useState({
     soldCount: 0,
-    categoryCounts: { fast: 0, fine: 0, reserve: 0, standard: 0 },
+    categoryCounts: { fun: 0, fine: 0, reserve: 0, standard: 0 },
     portionCounts: { bottle: 0, glass: 0, carafe: 0 },
     top5WinesByCategory: {
-      fast: [] as Array<{ name: string; vintage?: string; volume: number; pctOfTotal: number }>,
+      fun: [] as Array<{ name: string; vintage?: string; volume: number; pctOfTotal: number }>,
       fine: [] as Array<{ name: string; vintage?: string; volume: number; pctOfTotal: number }>,
       reserve: [] as Array<{ name: string; vintage?: string; volume: number; pctOfTotal: number }>,
       standard: [] as Array<{ name: string; vintage?: string; volume: number; pctOfTotal: number }>,
@@ -100,14 +100,14 @@ export default function StaffDashboardScreen() {
       );
 
       let totalVolume = 0;
-      const catCounts = { fast: 0, fine: 0, reserve: 0, standard: 0 };
+      const catCounts = { fun: 0, fine: 0, reserve: 0, standard: 0 };
       const portionCounts = { bottle: 0, glass: 0, carafe: 0 };
 
       const wineAggByCategory: Record<
         string,
         Record<string, { id: string; name: string; vintage?: string; volume: number }>
       > = {
-        fast: {},
+        fun: {},
         fine: {},
         reserve: {},
         standard: {},
@@ -128,7 +128,8 @@ export default function StaffDashboardScreen() {
         }
         totalVolume += vol;
 
-        const cat = (item.wineCategory || item.masterWine?.wineCategory || "standard").toLowerCase();
+        const rawCat = (item.wineCategory || item.masterWine?.wineCategory || "standard").toLowerCase();
+        const cat = rawCat === "fast" ? "fun" : rawCat;
         const cKey = cat in catCounts ? cat : "standard";
         catCounts[cKey as keyof typeof catCounts] += vol;
 
@@ -155,12 +156,12 @@ export default function StaffDashboardScreen() {
 
       // Extract Top 5 per category
       const top5ByCategory: {
-        fast: Array<{ name: string; vintage?: string; volume: number; pctOfTotal: number }>;
+        fun: Array<{ name: string; vintage?: string; volume: number; pctOfTotal: number }>;
         fine: Array<{ name: string; vintage?: string; volume: number; pctOfTotal: number }>;
         reserve: Array<{ name: string; vintage?: string; volume: number; pctOfTotal: number }>;
         standard: Array<{ name: string; vintage?: string; volume: number; pctOfTotal: number }>;
       } = {
-        fast: [],
+        fun: [],
         fine: [],
         reserve: [],
         standard: [],
@@ -590,7 +591,7 @@ export default function StaffDashboardScreen() {
               {/* Category Segmented Selector Tabs */}
               <View style={styles.catTabContainer}>
                 {[
-                  { key: "fast", label: "Fast", color: "#d97706", bg: "#fef3c7" },
+                  { key: "fun", label: "Fun", color: "#d97706", bg: "#fef3c7" },
                   { key: "fine", label: "Fine", color: "#be185d", bg: "#fce7f3" },
                   { key: "reserve", label: "Reserve", color: "#4338ca", bg: "#e0e7ff" },
                   { key: "standard", label: "Standard", color: "#475569", bg: "#f1f5f9" },

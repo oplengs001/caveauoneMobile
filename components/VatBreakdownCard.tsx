@@ -63,7 +63,7 @@ export default function VatBreakdownCard({
             ]}
           >
             <Zap size={10} color="#f59e0b" />
-            <Text style={vatStyles.fastMovingText}>FAST MOVING</Text>
+            <Text style={vatStyles.fastMovingText}>FUN WINE</Text>
           </View>
         )}
       </View>

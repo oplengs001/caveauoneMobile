@@ -73,7 +73,7 @@ type FilterType =
 
 type CategoryFilterType =
   | "all"
-  | "fast"
+  | "fun"
   | "fine"
   | "reserve"
   | "standard"
@@ -194,7 +194,7 @@ export default function StoreMasterListScreen() {
   const [sheetAllowGlass, setSheetAllowGlass] = useState(false);
   const [sheetAllowCarafe, setSheetAllowCarafe] = useState(false);
   const [sheetDiscontinued, setSheetDiscontinued] = useState(false);
-  const [sheetWineCategory, setSheetWineCategory] = useState<"fast" | "fine" | "reserve" | "none">("none");
+  const [sheetWineCategory, setSheetWineCategory] = useState<"fun" | "fine" | "reserve" | "none">("none");
   const [sheetVatMode, setSheetVatMode] = useState<"included" | "excluded">("excluded");
 
   // Action states
@@ -533,9 +533,9 @@ export default function StoreMasterListScreen() {
 
     setSheetDiscontinued(entry.setting?.discontinued ?? false);
 
-    let cat: "fast" | "fine" | "reserve" | "none" = "none";
+    let cat: "fun" | "fine" | "reserve" | "none" = "none";
     if (entry.setting?.wineCategory) {
-      cat = entry.setting.wineCategory as "fast" | "fine" | "reserve";
+      cat = entry.setting.wineCategory as "fun" | "fine" | "reserve";
     }
     setSheetWineCategory(cat);
     setSheetVatMode(entry.setting?.vatMode ?? "excluded");
@@ -746,7 +746,7 @@ export default function StoreMasterListScreen() {
         {/* Left Indicator & Info */}
         <View style={styles.compactLeft}>
           <View style={styles.compactTitleRow}>
-            {category === "fast" && (
+            {category === "fun" && (
               <View style={[styles.miniCatBadge, { backgroundColor: "#fef3c7" }]}>
                 <Zap size={10} color="#d97706" />
               </View>
@@ -891,10 +891,10 @@ export default function StoreMasterListScreen() {
         </View>
 
         <View style={styles.tagsRow}>
-          {category === "fast" && (
+          {category === "fun" && (
             <View style={[styles.indicatorBadge, { backgroundColor: "#fef3c7" }]}>
               <Zap size={12} color="#d97706" strokeWidth={2.5} />
-              <Text style={[styles.indicatorText, { color: "#d97706" }]}>Fast Wine</Text>
+              <Text style={[styles.indicatorText, { color: "#d97706" }]}>Fun Wine</Text>
             </View>
           )}
           {category === "fine" && (
@@ -1302,7 +1302,7 @@ export default function StoreMasterListScreen() {
                     ? "glass-wine"
                     : categoryFilter === "bottle_only"
                       ? "bottle-wine-outline"
-                      : categoryFilter === "fast"
+                      : categoryFilter === "fun"
                         ? "lightning-bolt"
                         : categoryFilter === "fine"
                           ? "star"
@@ -1318,8 +1318,8 @@ export default function StoreMasterListScreen() {
                   ? "Glass & Carafe"
                   : categoryFilter === "bottle_only"
                     ? "Bottle Only"
-                    : categoryFilter === "fast"
-                      ? "Fast Wine"
+                    : categoryFilter === "fun"
+                      ? "Fun Wine"
                       : categoryFilter === "fine"
                         ? "Fine Wine"
                         : categoryFilter === "reserve"
@@ -1454,8 +1454,8 @@ export default function StoreMasterListScreen() {
                   color: "#64748b",
                 },
                 {
-                  id: "fast",
-                  label: "Fast Wine",
+                  id: "fun",
+                  label: "Fun Wine",
                   icon: "lightning-bolt",
                   color: "#d97706",
                 },
@@ -2031,7 +2031,7 @@ export default function StoreMasterListScreen() {
                     <View style={styles.categorySelectorGrid}>
                       {[
                         { id: "none", label: "Standard", icon: null, color: theme.textSecondary },
-                        { id: "fast", label: "Fast Wine", icon: Zap, color: "#d97706", bg: "#fef3c7" },
+                        { id: "fun", label: "Fun Wine", icon: Zap, color: "#d97706", bg: "#fef3c7" },
                         { id: "fine", label: "Fine Wine", icon: Star, color: "#be185d", bg: "#fce7f3" },
                         { id: "reserve", label: "Reserved Wine", icon: Lock, color: "#4338ca", bg: "#e0e7ff" },
                       ].map((cat) => {

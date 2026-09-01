@@ -205,7 +205,7 @@ export default function AdminDashboard() {
           stores: Record<string, { storeId: string; storeName: string; count: number; revenue: number }>;
         }
       > = {
-        fast: { label: "Fast Moving", badgeColor: "#f59e0b", iconText: "⚡ FAST", count: 0, revenue: 0, volume: 0, stores: {} },
+        fun: { label: "Fun Wine", badgeColor: "#f59e0b", iconText: "🎉 FUN", count: 0, revenue: 0, volume: 0, stores: {} },
         fine: { label: "Fine Wine", badgeColor: "#ec4899", iconText: "⭐ FINE", count: 0, revenue: 0, volume: 0, stores: {} },
         reserve: { label: "Reserve Collection", badgeColor: "#6366f1", iconText: "🔒 RESERVE", count: 0, revenue: 0, volume: 0, stores: {} },
         other: { label: "Standard Catalog", badgeColor: "#64748b", iconText: "🍷 STANDARD", count: 0, revenue: 0, volume: 0, stores: {} },
@@ -263,7 +263,7 @@ export default function AdminDashboard() {
 
         // Wine Category grouping
         const catRaw = (item.masterWine?.wineCategory || item.wineCategory || "other").toLowerCase();
-        const cKey = catRaw === "fast" ? "fast" : catRaw === "fine" ? "fine" : catRaw === "reserve" ? "reserve" : "other";
+        const cKey = (catRaw === "fun" || catRaw === "fast") ? "fun" : catRaw === "fine" ? "fine" : catRaw === "reserve" ? "reserve" : "other";
 
         if (!storeAgg[sId].catCounts[cKey]) {
           storeAgg[sId].catCounts[cKey] = { count: 0, revenue: 0 };

@@ -63,10 +63,10 @@ export default function HomeScreen() {
     soldCount: 0,
     totalRevenue: 0,
     activeBottles: 0,
-    categoryCounts: { fast: 0, fine: 0, reserve: 0, standard: 0 },
+    categoryCounts: { fun: 0, fine: 0, reserve: 0, standard: 0 },
     portionCounts: { bottle: 0, glass: 0, carafe: 0 },
     top5WinesByCategory: {
-      fast: [] as Array<{ name: string; vintage?: string; volume: number; pctOfTotal: number }>,
+      fun: [] as Array<{ name: string; vintage?: string; volume: number; pctOfTotal: number }>,
       fine: [] as Array<{ name: string; vintage?: string; volume: number; pctOfTotal: number }>,
       reserve: [] as Array<{ name: string; vintage?: string; volume: number; pctOfTotal: number }>,
       standard: [] as Array<{ name: string; vintage?: string; volume: number; pctOfTotal: number }>,
@@ -311,11 +311,11 @@ export default function HomeScreen() {
 
       let totalVolume = 0;
       let storeTotalRevenue = 0;
-      const catCounts = { fast: 0, fine: 0, reserve: 0, standard: 0 };
+      const catCounts = { fun: 0, fine: 0, reserve: 0, standard: 0 };
       const portionCounts = { bottle: 0, glass: 0, carafe: 0 };
 
       const wineAggByCategory: Record<string, Record<string, { id: string; name: string; vintage?: string; volume: number }>> = {
-        fast: {},
+        fun: {},
         fine: {},
         reserve: {},
         standard: {},
@@ -344,7 +344,8 @@ export default function HomeScreen() {
         }
         totalVolume += vol;
 
-        const cat = (item.wineCategory || item.masterWine?.wineCategory || "standard").toLowerCase();
+        const rawCat = (item.wineCategory || item.masterWine?.wineCategory || "standard").toLowerCase();
+        const cat = rawCat === "fast" ? "fun" : rawCat;
         const cKey = cat in catCounts ? cat : "standard";
         catCounts[cKey as keyof typeof catCounts] += vol;
 
@@ -371,12 +372,12 @@ export default function HomeScreen() {
 
       // Extract Top 5 per category
       const top5ByCategory: {
-        fast: Array<{ name: string; vintage?: string; volume: number; pctOfTotal: number }>;
+        fun: Array<{ name: string; vintage?: string; volume: number; pctOfTotal: number }>;
         fine: Array<{ name: string; vintage?: string; volume: number; pctOfTotal: number }>;
         reserve: Array<{ name: string; vintage?: string; volume: number; pctOfTotal: number }>;
         standard: Array<{ name: string; vintage?: string; volume: number; pctOfTotal: number }>;
       } = {
-        fast: [],
+        fun: [],
         fine: [],
         reserve: [],
         standard: [],
@@ -774,80 +775,160 @@ export default function HomeScreen() {
 
         {isStore && hasAlerts && (
           <View style={styles.metricsDashboard}>
-            <Text style={styles.metricsTitle}>Inventory Alerts</Text>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <Text style={styles.metricsTitle}>Inventory Alerts</Text>
+                <View style={[styles.deliveryCountPill, { backgroundColor: "rgba(239, 68, 68, 0.15)" }]}>
+                  <Text style={[styles.deliveryCountPillText, { color: "#ef4444" }]}>
+                    {dashboardMetrics.stockout.wines + dashboardMetrics.parAlert.wines + dashboardMetrics.underSafety.wines}
+                  </Text>
+                </View>
+              </View>
+            </View>
+
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.metricsGrid}
+              contentContainerStyle={{ gap: 12, paddingRight: 8 }}
             >
               {dashboardMetrics.stockout.wines > 0 && (
                 <TouchableOpacity
-                  style={[styles.metricCard, { backgroundColor: "#ef4444" }]}
+                  style={[
+                    styles.deliveryCardCompact,
+                    {
+                      backgroundColor: theme.card,
+                      borderColor: theme.border,
+                    },
+                  ]}
                   onPress={() =>
                     router.push({
                       pathname: "/store-master-list",
                       params: { filter: "stockout" },
                     })
                   }
+                  activeOpacity={0.85}
                 >
-                  <AlertOctagon size={24} color="#ffffff" strokeWidth={2.5} />
-                  <Text style={[styles.metricCount, { color: "#ffffff" }]}>
-                    {dashboardMetrics.stockout.wines}
-                  </Text>
-                  <Text style={styles.metricLabel}>Stockout Wines</Text>
-                  <Text style={styles.metricSubLabel}>
-                    {dashboardMetrics.stockout.bottles} bottles needed
-                  </Text>
+                  <View style={styles.deliveryCardHeader}>
+                    <View style={[styles.deliveryCardIconCircle, { backgroundColor: "rgba(239, 68, 68, 0.12)" }]}>
+                      <AlertOctagon size={18} color="#ef4444" strokeWidth={2.2} />
+                    </View>
+                    <View style={[styles.deliveryStatusBadge, { backgroundColor: "rgba(239, 68, 68, 0.12)", borderColor: "rgba(239, 68, 68, 0.3)" }]}>
+                      <Text style={[styles.deliveryStatusBadgeText, { color: "#dc2626" }]}>STOCKOUT</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.deliveryCardBody}>
+                    <Text style={[styles.deliveryCardTitle, { color: theme.text }]} numberOfLines={1}>
+                      Stockout Wines
+                    </Text>
+                    <Text style={[styles.deliveryCardSubtitle, { color: theme.textSecondary }]} numberOfLines={1}>
+                      {dashboardMetrics.stockout.wines} SKU{dashboardMetrics.stockout.wines === 1 ? "" : "s"} at zero stock
+                    </Text>
+                  </View>
+
+                  <View style={[styles.deliveryCardFooter, { borderTopColor: theme.border }]}>
+                    <View style={styles.deliveryQtyPill}>
+                      <Package size={12} color="#ef4444" strokeWidth={2.2} />
+                      <Text style={[styles.deliveryQtyText, { color: theme.text }]}>
+                        {dashboardMetrics.stockout.bottles} bottles needed
+                      </Text>
+                    </View>
+                    <ChevronRight size={14} color="#94a3b8" />
+                  </View>
                 </TouchableOpacity>
               )}
 
               {dashboardMetrics.parAlert.wines > 0 && (
                 <TouchableOpacity
-                  style={[styles.metricCard, { backgroundColor: "#f97316" }]}
+                  style={[
+                    styles.deliveryCardCompact,
+                    {
+                      backgroundColor: theme.card,
+                      borderColor: theme.border,
+                    },
+                  ]}
                   onPress={() =>
                     router.push({
                       pathname: "/store-master-list",
                       params: { filter: "alerts" },
                     })
                   }
+                  activeOpacity={0.85}
                 >
-                  <AlertTriangle
-                    size={24}
-                    color="#ffffff"
-                    strokeWidth={2.5}
-                  />
-                  <Text style={[styles.metricCount, { color: "#ffffff" }]}>
-                    {dashboardMetrics.parAlert.wines}
-                  </Text>
-                  <Text style={styles.metricLabel}>PAR Alert Wines</Text>
-                  <Text style={styles.metricSubLabel}>
-                    {dashboardMetrics.parAlert.bottles} bottles needed
-                  </Text>
+                  <View style={styles.deliveryCardHeader}>
+                    <View style={[styles.deliveryCardIconCircle, { backgroundColor: "rgba(249, 115, 22, 0.12)" }]}>
+                      <AlertTriangle size={18} color="#f97316" strokeWidth={2.2} />
+                    </View>
+                    <View style={[styles.deliveryStatusBadge, { backgroundColor: "rgba(249, 115, 22, 0.12)", borderColor: "rgba(249, 115, 22, 0.3)" }]}>
+                      <Text style={[styles.deliveryStatusBadgeText, { color: "#ea580c" }]}>PAR ALERT</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.deliveryCardBody}>
+                    <Text style={[styles.deliveryCardTitle, { color: theme.text }]} numberOfLines={1}>
+                      PAR Alert Wines
+                    </Text>
+                    <Text style={[styles.deliveryCardSubtitle, { color: theme.textSecondary }]} numberOfLines={1}>
+                      {dashboardMetrics.parAlert.wines} SKU{dashboardMetrics.parAlert.wines === 1 ? "" : "s"} below PAR level
+                    </Text>
+                  </View>
+
+                  <View style={[styles.deliveryCardFooter, { borderTopColor: theme.border }]}>
+                    <View style={styles.deliveryQtyPill}>
+                      <Package size={12} color="#ea580c" strokeWidth={2.2} />
+                      <Text style={[styles.deliveryQtyText, { color: theme.text }]}>
+                        {dashboardMetrics.parAlert.bottles} bottles needed
+                      </Text>
+                    </View>
+                    <ChevronRight size={14} color="#94a3b8" />
+                  </View>
                 </TouchableOpacity>
               )}
 
               {dashboardMetrics.underSafety.wines > 0 && (
                 <TouchableOpacity
-                  style={[styles.metricCard, { backgroundColor: "#eab308" }]}
+                  style={[
+                    styles.deliveryCardCompact,
+                    {
+                      backgroundColor: theme.card,
+                      borderColor: theme.border,
+                    },
+                  ]}
                   onPress={() =>
                     router.push({
                       pathname: "/store-master-list",
                       params: { filter: "under_safety" },
                     })
                   }
+                  activeOpacity={0.85}
                 >
-                  <AlertTriangle
-                    size={24}
-                    color="#ffffff"
-                    strokeWidth={2.5}
-                  />
-                  <Text style={[styles.metricCount, { color: "#ffffff" }]}>
-                    {dashboardMetrics.underSafety.wines}
-                  </Text>
-                  <Text style={styles.metricLabel}>Under Safety</Text>
-                  <Text style={styles.metricSubLabel}>
-                    {dashboardMetrics.underSafety.bottles} bottles needed
-                  </Text>
+                  <View style={styles.deliveryCardHeader}>
+                    <View style={[styles.deliveryCardIconCircle, { backgroundColor: "rgba(234, 179, 8, 0.15)" }]}>
+                      <AlertTriangle size={18} color="#d97706" strokeWidth={2.2} />
+                    </View>
+                    <View style={[styles.deliveryStatusBadge, { backgroundColor: "rgba(234, 179, 8, 0.12)", borderColor: "rgba(234, 179, 8, 0.3)" }]}>
+                      <Text style={[styles.deliveryStatusBadgeText, { color: "#d97706" }]}>SAFETY</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.deliveryCardBody}>
+                    <Text style={[styles.deliveryCardTitle, { color: theme.text }]} numberOfLines={1}>
+                      Under Safety
+                    </Text>
+                    <Text style={[styles.deliveryCardSubtitle, { color: theme.textSecondary }]} numberOfLines={1}>
+                      {dashboardMetrics.underSafety.wines} SKU{dashboardMetrics.underSafety.wines === 1 ? "" : "s"} near safety stock
+                    </Text>
+                  </View>
+
+                  <View style={[styles.deliveryCardFooter, { borderTopColor: theme.border }]}>
+                    <View style={styles.deliveryQtyPill}>
+                      <Package size={12} color="#d97706" strokeWidth={2.2} />
+                      <Text style={[styles.deliveryQtyText, { color: theme.text }]}>
+                        {dashboardMetrics.underSafety.bottles} bottles needed
+                      </Text>
+                    </View>
+                    <ChevronRight size={14} color="#94a3b8" />
+                  </View>
                 </TouchableOpacity>
               )}
             </ScrollView>
@@ -1345,15 +1426,15 @@ export default function HomeScreen() {
                   </Text>
                   <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
                     <View style={{ flex: 1, minWidth: 140, backgroundColor: "#f59e0b15", borderColor: "#f59e0b40", borderWidth: 1, padding: 12, borderRadius: 12 }}>
-                      <Text style={{ fontSize: 10, fontWeight: "800", color: "#d97706" }}>⚡ FAST MOVING</Text>
+                      <Text style={{ fontSize: 10, fontWeight: "800", color: "#d97706" }}>🎉 FUN WINE</Text>
                       <Text style={{ fontSize: 18, fontWeight: "900", color: "#b45309", marginTop: 4 }}>
-                        {salesDashboardMetrics.categoryCounts.fast % 1 === 0
-                          ? `${salesDashboardMetrics.categoryCounts.fast} btl`
-                          : `${salesDashboardMetrics.categoryCounts.fast.toFixed(2)} btl`}
+                        {salesDashboardMetrics.categoryCounts.fun % 1 === 0
+                          ? `${salesDashboardMetrics.categoryCounts.fun} btl`
+                          : `${salesDashboardMetrics.categoryCounts.fun.toFixed(2)} btl`}
                       </Text>
-                      {salesDashboardMetrics.top5WinesByCategory.fast.length > 0 && (
+                      {salesDashboardMetrics.top5WinesByCategory.fun.length > 0 && (
                         <View style={{ marginTop: 8, borderTopWidth: 1, borderTopColor: "#f59e0b30", paddingTop: 6, gap: 4 }}>
-                          {salesDashboardMetrics.top5WinesByCategory.fast.map((w, idx) => (
+                          {salesDashboardMetrics.top5WinesByCategory.fun.map((w, idx) => (
                             <View key={idx} style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
                               <Text style={{ fontSize: 10, fontWeight: "700", color: "#b45309", flex: 1 }} numberOfLines={1}>
                                 #{idx + 1} {w.name}
@@ -1494,7 +1575,7 @@ export default function HomeScreen() {
                     </View>
                   </View>
                   <Text style={styles.heroActionDesc} numberOfLines={1}>
-                    Fast wine sales & live register
+                    Fun wine sales & live register
                   </Text>
                 </View>
               </View>
