@@ -1335,23 +1335,23 @@ export default function StoreMasterListScreen() {
               style={styles.activeFilterPill}
               onPress={() => setCategoryFilter("all")}
             >
-              <MaterialCommunityIcons
-                name={
-                  categoryFilter === "portions"
-                    ? "glass-wine"
-                    : categoryFilter === "bottle_only"
-                      ? "bottle-wine-outline"
-                      : categoryFilter === "fun"
-                        ? "lightning-bolt"
-                        : categoryFilter === "fine"
-                          ? "star"
-                          : categoryFilter === "reserve"
-                            ? "ghost"
-                            : "bottle-wine-outline"
-                }
-                size={13}
-                color={theme.primary}
-              />
+              {categoryFilter === "fun" ? (
+                <Text style={{ fontSize: 12, marginRight: 2 }}>😁</Text>
+              ) : categoryFilter === "fine" ? (
+                <Text style={{ fontSize: 12, marginRight: 2 }}>💎</Text>
+              ) : categoryFilter === "reserve" ? (
+                <Text style={{ fontSize: 12, marginRight: 2 }}>👻</Text>
+              ) : (
+                <MaterialCommunityIcons
+                  name={
+                    categoryFilter === "portions"
+                      ? "glass-wine"
+                      : "bottle-wine-outline"
+                  }
+                  size={13}
+                  color={theme.primary}
+                />
+              )}
               <Text style={styles.activeFilterPillText}>
                 {categoryFilter === "portions"
                   ? "Glass & Carafe"
@@ -1495,19 +1495,19 @@ export default function StoreMasterListScreen() {
                 {
                   id: "fun",
                   label: "Fun Wine",
-                  icon: "lightning-bolt",
+                  emoji: "😁",
                   color: "#d97706",
                 },
                 {
                   id: "fine",
                   label: "Fine Wine",
-                  icon: "star",
+                  emoji: "💎",
                   color: "#be185d",
                 },
                 {
                   id: "reserve",
                   label: "Reserve Wine",
-                  icon: "ghost",
+                  emoji: "👻",
                   color: "#4338ca",
                 },
                 {
@@ -1528,13 +1528,15 @@ export default function StoreMasterListScreen() {
                     isCatActive && styles.categoryChipActive,
                   ]}
                 >
-                  {cat.icon && (
+                  {"emoji" in cat && (cat as any).emoji ? (
+                    <Text style={{ fontSize: 13, marginRight: 4 }}>{(cat as any).emoji}</Text>
+                  ) : "icon" in cat && (cat as any).icon ? (
                     <MaterialCommunityIcons
-                      name={cat.icon as any}
+                      name={(cat as any).icon}
                       size={14}
                       color={isCatActive ? "#ffffff" : (cat as any).color || theme.textSecondary}
                     />
-                  )}
+                  ) : null}
                   <Text
                     style={[
                       styles.categoryChipText,
@@ -1714,20 +1716,20 @@ export default function StoreMasterListScreen() {
                 styles.sheet,
                 isWide
                   ? {
-                      borderRadius: 24,
-                      maxWidth: 580,
-                      width: "100%",
-                      maxHeight: "90%",
-                      alignSelf: "center",
-                    }
+                    borderRadius: 24,
+                    maxWidth: 580,
+                    width: "100%",
+                    maxHeight: "90%",
+                    alignSelf: "center",
+                  }
                   : {
-                      borderTopLeftRadius: 28,
-                      borderTopRightRadius: 28,
-                      maxWidth: 540,
-                      width: "100%",
-                      alignSelf: "center",
-                      maxHeight: "94%",
-                    },
+                    borderTopLeftRadius: 28,
+                    borderTopRightRadius: 28,
+                    maxWidth: 540,
+                    width: "100%",
+                    alignSelf: "center",
+                    maxHeight: "94%",
+                  },
               ]}
             >
               <View style={styles.sheetHandle} />
@@ -2199,7 +2201,7 @@ export default function StoreMasterListScreen() {
                     }}
                   >
                     {selected.activeRequest.status === "outbound" ||
-                    selected.activeRequest.status === "converted" ? (
+                      selected.activeRequest.status === "converted" ? (
                       <Truck size={16} color={theme.primary} strokeWidth={2.5} />
                     ) : selected.activeRequest.status === "receiving" ? (
                       <CheckCircle2 size={16} color={theme.primary} strokeWidth={2.5} />

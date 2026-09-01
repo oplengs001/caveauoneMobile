@@ -140,6 +140,27 @@ const normalizeWineType = (rawType?: string | null, wineName?: string | null): s
   return rawType || "Red Wine";
 };
 
+// Category Tier Emojis (Fun: 😁, Fine: 💎, Reserve: 👻)
+export const getCategoryEmoji = (category?: string | null): string | null => {
+  if (!category) return null;
+  const c = category.toLowerCase();
+  if (c === "fun" || c === "fast") return "😁";
+  if (c === "fine") return "💎";
+  if (c === "reserve") return "👻";
+  return null;
+};
+
+// Formats user display name cleanly from displayName or email (e.g. "carlos.mendoza.kong" -> "Carlos Mendoza")
+export const formatStaffDisplayName = (st?: AppUser | null): string => {
+  if (!st) return "Staff Member";
+  if (st.displayName && st.displayName.trim().length > 0) return st.displayName;
+  const raw = (st.email || "").split("@")[0] || "Staff";
+  const cleaned = raw.replace(/\.(kong|crosta)$/i, "");
+  return cleaned
+    .replace(/[._-]/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+};
+
 // Maroon color palette constants
 const MAROON = {
   primary: "#4c0519", // Deep Burgundy / Maroon
@@ -358,7 +379,7 @@ export default function StoreStaffPOSTerminal() {
       ]);
 
       if (storeId) {
-        prefetchCustomers(storeId).catch(() => {});
+        prefetchCustomers(storeId).catch(() => { });
       }
 
       const locs: any[] = Array.isArray(locationsData)
@@ -521,7 +542,7 @@ export default function StoreStaffPOSTerminal() {
       const q = staffSearchQuery.toLowerCase();
       list = staffList.filter(
         (s) =>
-          (s.displayName && s.displayName.toLowerCase().includes(q)) ||
+          formatStaffDisplayName(s).toLowerCase().includes(q) ||
           (s.email && s.email.toLowerCase().includes(q)) ||
           (s.role && s.role.toLowerCase().includes(q))
       );
@@ -533,8 +554,8 @@ export default function StoreStaffPOSTerminal() {
       const isRecentB = recentStaffIds.includes(b.id);
       if (isRecentA && !isRecentB) return -1;
       if (isRecentB && !isRecentA) return 1;
-      const nameA = a.displayName || a.email || "";
-      const nameB = b.displayName || b.email || "";
+      const nameA = formatStaffDisplayName(a);
+      const nameB = formatStaffDisplayName(b);
       return nameA.localeCompare(nameB);
     });
   }, [staffList, staffSearchQuery, selectedStaff, recentStaffIds]);
@@ -1121,7 +1142,7 @@ export default function StoreStaffPOSTerminal() {
       });
 
       if (selectedCustomer?.id) {
-        recordCustomerSaleInCache(selectedCustomer.id, totalAmount, storeId).catch(() => {});
+        recordCustomerSaleInCache(selectedCustomer.id, totalAmount, storeId).catch(() => { });
       }
 
       setSelectedCustomer(null);
@@ -1179,7 +1200,7 @@ export default function StoreStaffPOSTerminal() {
                             glassesRemaining: b.glassesRemaining,
                             ...(b.locationId ? { locationId: b.locationId } : {}),
                           }),
-                        }).catch(() => {});
+                        }).catch(() => { });
                       })
                     );
                   }
@@ -1195,7 +1216,7 @@ export default function StoreStaffPOSTerminal() {
                   successData.customerId,
                   -successData.totalAmount,
                   storeId
-                ).catch(() => {});
+                ).catch(() => { });
               }
 
               setSuccessData(null);
@@ -1382,13 +1403,13 @@ export default function StoreStaffPOSTerminal() {
           <View style={styles.staffHeaderLeft}>
             <View style={styles.staffHeaderAvatar}>
               <Text style={styles.staffHeaderAvatarText}>
-                {(selectedStaff?.displayName || selectedStaff?.email || "S")[0].toUpperCase()}
+                {formatStaffDisplayName(selectedStaff)[0]?.toUpperCase() || "S"}
               </Text>
             </View>
             <View style={{ flex: 1 }}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                 <Text style={styles.staffHeaderName} numberOfLines={1}>
-                  {selectedStaff?.displayName || selectedStaff?.email?.split("@")[0] || "Staff Member"}
+                  {formatStaffDisplayName(selectedStaff)}
                 </Text>
                 <View style={styles.activeServerPill}>
                   <View style={styles.activeServerDot} />
@@ -1457,8 +1478,8 @@ export default function StoreStaffPOSTerminal() {
                 <View style={styles.staffAccordionListWrap}>
                   {filteredStaffList.map((st) => {
                     const isSelected = selectedStaff?.id === st.id;
-                    const name = st.displayName || st.email?.split("@")[0] || "Staff";
-                    const initial = name[0].toUpperCase();
+                    const name = formatStaffDisplayName(st);
+                    const initial = name[0]?.toUpperCase() || "S";
                     const isRecent = recentStaffIds.includes(st.id);
 
                     return (
@@ -1738,7 +1759,7 @@ export default function StoreStaffPOSTerminal() {
               <View style={styles.portraitStaffRow}>
                 <View style={styles.onlineDot} />
                 <Text style={styles.portraitStaffName}>
-                  {selectedStaff?.displayName || profile?.email?.split("@")[0] || "Staff"} · On Duty
+                  {formatStaffDisplayName(selectedStaff)} · On Duty
                 </Text>
               </View>
             </View>
@@ -1986,13 +2007,13 @@ export default function StoreStaffPOSTerminal() {
             )}
           </View>
 
-          {/* ── WINE CATEGORY TIER FILTER (Fun vs Fine vs Reserve) ─── */}
+          {/* ── WINE CATEGORY TIER FILTER (Fun: 😁 vs Fine: 💎 vs Reserve: 👻) ─── */}
           <View style={styles.tierFilterContainer}>
             {([
-              { key: "all", label: "All Wines", icon: "view-grid-outline" as const },
-              { key: "fun", label: "Fun Wine", icon: "party-popper" as const },
-              { key: "fine", label: "Fine Wine", icon: "diamond-stone" as const },
-              ...(isManager ? [{ key: "reserve", label: "Reserve", icon: "ghost" as const }] : []),
+              { key: "all", label: "All Wines", emoji: null },
+              { key: "fun", label: "Fun Wine", emoji: "😁" },
+              { key: "fine", label: "Fine Wine", emoji: "💎" },
+              ...(isManager ? [{ key: "reserve", label: "Reserve", emoji: "👻" }] : []),
             ] as const).map((tier) => {
               const count = tierCounts[tier.key] ?? 0;
               const isActive = tierFilter === tier.key;
@@ -2007,11 +2028,7 @@ export default function StoreStaffPOSTerminal() {
                   ]}
                   activeOpacity={0.8}
                 >
-                  <MaterialCommunityIcons
-                    name={tier.icon}
-                    size={16}
-                    color={isActive ? "#ffffff" : MAROON.primary}
-                  />
+                  {tier.emoji && <Text style={styles.tierFilterEmoji}>{tier.emoji}</Text>}
                   <Text
                     style={[
                       styles.tierFilterText,
@@ -2040,9 +2057,7 @@ export default function StoreStaffPOSTerminal() {
             })}
           </View>
 
-
-
-          {/* ── WINE TYPE CATEGORY PILLS (Full Width) ──────────────────────── */}
+          {/* ── WINE TYPE PILLS (Full Width - Clean No Icons) ─────────────── */}
           <View style={styles.wineTypeFilterContainer}>
             {([
               { key: "all", label: "All", color: "#18181b", defaultBg: "#f4f4f5", activeBg: "#18181b", activeText: "#ffffff" },
@@ -2239,10 +2254,10 @@ export default function StoreStaffPOSTerminal() {
                               </Text>
                             </View>
 
-                            {/* Fixed Lower Right Ghost Icon for Reserve Wine */}
+                            {/* Fixed Lower Right Ghost Emoji Badge for Reserve Wine */}
                             {item.wineCategory === "reserve" && (
                               <View style={styles.cardReserveGhostBadge} pointerEvents="none">
-                                <MaterialCommunityIcons name="ghost" size={14} color="#4338ca" />
+                                <Text style={styles.cardReserveGhostText}>👻</Text>
                               </View>
                             )}
                           </TouchableOpacity>
@@ -3186,6 +3201,10 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 4,
+  },
+  tierFilterEmoji: {
+    fontSize: 14,
+    marginRight: 4,
   },
   tierFilterText: {
     fontSize: 12,
@@ -4730,17 +4749,12 @@ const styles = StyleSheet.create({
   },
   cardReserveGhostBadge: {
     position: "absolute",
-    bottom: 8,
-    right: 8,
-    backgroundColor: "#e0e7ff",
-    borderRadius: 8,
-    padding: 4,
+    bottom: 6,
+    right: 6,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#4338ca",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.15,
-    shadowRadius: 2,
-    elevation: 2,
+  },
+  cardReserveGhostText: {
+    fontSize: 16,
   },
 });
