@@ -119,8 +119,8 @@ export default function TaggingScreen() {
     "sold" | "received" | "tagged" | null
   >(null);
 
-  // Fast-moving flag — drives whether we pre-populate the price
-  const [wineCategory, setWineCategory] = useState<"fast" | "fine" | "reserve" | null>(null);
+  // Fun wine flag — drives whether we pre-populate the price
+  const [wineCategory, setWineCategory] = useState<"fun" | "fine" | "reserve" | null>(null);
   const [storeVatMode, setStoreVatMode] = useState<"excluded" | "included">("excluded");
 
   // Add Location Modal State
@@ -1108,7 +1108,7 @@ export default function TaggingScreen() {
                   ? `BULK TAGGING (${bulkBottleIds?.length} BOTTLES)`
                   : `BOTTLE ID: ${bottle?.id.toUpperCase()}`}
               </Text>
-              {wineCategory === "fast" && mode === "sell" && (
+              {wineCategory === "fun" && mode === "sell" && (
                 <View
                   style={[
                     styles.fastMovingChip,
@@ -1116,7 +1116,7 @@ export default function TaggingScreen() {
                   ]}
                 >
                   <Zap size={10} color="#f59e0b" />
-                  <Text style={styles.fastMovingChipText}>FAST MOVING</Text>
+                  <Text style={styles.fastMovingChipText}>FUN WINE</Text>
                 </View>
               )}
             </View>
@@ -1314,7 +1314,7 @@ export default function TaggingScreen() {
                       Sale Price
                     </Text>
                     <View style={{ flex: 1 }} />
-                    {wineCategory === "fast" ? (
+                    {wineCategory === "fun" ? (
                       <Text
                         style={[styles.autoFilledHint, { color: "#f59e0b" }]}
                       >
@@ -1394,7 +1394,7 @@ export default function TaggingScreen() {
                     <Text style={{ color: "#ef4444", fontSize: 12, fontWeight: "600", marginTop: 8, paddingHorizontal: 4 }}>
                       {priceError}
                     </Text>
-                  ) : wineCategory !== "fast" ? (
+                  ) : wineCategory !== "fun" ? (
                     <Text
                       style={[styles.priceHint, { color: theme.textSecondary }]}
                     >
@@ -1407,7 +1407,7 @@ export default function TaggingScreen() {
                 <VatBreakdownCard
                   basePrice={salePrice}
                   theme={theme}
-                  isFastMoving={wineCategory === "fast"}
+                  isFastMoving={wineCategory === "fun"}
                   vatMode={storeVatMode}
                 />
 

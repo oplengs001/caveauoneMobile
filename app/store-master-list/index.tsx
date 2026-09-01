@@ -2,27 +2,33 @@ import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { apiFetch } from "@/lib/api";
 import { MasterWine, StockStatus, StoreWineSetting } from "@/types";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import {
   AlertTriangle,
+  ArrowUpDown,
   BarChart3,
   Check,
   CheckCircle2,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Clock,
+  LayoutGrid,
+  LayoutList,
   Lock,
+  Minus,
   Package,
+  Plus,
   RefreshCw,
   Search,
+  SlidersHorizontal,
   Star,
   TrendingDown,
   TrendingUp,
   Truck,
   Wine,
   X,
-  Zap
+  Zap,
 } from "lucide-react-native";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -30,6 +36,7 @@ import {
   Alert,
   FlatList,
   Modal,
+  Platform,
   RefreshControl,
   SafeAreaView,
   ScrollView,
@@ -53,6 +60,26 @@ interface WineEntry {
   requestedQty: number;
   activeRequest?: { id: string; status: string };
 }
+
+type FilterType =
+  | "all"
+  | "needs_reorder"
+  | "stockout"
+  | "par_alert"
+  | "under_safety"
+  | "optimal"
+  | "overstock"
+  | "discontinued";
+
+type CategoryFilterType =
+  | "all"
+  | "fun"
+  | "fine"
+  | "reserve"
+  | "standard"
+  | "portions"
+  | "bottle_only";
+type SortOption = "urgency" | "stock_asc" | "stock_desc" | "name_asc" | "price_desc";
 
 function computeStatus(
   stockCount: number,
@@ -87,7 +114,7 @@ function computeStatus(
 
 const STATUS_CONFIG: Record<
   StockStatus,
-  { label: string; color: string; bg: string; accent: string }
+  { label: string; color: string; bg: string; accent: string; icon?: any }
 > = {
   in_stock: {
     label: "Optimal",
@@ -119,7 +146,12 @@ const STATUS_CONFIG: Record<
     bg: "#fefce8",
     accent: "#eab308",
   },
-  unset: { label: "Unset", color: "#475569", bg: "#e2e8f0", accent: "#94a3b8" },
+  unset: {
+    label: "Unset",
+    color: "#475569",
+    bg: "#e2e8f0",
+    accent: "#94a3b8",
+  },
   discontinued: {
     label: "Discontinued",
     color: "#475569",
@@ -136,64 +168,41 @@ export default function StoreMasterListScreen() {
   const [entries, setEntries] = useState<WineEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Filters & Controls
   const { filter: initialFilter } = useLocalSearchParams<{
-    filter:
-    | "all"
-    | "under_safety"
-    | "stockout"
-    | "overstock"
-    | "optimal"
-    | "discontinued";
+    filter: FilterType;
   }>();
-  const [filter, setFilter] = useState<
-    "all" | "under_safety" | "stockout" | "overstock" | "optimal" | "discontinued"
-  >(initialFilter || "all");
+  const [filter, setFilter] = useState<FilterType>(initialFilter || "all");
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilterType>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState<SortOption>("urgency");
+  const [viewMode, setViewMode] = useState<"compact" | "detailed">("compact");
+  const [isSortModalOpen, setIsSortModalOpen] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
 
-  const [isWineFilterModalOpen, setIsWineFilterModalOpen] = useState(false);
-  const [masterWinesList, setMasterWinesList] = useState<MasterWine[]>([]);
-  const [selectedWineFilter, setSelectedWineFilter] =
-    useState<MasterWine | null>(null);
-  const [wineSearchTerm, setWineSearchTerm] = useState("");
+  const activeFiltersCount =
+    (filter !== "all" ? 1 : 0) + (categoryFilter !== "all" ? 1 : 0);
 
+  // Setting Sheet
   const [selected, setSelected] = useState<WineEntry | null>(null);
   const [sheetPar, setSheetPar] = useState("");
   const [sheetSafety, setSheetSafety] = useState("");
   const [sheetSellingPrice, setSheetSellingPrice] = useState("");
   const [sheetGlassPrice, setSheetGlassPrice] = useState("");
   const [sheetCarafePrice, setSheetCarafePrice] = useState("");
+  const [sheetAllowGlass, setSheetAllowGlass] = useState(false);
+  const [sheetAllowCarafe, setSheetAllowCarafe] = useState(false);
   const [sheetDiscontinued, setSheetDiscontinued] = useState(false);
-  const [sheetWineCategory, setSheetWineCategory] = useState<"fast" | "fine" | "reserve" | "none">("none");
+  const [sheetWineCategory, setSheetWineCategory] = useState<"fun" | "fine" | "reserve" | "none">("none");
   const [sheetVatMode, setSheetVatMode] = useState<"included" | "excluded">("excluded");
+
+  // Action states
   const [saving, setSaving] = useState(false);
   const [requesting, setRequesting] = useState(false);
   const [isBatchConfirmVisible, setIsBatchConfirmVisible] = useState(false);
   const [batchRequesting, setBatchRequesting] = useState(false);
   const [isSuccessVisible, setIsSuccessVisible] = useState(false);
-
-  useEffect(() => {
-    const fetchMasterWines = async () => {
-      try {
-        const data = await apiFetch("/wines");
-        const wines: MasterWine[] = data.wines || data;
-        setMasterWinesList(wines);
-      } catch (err) {
-        console.error("Failed to fetch master wines:", err);
-      }
-    };
-    fetchMasterWines();
-  }, []);
-
-  const filteredMasterWines = useMemo(() => {
-    const q = wineSearchTerm.toLowerCase();
-    return masterWinesList
-      .filter(
-        (w) =>
-          w.name?.toLowerCase().includes(q) ||
-          w.producer?.toLowerCase().includes(q) ||
-          w.sku?.toLowerCase().includes(q),
-      )
-      .slice(0, 30);
-  }, [masterWinesList, wineSearchTerm]);
 
   const fetchData = useCallback(async () => {
     if (authLoading) return;
@@ -218,7 +227,9 @@ export default function StoreMasterListScreen() {
         return [];
       });
 
-      const fetchPendingRequests = apiFetch(`/wine-requests?storeId=${storeId}&status=pending,converted,outbound,receiving`).catch((err) => {
+      const fetchPendingRequests = apiFetch(
+        `/wine-requests?storeId=${storeId}&status=pending,converted,outbound,receiving`
+      ).catch((err) => {
         console.error("Error fetching pending requests:", err);
         return [];
       });
@@ -270,10 +281,7 @@ export default function StoreMasterListScreen() {
         masterWinesMap.set(w.id, w as MasterWine);
       });
 
-      const pendingWineRequestMap = new Map<
-        string,
-        { id: string; status: string }
-      >();
+      const pendingWineRequestMap = new Map<string, { id: string; status: string }>();
       pendingRequestsList.forEach((request: any) => {
         request.items?.forEach((item: { masterWineId: string }) => {
           if (item.masterWineId) {
@@ -317,19 +325,9 @@ export default function StoreMasterListScreen() {
         };
       });
 
-      const order: StockStatus[] = [
-        "stockout",
-        "par_alert",
-        "under_safety",
-        "in_stock",
-        "overstock",
-        "unset",
-        "discontinued",
-      ];
       const validResults = results.filter(
         (entry) => !(entry.stockCount === 0 && entry.status === "unset")
       );
-      validResults.sort((a, b) => order.indexOf(a.status) - order.indexOf(b.status));
       setEntries(validResults);
     } catch (err: any) {
       console.error("MasterList fetch error:", err);
@@ -349,6 +347,175 @@ export default function StoreMasterListScreen() {
     fetchData();
   };
 
+  // High-Level KPI Summary Calculations
+  const metrics = useMemo(() => {
+    let totalPhysicalBottles = 0;
+    let totalFullBottles = 0;
+    let totalOpenGlasses = 0;
+    let stockoutCount = 0;
+    let parAlertCount = 0;
+    let underSafetyCount = 0;
+    let optimalCount = 0;
+    let overstockCount = 0;
+    let discontinuedCount = 0;
+    let totalDeficit = 0;
+
+    entries.forEach((e) => {
+      totalPhysicalBottles += e.stockCount;
+      totalFullBottles += e.fullBottlesCount;
+      totalOpenGlasses += e.openGlassesCount;
+      if (e.requestedQty > 0 && !e.setting?.discontinued) {
+        totalDeficit += e.requestedQty;
+      }
+
+      switch (e.status) {
+        case "stockout":
+          stockoutCount++;
+          break;
+        case "par_alert":
+          parAlertCount++;
+          break;
+        case "under_safety":
+          underSafetyCount++;
+          break;
+        case "in_stock":
+          optimalCount++;
+          break;
+        case "overstock":
+          overstockCount++;
+          break;
+        case "discontinued":
+          discontinuedCount++;
+          break;
+      }
+    });
+
+    const needsReorderCount = stockoutCount + parAlertCount + underSafetyCount;
+
+    return {
+      totalWines: entries.length,
+      totalPhysicalBottles: Math.round(totalPhysicalBottles * 10) / 10,
+      totalFullBottles,
+      totalOpenGlasses,
+      needsReorderCount,
+      stockoutCount,
+      parAlertCount,
+      underSafetyCount,
+      optimalCount,
+      overstockCount,
+      discontinuedCount,
+      totalDeficit,
+    };
+  }, [entries]);
+
+  // Filtering & Searching & Sorting
+  const filteredAndSortedEntries = useMemo(() => {
+    let result = entries.filter((e) => {
+      // 1. Status Filter
+      if (filter === "needs_reorder") {
+        if (
+          e.status !== "stockout" &&
+          e.status !== "par_alert" &&
+          e.status !== "under_safety"
+        ) {
+          return false;
+        }
+      } else if (filter === "stockout") {
+        if (e.status !== "stockout") return false;
+      } else if (filter === "par_alert") {
+        if (e.status !== "par_alert") return false;
+      } else if (filter === "under_safety") {
+        if (e.status !== "under_safety") return false;
+      } else if (filter === "optimal") {
+        if (e.status !== "in_stock") return false;
+      } else if (filter === "overstock") {
+        if (e.status !== "overstock") return false;
+      } else if (filter === "discontinued") {
+        if (e.status !== "discontinued") return false;
+      }
+
+      // 2. Wine Category & Serving Mode Filter
+      if (categoryFilter !== "all") {
+        const isPortion =
+          Boolean(e.setting?.allowGlass || e.setting?.allowCarafe) ||
+          (e.setting?.glassPrice != null && Number(e.setting.glassPrice) > 0) ||
+          (e.setting?.carafePrice != null && Number(e.setting.carafePrice) > 0);
+
+        if (categoryFilter === "portions") {
+          if (!isPortion) return false;
+        } else if (categoryFilter === "bottle_only") {
+          if (isPortion) return false;
+        } else if (categoryFilter === "standard") {
+          const cat = e.setting?.wineCategory ?? e.masterWine?.wineCategory ?? "standard";
+          if (cat && cat !== "standard" && cat !== null) return false;
+        } else {
+          const cat = e.setting?.wineCategory ?? e.masterWine?.wineCategory ?? "standard";
+          if (cat !== categoryFilter) return false;
+        }
+      }
+
+      // 3. Search Query
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const matchesName = e.masterWine.name?.toLowerCase().includes(q);
+        const matchesProducer = e.masterWine.producer?.toLowerCase().includes(q);
+        const matchesVintage = e.masterWine.vintage?.toLowerCase().includes(q);
+        const matchesSku = e.masterWine.sku?.toLowerCase().includes(q);
+        const matchesRegion = e.masterWine.region?.toLowerCase().includes(q);
+        if (
+          !matchesName &&
+          !matchesProducer &&
+          !matchesVintage &&
+          !matchesSku &&
+          !matchesRegion
+        ) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+
+    // 4. Sorting
+    result.sort((a, b) => {
+      if (sortBy === "urgency") {
+        // High deficit first, then status priority
+        if (b.requestedQty !== a.requestedQty) {
+          return b.requestedQty - a.requestedQty;
+        }
+        const order: StockStatus[] = [
+          "stockout",
+          "par_alert",
+          "under_safety",
+          "in_stock",
+          "overstock",
+          "unset",
+          "discontinued",
+        ];
+        return order.indexOf(a.status) - order.indexOf(b.status);
+      } else if (sortBy === "stock_asc") {
+        return a.stockCount - b.stockCount;
+      } else if (sortBy === "stock_desc") {
+        return b.stockCount - a.stockCount;
+      } else if (sortBy === "name_asc") {
+        return (a.masterWine.name || "").localeCompare(b.masterWine.name || "");
+      } else if (sortBy === "price_desc") {
+        const priceA = a.setting?.sellingPrice ?? a.masterWine.price ?? 0;
+        const priceB = b.setting?.sellingPrice ?? b.masterWine.price ?? 0;
+        return priceB - priceA;
+      }
+      return 0;
+    });
+
+    return result;
+  }, [entries, filter, categoryFilter, searchQuery, sortBy]);
+
+  const itemsToRequest = useMemo(() => {
+    return filteredAndSortedEntries.filter(
+      (entry) => entry.requestedQty > 0 && !entry.setting?.discontinued
+    );
+  }, [filteredAndSortedEntries]);
+
   const openSheet = (entry: WineEntry) => {
     setSelected(entry);
     setSheetPar(entry.setting?.parLevel?.toString() ?? "");
@@ -356,14 +523,21 @@ export default function StoreMasterListScreen() {
     setSheetSellingPrice(entry.setting?.sellingPrice?.toString() ?? "");
     setSheetGlassPrice(entry.setting?.glassPrice?.toString() ?? "");
     setSheetCarafePrice(entry.setting?.carafePrice?.toString() ?? "");
+
+    const allowPortion =
+      Boolean(entry.setting?.allowGlass || entry.setting?.allowCarafe) ||
+      (entry.setting?.glassPrice != null && Number(entry.setting.glassPrice) > 0) ||
+      (entry.setting?.carafePrice != null && Number(entry.setting.carafePrice) > 0);
+    setSheetAllowGlass(allowPortion);
+    setSheetAllowCarafe(allowPortion);
+
     setSheetDiscontinued(entry.setting?.discontinued ?? false);
 
-    let cat: "fast" | "fine" | "reserve" | "none" = "none";
+    let cat: "fun" | "fine" | "reserve" | "none" = "none";
     if (entry.setting?.wineCategory) {
-      cat = entry.setting.wineCategory as "fast" | "fine" | "reserve";
+      cat = entry.setting.wineCategory as "fun" | "fine" | "reserve";
     }
     setSheetWineCategory(cat);
-
     setSheetVatMode(entry.setting?.vatMode ?? "excluded");
   };
 
@@ -376,7 +550,7 @@ export default function StoreMasterListScreen() {
     if (safety < par) {
       Alert.alert(
         "Invalid Settings",
-        "Safety Stock must be greater than or equal to PAR Level.",
+        "Safety Stock must be greater than or equal to PAR Level."
       );
       return;
     }
@@ -390,8 +564,12 @@ export default function StoreMasterListScreen() {
           parLevel: par,
           safetyStock: safety,
           sellingPrice: sheetSellingPrice ? parseFloat(sheetSellingPrice) : null,
-          glassPrice: sheetGlassPrice ? parseFloat(sheetGlassPrice) : null,
-          carafePrice: sheetCarafePrice ? parseFloat(sheetCarafePrice) : null,
+          glassPrice:
+            sheetAllowGlass && sheetGlassPrice ? parseFloat(sheetGlassPrice) : null,
+          carafePrice:
+            sheetAllowCarafe && sheetCarafePrice ? parseFloat(sheetCarafePrice) : null,
+          allowGlass: sheetAllowGlass,
+          allowCarafe: sheetAllowCarafe,
           discontinued: sheetDiscontinued,
           wineCategory: sheetWineCategory === "none" ? null : sheetWineCategory,
           vatMode: sheetVatMode,
@@ -421,7 +599,7 @@ export default function StoreMasterListScreen() {
     if (qty <= 0) return;
 
     Alert.alert(
-      "Submit Request",
+      "Submit Replenishment",
       `Request ${qty} bottles of ${selected.masterWine.name}?`,
       [
         { text: "Cancel", style: "cancel" },
@@ -457,7 +635,7 @@ export default function StoreMasterListScreen() {
               });
               Alert.alert(
                 "Submitted!",
-                `Request for ${qty} bottles has been sent to the warehouse.`,
+                `Request for ${qty} bottles has been sent to warehouse.`
               );
               closeSheet();
               fetchData();
@@ -469,7 +647,7 @@ export default function StoreMasterListScreen() {
             }
           },
         },
-      ],
+      ]
     );
   };
 
@@ -494,7 +672,7 @@ export default function StoreMasterListScreen() {
 
       const totalAmount = requestItems.reduce(
         (sum, item) => sum + item.price * item.qty,
-        0,
+        0
       );
 
       await apiFetch("/wine-requests", {
@@ -523,40 +701,145 @@ export default function StoreMasterListScreen() {
   const handleBatchRequest = () => {
     if (itemsToRequest.length === 0) {
       Alert.alert(
-        "No Items",
-        "There are no items that need replenishment in the current view.",
+        "No Replenishment Needed",
+        "There are no items currently in deficit under this filter."
       );
       return;
     }
     setIsBatchConfirmVisible(true);
   };
 
-  const filtered = entries.filter((e) => {
-    if (selectedWineFilter && e.masterWine.id !== selectedWineFilter.id) {
-      return false;
-    }
-    if (filter === "under_safety") return e.status === "under_safety";
-    if (filter === "stockout") return e.status === "stockout";
-    if (filter === "overstock") return e.status === "overstock";
-    if (filter === "optimal") return e.status === "in_stock";
-    if (filter === "discontinued") return e.status === "discontinued";
-    return true;
-  });
+  // Stepper helper for Par and Safety
+  const stepPar = (delta: number) => {
+    const current = parseInt(sheetPar, 10) || 0;
+    const updated = Math.max(0, current + delta);
+    setSheetPar(updated.toString());
+  };
 
-  const itemsToRequest = filtered.filter(
-    (entry) => entry.requestedQty > 0 && !entry.setting?.discontinued,
-  );
+  const stepSafety = (delta: number) => {
+    const current = parseInt(sheetSafety, 10) || 0;
+    const updated = Math.max(0, current + delta);
+    setSheetSafety(updated.toString());
+  };
 
-  const alertCount = entries.filter(
-    (e) => e.status === "par_alert" || e.status === "stockout",
-  ).length;
-
-  const renderItem = ({ item }: { item: WineEntry }) => {
+  // --- RENDER COMPACT ROW ---
+  const renderCompactItem = ({ item }: { item: WineEntry }) => {
     const cfg = STATUS_CONFIG[item.status];
     const isConfigured = !!item.setting && !item.setting.discontinued;
+    const safetyStock = item.setting?.safetyStock || 0;
+    const category = item.setting?.wineCategory || item.masterWine.wineCategory;
 
+    const isPortion =
+      Boolean(item.setting?.allowGlass || item.setting?.allowCarafe) ||
+      (item.setting?.glassPrice != null && Number(item.setting.glassPrice) > 0) ||
+      (item.setting?.carafePrice != null && Number(item.setting.carafePrice) > 0);
+
+    return (
+      <TouchableOpacity
+        style={[
+          styles.compactRow,
+          item.status === "stockout" && styles.rowStockoutHighlight,
+        ]}
+        onPress={() => openSheet(item)}
+        activeOpacity={0.7}
+      >
+        {/* Left Indicator & Info */}
+        <View style={styles.compactLeft}>
+          <View style={styles.compactTitleRow}>
+            {category === "fun" && (
+              <View style={[styles.miniCatBadge, { backgroundColor: "#fef3c7" }]}>
+                <Zap size={10} color="#d97706" />
+              </View>
+            )}
+            {category === "fine" && (
+              <View style={[styles.miniCatBadge, { backgroundColor: "#fce7f3" }]}>
+                <Star size={10} color="#be185d" />
+              </View>
+            )}
+            {category === "reserve" && (
+              <View style={[styles.miniCatBadge, { backgroundColor: "#e0e7ff" }]}>
+                <Lock size={10} color="#4338ca" />
+              </View>
+            )}
+            <Text style={styles.compactWineName} numberOfLines={1}>
+              {item.masterWine.name}
+            </Text>
+          </View>
+
+          <View style={styles.compactMetaRow}>
+            <Text style={styles.compactMetaText} numberOfLines={1}>
+              {[item.masterWine.vintage, item.masterWine.producer, item.masterWine.format]
+                .filter(Boolean)
+                .join(" · ")}
+            </Text>
+            {isPortion && (
+              <View style={styles.portionTagGlass}>
+                <MaterialCommunityIcons name="glass-wine" size={12} color="#be185d" />
+                <Text style={styles.portionTagTextGlass}>Glass & Carafe</Text>
+              </View>
+            )}
+            {item.setting?.sellingPrice != null && (
+              <Text style={styles.compactPriceText}>
+                ₱
+                {item.setting.sellingPrice.toLocaleString("en-US", {
+                  minimumFractionDigits: 0,
+                  maximumFractionDigits: 2,
+                })}
+              </Text>
+            )}
+          </View>
+        </View>
+
+        {/* Right Stock & Status */}
+        <View style={styles.compactRight}>
+          <View style={styles.compactStockPill}>
+            <Text style={styles.compactStockVal}>
+              {item.stockCount % 1 === 0 ? item.stockCount : item.stockCount.toFixed(2)}
+            </Text>
+            {isConfigured && (
+              <Text style={styles.compactStockTarget}>/{safetyStock}</Text>
+            )}
+          </View>
+
+          <View style={[styles.compactStatusBadge, { backgroundColor: cfg.bg }]}>
+            <View style={[styles.compactStatusDot, { backgroundColor: cfg.accent }]} />
+            <Text style={[styles.compactStatusText, { color: cfg.color }]}>
+              {cfg.label}
+            </Text>
+          </View>
+
+          {item.requestedQty > 0 && (
+            <View style={styles.compactDeficitBadge}>
+              <TrendingDown size={9} color="#ea580c" />
+              <Text style={styles.compactDeficitText}>-{item.requestedQty}</Text>
+            </View>
+          )}
+
+          {item.openGlassesCount > 0 && (
+            <View style={styles.compactGlassBadge}>
+              <MaterialCommunityIcons name="glass-wine" size={10} color="#2563eb" />
+              <Text style={styles.compactGlassText}>{item.openGlassesCount}/6</Text>
+            </View>
+          )}
+        </View>
+
+        <ChevronRight size={16} color={theme.textSecondary} style={{ opacity: 0.5 }} />
+      </TouchableOpacity>
+    );
+  };
+
+  // --- RENDER DETAILED CARD ---
+  const renderDetailedItem = ({ item }: { item: WineEntry }) => {
+    const cfg = STATUS_CONFIG[item.status];
+    const isConfigured = !!item.setting && !item.setting.discontinued;
     const safetyStock = item.setting?.safetyStock || 0;
     const parLevel = item.setting?.parLevel || 0;
+    const category = item.setting?.wineCategory || item.masterWine.wineCategory;
+
+    const isPortion =
+      Boolean(item.setting?.allowGlass || item.setting?.allowCarafe) ||
+      (item.setting?.glassPrice != null && Number(item.setting.glassPrice) > 0) ||
+      (item.setting?.carafePrice != null && Number(item.setting.carafePrice) > 0);
 
     const fillPercentage =
       safetyStock > 0
@@ -571,7 +854,7 @@ export default function StoreMasterListScreen() {
     return (
       <TouchableOpacity
         style={[
-          styles.card,
+          styles.detailedCard,
           {
             borderColor: item.status === "stockout" ? "#fecaca" : theme.border,
           },
@@ -585,9 +868,9 @@ export default function StoreMasterListScreen() {
               {item.masterWine.name}
             </Text>
             <Text style={styles.wineMeta}>
-              {item.masterWine.vintage}
-              {item.masterWine.producer ? ` · ${item.masterWine.producer}` : ""}
-              {item.masterWine.format ? ` · ${item.masterWine.format}` : ""}
+              {[item.masterWine.vintage, item.masterWine.producer, item.masterWine.format]
+                .filter(Boolean)
+                .join(" · ")}
             </Text>
           </View>
           <View style={{ alignItems: "flex-end" }}>
@@ -607,42 +890,52 @@ export default function StoreMasterListScreen() {
           </View>
         </View>
 
-        {item.setting?.wineCategory && (
-          <View style={styles.tagsRow}>
-            {item.setting.wineCategory === "fast" && (
-              <View style={[styles.indicatorBadge, { backgroundColor: "#fef3c7" }]}>
-                <Zap size={10} color="#d97706" strokeWidth={2.5} />
-                <Text style={[styles.indicatorText, { color: "#d97706" }]}>Fast Wine</Text>
-              </View>
-            )}
-            {item.setting.wineCategory === "fine" && (
-              <View style={[styles.indicatorBadge, { backgroundColor: "#fce7f3" }]}>
-                <Star size={10} color="#be185d" strokeWidth={2.5} />
-                <Text style={[styles.indicatorText, { color: "#be185d" }]}>Fine Wine</Text>
-              </View>
-            )}
-            {item.setting.wineCategory === "reserve" && (
-              <View style={[styles.indicatorBadge, { backgroundColor: "#e0e7ff" }]}>
-                <Lock size={10} color="#4338ca" strokeWidth={2.5} />
-                <Text style={[styles.indicatorText, { color: "#4338ca" }]}>Reserved Wine</Text>
-              </View>
-            )}
-          </View>
-        )}
+        <View style={styles.tagsRow}>
+          {category === "fun" && (
+            <View style={[styles.indicatorBadge, { backgroundColor: "#fef3c7" }]}>
+              <Zap size={12} color="#d97706" strokeWidth={2.5} />
+              <Text style={[styles.indicatorText, { color: "#d97706" }]}>Fun Wine</Text>
+            </View>
+          )}
+          {category === "fine" && (
+            <View style={[styles.indicatorBadge, { backgroundColor: "#fce7f3" }]}>
+              <Star size={12} color="#be185d" strokeWidth={2.5} />
+              <Text style={[styles.indicatorText, { color: "#be185d" }]}>Fine Wine</Text>
+            </View>
+          )}
+          {category === "reserve" && (
+            <View style={[styles.indicatorBadge, { backgroundColor: "#e0e7ff" }]}>
+              <Lock size={12} color="#4338ca" strokeWidth={2.5} />
+              <Text style={[styles.indicatorText, { color: "#4338ca" }]}>Reserved Wine</Text>
+            </View>
+          )}
+          {isPortion ? (
+            <View style={[styles.indicatorBadge, { backgroundColor: "#fce7f3", borderColor: "#fbcfe8", borderWidth: 1 }]}>
+              <MaterialCommunityIcons name="glass-wine" size={13} color="#be185d" />
+              <Text style={[styles.indicatorText, { color: "#be185d" }]}>By Glass & Carafe</Text>
+            </View>
+          ) : (
+            <View style={[styles.indicatorBadge, { backgroundColor: "#f1f5f9", borderColor: "#e2e8f0", borderWidth: 1 }]}>
+              <MaterialCommunityIcons name="bottle-wine-outline" size={13} color="#64748b" />
+              <Text style={[styles.indicatorText, { color: "#64748b" }]}>Bottle Only</Text>
+            </View>
+          )}
+        </View>
 
         {isConfigured ? (
           <View style={styles.barContainer}>
             <View style={styles.barStatsRow}>
               <View style={styles.stockHeaderRow}>
-                <Package size={16} color={theme.textSecondary} />
+                <Package size={15} color={theme.textSecondary} />
                 <Text style={styles.stockPrimaryValue}>
                   {item.stockCount % 1 === 0 ? item.stockCount : item.stockCount.toFixed(2)}
                 </Text>
-                <Text style={styles.stockPrimaryLabel}>IN STOCK</Text>
+                <Text style={styles.stockPrimaryLabel}>IN STORE</Text>
                 {item.openGlassesCount > 0 && (
-                  <View style={{ backgroundColor: "#3b82f615", borderColor: "#3b82f640", borderWidth: 1, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, marginLeft: 6 }}>
-                    <Text style={{ fontSize: 10, fontWeight: "700", color: "#2563eb" }}>
-                      🍷 {item.openGlassesCount}/6 glasses open
+                  <View style={styles.openGlassesBadge}>
+                    <MaterialCommunityIcons name="glass-wine" size={11} color="#2563eb" />
+                    <Text style={styles.openGlassesText}>
+                      {item.openGlassesCount}/6 glasses
                     </Text>
                   </View>
                 )}
@@ -651,9 +944,7 @@ export default function StoreMasterListScreen() {
               {item.requestedQty > 0 && (
                 <View style={styles.deficitBadge}>
                   <TrendingDown size={12} color="#ea580c" strokeWidth={2.5} />
-                  <Text style={styles.deficitText}>
-                    {item.requestedQty} DEFICIT
-                  </Text>
+                  <Text style={styles.deficitText}>{item.requestedQty} DEFICIT</Text>
                 </View>
               )}
             </View>
@@ -691,11 +982,11 @@ export default function StoreMasterListScreen() {
             <Text style={styles.stockPrimaryValue}>
               {item.stockCount % 1 === 0 ? item.stockCount : item.stockCount.toFixed(2)}
             </Text>
-            <Text style={styles.stockPrimaryLabel}>IN STOCK (UNSET)</Text>
+            <Text style={styles.stockPrimaryLabel}>IN STORE (UNSET PAR)</Text>
             {item.openGlassesCount > 0 && (
-              <View style={{ backgroundColor: "#3b82f615", borderColor: "#3b82f640", borderWidth: 1, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, marginLeft: 6 }}>
-                <Text style={{ fontSize: 10, fontWeight: "700", color: "#2563eb" }}>
-                  🍷 {item.openGlassesCount}/6 glasses open
+              <View style={styles.openGlassesBadge}>
+                <Text style={styles.openGlassesText}>
+                  🍷 {item.openGlassesCount}/6 glasses
                 </Text>
               </View>
             )}
@@ -722,18 +1013,14 @@ export default function StoreMasterListScreen() {
               {item.activeRequest.status === "pending"
                 ? "Request Pending Approval"
                 : item.activeRequest.status === "converted"
-                  ? "Warehouse is Pulling Out"
+                  ? "Warehouse Pullout in Progress"
                   : item.activeRequest.status === "outbound"
                     ? "Stock is Outbound"
                     : item.activeRequest.status === "receiving"
-                      ? "Ready to Receive"
-                      : "Requested"}
+                      ? "Ready to Ingress / Receive"
+                      : "Active Request"}
             </Text>
-            <ChevronRight
-              size={14}
-              color={cfg.color}
-              style={{ marginLeft: "auto" }}
-            />
+            <ChevronRight size={14} color={cfg.color} style={{ marginLeft: "auto" }} />
           </TouchableOpacity>
         )}
       </TouchableOpacity>
@@ -744,129 +1031,502 @@ export default function StoreMasterListScreen() {
     <SafeAreaView style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
 
+      {/* Top Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <ChevronLeft size={28} color={theme.primary} strokeWidth={2.5} />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>Stock Management</Text>
-          <Text style={styles.subtitle}>{entries.length} wines tracked</Text>
-        </View>
-        <TouchableOpacity onPress={onRefresh} style={styles.refreshBtn}>
-          <RefreshCw size={20} color={theme.primary} strokeWidth={2.5} />
-        </TouchableOpacity>
-      </View>
-
-      {alertCount > 0 && (
-        <View style={styles.alertBanner}>
-          <AlertTriangle size={16} color="#92400e" />
-          <Text style={styles.alertBannerText}>
-            {alertCount} wine{alertCount > 1 ? "s" : ""} require attention
+          <Text style={styles.subtitle}>
+            {entries.length} wines · {metrics.totalPhysicalBottles} bottles in store
           </Text>
         </View>
-      )}
 
-      <View style={{ paddingHorizontal: 20, paddingTop: 12, paddingBottom: 4 }}>
+        {/* View Mode Toggle */}
         <TouchableOpacity
-          style={[
-            styles.wineFilterBtn,
-            {
-              backgroundColor: selectedWineFilter
-                ? theme.primary + "10"
-                : theme.card,
-              borderColor: selectedWineFilter ? theme.primary : theme.border,
-            },
-          ]}
-          onPress={() => setIsWineFilterModalOpen(true)}
+          style={styles.viewModeBtn}
+          onPress={() => setViewMode((v) => (v === "compact" ? "detailed" : "compact"))}
           activeOpacity={0.7}
         >
-          <Wine
-            size={16}
-            color={selectedWineFilter ? theme.primary : theme.textSecondary}
-          />
-          <Text
-            style={[
-              styles.wineFilterBtnText,
-              { color: selectedWineFilter ? theme.primary : theme.text },
-            ]}
-            numberOfLines={1}
-          >
-            {selectedWineFilter
-              ? selectedWineFilter.name
-              : "Filter specific wine..."}
-          </Text>
-          {selectedWineFilter ? (
-            <TouchableOpacity
-              onPress={() => setSelectedWineFilter(null)}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <X size={16} color={theme.primary} />
-            </TouchableOpacity>
+          {viewMode === "compact" ? (
+            <LayoutList size={18} color={theme.primary} />
           ) : (
-            <ChevronDown size={16} color={theme.textSecondary} />
+            <LayoutGrid size={18} color={theme.primary} />
           )}
+          <Text style={styles.viewModeBtnText}>
+            {viewMode === "compact" ? "Compact" : "Cards"}
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity onPress={onRefresh} style={styles.refreshBtn}>
+          <RefreshCw size={18} color={theme.primary} strokeWidth={2.5} />
         </TouchableOpacity>
       </View>
 
-      <View style={styles.filterRow}>
+      {/* AT-A-GLANCE INVENTORY HEALTH DASHBOARD (KPI TILES) */}
+      <View style={styles.kpiContainer}>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ gap: 8 }}
+          contentContainerStyle={styles.kpiScrollContent}
         >
-          {(
-            [
-              "all",
-              "under_safety",
-              "stockout",
-              "overstock",
-              "optimal",
-              "discontinued",
-            ] as const
-          ).map((f) => (
-            <TouchableOpacity
-              key={f}
-              style={[
-                styles.filterChip,
-                filter === f && styles.filterChipActive,
-              ]}
-              onPress={() => setFilter(f)}
-            >
+          {/* Card 1: Total Inventory */}
+          <TouchableOpacity
+            style={[styles.kpiCard, filter === "all" && styles.kpiCardActive]}
+            onPress={() => setFilter("all")}
+            activeOpacity={0.8}
+          >
+            <View style={styles.kpiCardHeader}>
+              <Wine size={16} color={theme.primary} />
+              <Text style={styles.kpiCardLabel}>TOTAL STORE</Text>
+            </View>
+            <Text style={styles.kpiCardValue}>{metrics.totalPhysicalBottles}</Text>
+            <Text style={styles.kpiCardSub}>
+              {metrics.totalWines} wines · {metrics.totalFullBottles} sealed
+            </Text>
+          </TouchableOpacity>
+
+          {/* Card 2: Needs Reorder (Alerts) */}
+          <TouchableOpacity
+            style={[
+              styles.kpiCard,
+              styles.kpiCardAlert,
+              filter === "needs_reorder" && styles.kpiCardAlertActive,
+            ]}
+            onPress={() => setFilter(filter === "needs_reorder" ? "all" : "needs_reorder")}
+            activeOpacity={0.8}
+          >
+            <View style={styles.kpiCardHeader}>
+              <AlertTriangle
+                size={16}
+                color={metrics.needsReorderCount > 0 ? "#ea580c" : theme.textSecondary}
+              />
               <Text
                 style={[
-                  styles.filterChipText,
-                  filter === f && styles.filterChipTextActive,
+                  styles.kpiCardLabel,
+                  metrics.needsReorderCount > 0 && { color: "#c2410c" },
                 ]}
               >
-                {f === "all"
-                  ? "All"
-                  : f === "under_safety"
-                    ? "🛡 Under Safety"
-                    : f === "stockout"
-                      ? "🔴 Stockout"
-                      : f === "overstock"
-                        ? "🔵 Overstock"
-                        : f === "optimal"
-                          ? "🟢 Optimal"
-                          : "🚫 Discontinued"}
+                REORDER NEEDED
               </Text>
-            </TouchableOpacity>
-          ))}
+            </View>
+            <Text
+              style={[
+                styles.kpiCardValue,
+                metrics.needsReorderCount > 0 && { color: "#c2410c" },
+              ]}
+            >
+              {metrics.needsReorderCount}
+            </Text>
+            <Text style={styles.kpiCardSub}>
+              {metrics.totalDeficit > 0
+                ? `${metrics.totalDeficit} bottles deficit`
+                : "All targets met"}
+            </Text>
+          </TouchableOpacity>
+
+          {/* Card 3: Optimal Stock */}
+          <TouchableOpacity
+            style={[styles.kpiCard, filter === "optimal" && styles.kpiCardOptimalActive]}
+            onPress={() => setFilter(filter === "optimal" ? "all" : "optimal")}
+            activeOpacity={0.8}
+          >
+            <View style={styles.kpiCardHeader}>
+              <CheckCircle2 size={16} color="#10b981" />
+              <Text style={[styles.kpiCardLabel, { color: "#047857" }]}>OPTIMAL</Text>
+            </View>
+            <Text style={[styles.kpiCardValue, { color: "#047857" }]}>
+              {metrics.optimalCount}
+            </Text>
+            <Text style={styles.kpiCardSub}>Healthy stock balance</Text>
+          </TouchableOpacity>
+
+          {/* Card 4: Overstock */}
+          <TouchableOpacity
+            style={[styles.kpiCard, filter === "overstock" && styles.kpiCardOverstockActive]}
+            onPress={() => setFilter(filter === "overstock" ? "all" : "overstock")}
+            activeOpacity={0.8}
+          >
+            <View style={styles.kpiCardHeader}>
+              <TrendingUp size={16} color="#3b82f6" />
+              <Text style={[styles.kpiCardLabel, { color: "#1d4ed8" }]}>OVERSTOCK</Text>
+            </View>
+            <Text style={[styles.kpiCardValue, { color: "#1d4ed8" }]}>
+              {metrics.overstockCount}
+            </Text>
+            <Text style={styles.kpiCardSub}>Above safety levels</Text>
+          </TouchableOpacity>
         </ScrollView>
       </View>
 
+      {/* SEARCH, FILTER TOGGLE & SORT TOOLBAR */}
+      <View style={styles.searchAndToolbar}>
+        <View style={styles.searchBox}>
+          <Search size={16} color={theme.textSecondary} style={{ marginRight: 8 }} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search wine, vintage, SKU..."
+            placeholderTextColor={theme.textSecondary}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            clearButtonMode="while-editing"
+          />
+          {searchQuery.length > 0 && Platform.OS !== "ios" && (
+            <TouchableOpacity onPress={() => setSearchQuery("")} style={{ padding: 4 }}>
+              <X size={16} color={theme.textSecondary} />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Hide / Show Filters Toggle Button */}
+        <TouchableOpacity
+          style={[
+            styles.filterToggleButton,
+            (showFilters || activeFiltersCount > 0) && styles.filterToggleButtonActive,
+          ]}
+          onPress={() => setShowFilters(!showFilters)}
+          activeOpacity={0.7}
+        >
+          <SlidersHorizontal
+            size={16}
+            color={
+              showFilters || activeFiltersCount > 0
+                ? theme.primary
+                : theme.textSecondary
+            }
+          />
+          <Text
+            style={[
+              styles.filterToggleButtonText,
+              (showFilters || activeFiltersCount > 0) && {
+                color: theme.primary,
+                fontWeight: "800",
+              },
+            ]}
+          >
+            Filters
+          </Text>
+          {activeFiltersCount > 0 && (
+            <View style={styles.filterCountBadge}>
+              <Text style={styles.filterCountBadgeText}>{activeFiltersCount}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+
+        {/* Sort Button */}
+        <TouchableOpacity
+          style={[styles.sortButton, sortBy !== "urgency" && styles.sortButtonActive]}
+          onPress={() => setIsSortModalOpen(true)}
+          activeOpacity={0.7}
+        >
+          <ArrowUpDown
+            size={16}
+            color={sortBy !== "urgency" ? theme.primary : theme.textSecondary}
+          />
+          <Text
+            style={[
+              styles.sortButtonText,
+              sortBy !== "urgency" && { color: theme.primary, fontWeight: "800" },
+            ]}
+          >
+            {sortBy === "urgency"
+              ? "Sort"
+              : sortBy === "stock_asc"
+                ? "Stock ↑"
+                : sortBy === "stock_desc"
+                  ? "Stock ↓"
+                  : sortBy === "name_asc"
+                    ? "A-Z"
+                    : "Price ↓"}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* COLLAPSED ACTIVE FILTERS BAR (when filters are hidden but active) */}
+      {!showFilters && activeFiltersCount > 0 && (
+        <View style={styles.activeFilterSummaryRow}>
+          <Text style={styles.activeFilterSummaryLabel}>Active:</Text>
+          {filter !== "all" && (
+            <TouchableOpacity
+              style={styles.activeFilterPill}
+              onPress={() => setFilter("all")}
+            >
+              <MaterialCommunityIcons
+                name={
+                  filter === "needs_reorder"
+                    ? "alert-octagon-outline"
+                    : filter === "stockout"
+                      ? "close-circle-outline"
+                      : filter === "par_alert"
+                        ? "lightning-bolt-outline"
+                        : filter === "under_safety"
+                          ? "shield-alert-outline"
+                          : filter === "optimal"
+                            ? "check-circle-outline"
+                            : filter === "overstock"
+                              ? "trending-up"
+                              : "cancel"
+                }
+                size={13}
+                color={theme.primary}
+              />
+              <Text style={styles.activeFilterPillText}>
+                {filter === "needs_reorder"
+                  ? "Reorder"
+                  : filter === "stockout"
+                    ? "Stockout"
+                    : filter === "par_alert"
+                      ? "PAR Alert"
+                      : filter === "under_safety"
+                        ? "Under Safety"
+                        : filter === "optimal"
+                          ? "Optimal"
+                          : filter === "overstock"
+                            ? "Overstock"
+                            : filter === "discontinued"
+                              ? "Discontinued"
+                              : filter}
+              </Text>
+              <X size={12} color={theme.primary} />
+            </TouchableOpacity>
+          )}
+          {categoryFilter !== "all" && (
+            <TouchableOpacity
+              style={styles.activeFilterPill}
+              onPress={() => setCategoryFilter("all")}
+            >
+              <MaterialCommunityIcons
+                name={
+                  categoryFilter === "portions"
+                    ? "glass-wine"
+                    : categoryFilter === "bottle_only"
+                      ? "bottle-wine-outline"
+                      : categoryFilter === "fun"
+                        ? "lightning-bolt"
+                        : categoryFilter === "fine"
+                          ? "star"
+                          : categoryFilter === "reserve"
+                            ? "lock-outline"
+                            : "bottle-wine-outline"
+                }
+                size={13}
+                color={theme.primary}
+              />
+              <Text style={styles.activeFilterPillText}>
+                {categoryFilter === "portions"
+                  ? "Glass & Carafe"
+                  : categoryFilter === "bottle_only"
+                    ? "Bottle Only"
+                    : categoryFilter === "fun"
+                      ? "Fun Wine"
+                      : categoryFilter === "fine"
+                        ? "Fine Wine"
+                        : categoryFilter === "reserve"
+                          ? "Reserve Wine"
+                          : "Standard"}
+              </Text>
+              <X size={12} color={theme.primary} />
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            onPress={() => {
+              setFilter("all");
+              setCategoryFilter("all");
+            }}
+            style={styles.clearAllFiltersBtn}
+          >
+            <Text style={styles.clearAllFiltersText}>Clear</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* EXPANDABLE STATUS & CATEGORY FILTERS STRIP */}
+      {showFilters && (
+        <View style={styles.filtersSection}>
+          <View style={styles.filtersHeaderBar}>
+            <Text style={styles.filtersHeaderTitle}>FILTER BY STATUS & SERVING</Text>
+            <TouchableOpacity onPress={() => setShowFilters(false)}>
+              <Text style={styles.hideFiltersBtnText}>Hide filters ▲</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Status Chips */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filterChipsRow}
+          >
+            {(
+              [
+                { key: "all", label: `All (${entries.length})`, icon: "layers-outline" },
+                {
+                  key: "needs_reorder",
+                  label: `Reorder (${metrics.needsReorderCount})`,
+                  icon: "alert-octagon-outline",
+                  color: "#c2410c",
+                },
+                {
+                  key: "stockout",
+                  label: `Stockout (${metrics.stockoutCount})`,
+                  icon: "close-circle-outline",
+                  color: "#dc2626",
+                },
+                {
+                  key: "par_alert",
+                  label: `PAR Alert (${metrics.parAlertCount})`,
+                  icon: "lightning-bolt-outline",
+                  color: "#d97706",
+                },
+                {
+                  key: "under_safety",
+                  label: `Under Safety (${metrics.underSafetyCount})`,
+                  icon: "shield-alert-outline",
+                  color: "#ca8a04",
+                },
+                {
+                  key: "optimal",
+                  label: `Optimal (${metrics.optimalCount})`,
+                  icon: "check-circle-outline",
+                  color: "#059669",
+                },
+                {
+                  key: "overstock",
+                  label: `Overstock (${metrics.overstockCount})`,
+                  icon: "trending-up",
+                  color: "#2563eb",
+                },
+                {
+                  key: "discontinued",
+                  label: `Discontinued (${metrics.discontinuedCount})`,
+                  icon: "cancel",
+                  color: "#64748b",
+                },
+              ] as { key: FilterType; label: string; icon?: string; color?: string }[]
+            ).map((chip) => {
+              const isActive = filter === chip.key;
+              return (
+                <TouchableOpacity
+                  key={chip.key}
+                  style={[styles.filterChip, isActive && styles.filterChipActive]}
+                  onPress={() => setFilter(chip.key)}
+                >
+                  {chip.icon && (
+                    <MaterialCommunityIcons
+                      name={chip.icon as any}
+                      size={14}
+                      color={isActive ? "#ffffff" : chip.color || theme.textSecondary}
+                    />
+                  )}
+                  <Text
+                    style={[
+                      styles.filterChipText,
+                      isActive && styles.filterChipTextActive,
+                      !isActive && chip.color ? { color: chip.color } : null,
+                    ]}
+                  >
+                    {chip.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+
+          {/* Category & Serving Option Pills */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.categoryChipsRow}
+          >
+            {(
+              [
+                { id: "all", label: "All Servings", icon: "layers-outline" },
+                {
+                  id: "portions",
+                  label: "By Glass & Carafe",
+                  icon: "glass-wine",
+                  color: "#be185d",
+                },
+                {
+                  id: "bottle_only",
+                  label: "Bottle Only",
+                  icon: "bottle-wine-outline",
+                  color: "#64748b",
+                },
+                {
+                  id: "fun",
+                  label: "Fun Wine",
+                  icon: "lightning-bolt",
+                  color: "#d97706",
+                },
+                {
+                  id: "fine",
+                  label: "Fine Wine",
+                  icon: "star",
+                  color: "#be185d",
+                },
+                {
+                  id: "reserve",
+                  label: "Reserve Wine",
+                  icon: "lock-outline",
+                  color: "#4338ca",
+                },
+                {
+                  id: "standard",
+                  label: "Standard",
+                  icon: "bottle-wine-outline",
+                  color: theme.textSecondary,
+                },
+              ] as const
+            ).map((cat) => {
+              const isCatActive = categoryFilter === cat.id;
+              return (
+                <TouchableOpacity
+                  key={cat.id}
+                  onPress={() => setCategoryFilter(cat.id as CategoryFilterType)}
+                  style={[
+                    styles.categoryChip,
+                    isCatActive && styles.categoryChipActive,
+                  ]}
+                >
+                  {cat.icon && (
+                    <MaterialCommunityIcons
+                      name={cat.icon as any}
+                      size={14}
+                      color={isCatActive ? "#ffffff" : (cat as any).color || theme.textSecondary}
+                    />
+                  )}
+                  <Text
+                    style={[
+                      styles.categoryChipText,
+                      isCatActive && styles.categoryChipTextActive,
+                    ]}
+                  >
+                    {cat.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+      )}
+
+      {/* Wine List */}
       {loading ? (
         <ActivityIndicator
           size="large"
           color={theme.primary}
-          style={{ flex: 1 }}
+          style={{ flex: 1, marginTop: 40 }}
         />
       ) : (
         <FlatList
-          data={filtered}
-          renderItem={renderItem}
+          data={filteredAndSortedEntries}
+          renderItem={viewMode === "compact" ? renderCompactItem : renderDetailedItem}
           keyExtractor={(e) => e.masterWine.id}
-          contentContainerStyle={styles.list}
+          contentContainerStyle={[
+            styles.list,
+            itemsToRequest.length > 0 && { paddingBottom: 110 },
+          ]}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -876,17 +1536,31 @@ export default function StoreMasterListScreen() {
           }
           ListEmptyComponent={
             <View style={styles.empty}>
-              <BarChart3 size={56} color={theme.border} strokeWidth={1} />
+              <BarChart3 size={52} color={theme.border} strokeWidth={1.2} />
+              <Text style={styles.emptyTitle}>No matching wines</Text>
               <Text style={styles.emptyText}>
-                {selectedWineFilter
-                  ? "No data found for this wine."
-                  : "No wines found."}
+                {searchQuery
+                  ? `No wines matched "${searchQuery}" under current filters.`
+                  : "No wines found under the selected status/category."}
               </Text>
+              {(searchQuery || filter !== "all" || categoryFilter !== "all") && (
+                <TouchableOpacity
+                  style={styles.resetFilterBtn}
+                  onPress={() => {
+                    setSearchQuery("");
+                    setFilter("all");
+                    setCategoryFilter("all");
+                  }}
+                >
+                  <Text style={styles.resetFilterBtnText}>Reset All Filters</Text>
+                </TouchableOpacity>
+              )}
             </View>
           }
         />
       )}
 
+      {/* FLOATING BATCH REPLENISHMENT BAR */}
       {itemsToRequest.length > 0 && !loading && (
         <View style={styles.batchRequestContainer}>
           <TouchableOpacity
@@ -896,74 +1570,590 @@ export default function StoreMasterListScreen() {
             ]}
             onPress={handleBatchRequest}
             disabled={batchRequesting}
+            activeOpacity={0.85}
           >
             {batchRequesting ? (
               <ActivityIndicator color="#fff" />
             ) : (
               <>
-                <TrendingUp size={20} color="#fff" strokeWidth={2.5} />
+                <View style={styles.batchCountBadge}>
+                  <Text style={styles.batchCountBadgeText}>
+                    {itemsToRequest.length}
+                  </Text>
+                </View>
                 <Text style={styles.batchRequestButtonText}>
-                  REQUEST ALL (
-                  {itemsToRequest.reduce(
-                    (sum, item) => sum + item.requestedQty,
-                    0,
-                  )}{" "}
-                  bottles)
+                  REQUEST REPLENISHMENT (
+                  {itemsToRequest.reduce((sum, item) => sum + item.requestedQty, 0)}{" "}
+                  BOTTLES)
                 </Text>
+                <TrendingUp size={18} color="#fff" strokeWidth={2.5} />
               </>
             )}
           </TouchableOpacity>
         </View>
       )}
 
-      <Modal visible={isSuccessVisible} animationType="fade" transparent>
-        <View style={styles.successOverlay}>
-          <View style={styles.successContainer}>
-            <View
-              style={[
-                styles.successIconContainer,
-                { backgroundColor: theme.primary + "15" },
-              ]}
-            >
-              <CheckCircle2 size={48} color={theme.primary} strokeWidth={1.5} />
+      {/* SORT SELECTION MODAL */}
+      <Modal
+        visible={isSortModalOpen}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setIsSortModalOpen(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setIsSortModalOpen(false)}
+        >
+          <View style={styles.sortModalSheet}>
+            <View style={styles.sheetHandle} />
+            <Text style={styles.sortModalTitle}>Sort Inventory By</Text>
+
+            {(
+              [
+                { id: "urgency", label: "Urgency & Deficit (Highest First)", icon: "alert-octagon-outline" },
+                { id: "stock_asc", label: "Stock Count: Low to High", icon: "trending-down" },
+                { id: "stock_desc", label: "Stock Count: High to Low", icon: "trending-up" },
+                { id: "name_asc", label: "Wine Name (A to Z)", icon: "sort-alphabetical-ascending" },
+                { id: "price_desc", label: "Retail Price: High to Low", icon: "tag-outline" },
+              ] as const
+            ).map((opt) => {
+              const isSelected = sortBy === opt.id;
+              return (
+                <TouchableOpacity
+                  key={opt.id}
+                  style={[styles.sortOptionItem, isSelected && styles.sortOptionSelected]}
+                  onPress={() => {
+                    setSortBy(opt.id);
+                    setIsSortModalOpen(false);
+                  }}
+                >
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1 }}>
+                    <MaterialCommunityIcons
+                      name={opt.icon as any}
+                      size={18}
+                      color={isSelected ? theme.primary : theme.textSecondary}
+                    />
+                    <Text
+                      style={[
+                        styles.sortOptionText,
+                        isSelected && { color: theme.primary, fontWeight: "800" },
+                      ]}
+                    >
+                      {opt.label}
+                    </Text>
+                  </View>
+                  {isSelected && <Check size={18} color={theme.primary} strokeWidth={2.5} />}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* ADJUSTMENT & SETTINGS SHEET MODAL */}
+      <Modal
+        visible={!!selected}
+        animationType="slide"
+        transparent
+        onRequestClose={closeSheet}
+      >
+        <View style={styles.sheetOverlay}>
+          <View style={styles.sheet}>
+            <View style={styles.sheetHandle} />
+
+            <View style={styles.sheetHeader}>
+              <View style={{ flex: 1, paddingRight: 8 }}>
+                <Text style={styles.sheetWineName} numberOfLines={2}>
+                  {selected?.masterWine.name}
+                </Text>
+                <Text style={styles.sheetWineMeta}>
+                  {[
+                    selected?.masterWine.vintage,
+                    selected?.masterWine.producer,
+                    selected?.masterWine.format,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </Text>
+              </View>
+              <TouchableOpacity onPress={closeSheet} style={styles.closeBtn}>
+                <X size={22} color={theme.textSecondary} />
+              </TouchableOpacity>
             </View>
-            <Text style={styles.successTitle}>Request Sent!</Text>
-            <Text style={styles.successMessage}>
-              Your batch request has been sent to the warehouse for processing.
-            </Text>
-            <TouchableOpacity
-              style={[
-                styles.successViewButton,
-                { backgroundColor: theme.primary },
-              ]}
-              onPress={() => {
-                setIsSuccessVisible(false);
-                fetchData();
-                router.push("/wine-requests");
-              }}
-            >
-              <Text style={styles.successViewButtonText}>VIEW REQUESTS</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.successCloseButton}
-              onPress={() => {
-                setIsSuccessVisible(false);
-                fetchData();
-              }}
-            >
-              <Text
-                style={[
-                  styles.successCloseButtonText,
-                  { color: theme.textSecondary },
-                ]}
+
+            {/* Current Stock Banner */}
+            <View style={styles.sheetStockBanner}>
+              <View style={styles.sheetStockInfo}>
+                <Text style={styles.sheetStockVal}>
+                  {selected?.stockCount !== undefined
+                    ? selected.stockCount % 1 === 0
+                      ? selected.stockCount
+                      : selected.stockCount.toFixed(2)
+                    : 0}
+                </Text>
+                <View>
+                  <Text style={styles.sheetStockLabel}>BOTTLES IN STORE</Text>
+                  <Text style={styles.sheetStockSubLabel}>
+                    {selected?.openGlassesCount && selected.openGlassesCount > 0
+                      ? `${selected.fullBottlesCount} sealed + ${selected.openGlassesCount}/6 glass open`
+                      : `${selected?.fullBottlesCount ?? 0} sealed bottles`}
+                  </Text>
+                </View>
+              </View>
+
+              {selected && (
+                <View
+                  style={[
+                    styles.statusBadge,
+                    { backgroundColor: STATUS_CONFIG[selected.status].bg },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.statusText,
+                      { color: STATUS_CONFIG[selected.status].color },
+                    ]}
+                  >
+                    {STATUS_CONFIG[selected.status].label}
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} style={{ flexGrow: 1 }}>
+              {/* --- PAR LEVEL & SAFETY TARGET CARD --- */}
+              <View style={styles.settingsCard}>
+                {/* Par Level */}
+                <View style={styles.settingRow}>
+                  <View style={styles.settingTextContainer}>
+                    <Text style={styles.fieldLabel}>PAR REORDER LEVEL</Text>
+                    <Text style={styles.fieldHint}>
+                      Trigger reorder alert when stock reaches this amount.
+                    </Text>
+                  </View>
+                  <View style={styles.stepperContainer}>
+                    <TouchableOpacity
+                      style={styles.stepperBtn}
+                      onPress={() => stepPar(-1)}
+                    >
+                      <Minus size={16} color={theme.primary} />
+                    </TouchableOpacity>
+                    <TextInput
+                      style={[styles.input, styles.inputStepper]}
+                      value={sheetPar}
+                      onChangeText={setSheetPar}
+                      keyboardType="number-pad"
+                      placeholder="0"
+                      placeholderTextColor="#94a3b8"
+                    />
+                    <TouchableOpacity
+                      style={styles.stepperBtn}
+                      onPress={() => stepPar(1)}
+                    >
+                      <Plus size={16} color={theme.primary} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                <View style={styles.divider} />
+
+                {/* Safety Stock */}
+                <View style={styles.settingRow}>
+                  <View style={styles.settingTextContainer}>
+                    <Text style={styles.fieldLabel}>SAFETY TARGET STOCK</Text>
+                    <Text style={styles.fieldHint}>
+                      Ideal target quantity restored upon replenishment.
+                    </Text>
+                  </View>
+                  <View style={styles.stepperContainer}>
+                    <TouchableOpacity
+                      style={styles.stepperBtn}
+                      onPress={() => stepSafety(-1)}
+                    >
+                      <Minus size={16} color={theme.primary} />
+                    </TouchableOpacity>
+                    <TextInput
+                      style={[styles.input, styles.inputStepper]}
+                      value={sheetSafety}
+                      onChangeText={setSheetSafety}
+                      keyboardType="number-pad"
+                      placeholder="0"
+                      placeholderTextColor="#94a3b8"
+                    />
+                    <TouchableOpacity
+                      style={styles.stepperBtn}
+                      onPress={() => stepSafety(1)}
+                    >
+                      <Plus size={16} color={theme.primary} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+
+              {/* Dynamic Formula Display */}
+              {sheetSafety && (
+                <View style={styles.formulaBox}>
+                  <Text style={styles.formulaLabel}>REPLENISHMENT FORMULA</Text>
+                  <Text style={styles.formulaText}>
+                    Target ({sheetSafety}) − Current (
+                    {selected?.stockCount !== undefined
+                      ? selected.stockCount % 1 === 0
+                        ? selected.stockCount
+                        : selected.stockCount.toFixed(2)
+                      : 0}
+                    ) ={" "}
+                    <Text style={{ color: theme.primary, fontWeight: "900" }}>
+                      {Math.ceil(
+                        Math.max(
+                          0,
+                          parseInt(sheetSafety, 10) - (selected?.stockCount ?? 0)
+                        )
+                      )}{" "}
+                      bottles needed
+                    </Text>
+                  </Text>
+                </View>
+              )}
+
+              {/* --- PORTION SERVING OPTIONS (GLASS & CARAFE) --- */}
+              <View style={[styles.settingsCard, { marginTop: 14 }]}>
+                <View style={{ paddingVertical: 12 }}>
+                  <Text style={styles.fieldLabel}>PORTION SERVING (GLASS & CARAFE)</Text>
+                  <Text style={styles.fieldHint}>
+                    Default: Whole bottle only. Enabling allows both single glass and carafe sales.
+                  </Text>
+
+                  {/* Single Unified Toggle for Glass & Carafe */}
+                  <View style={[styles.portionToggleRow, { marginTop: 10 }]}>
+                    <View style={styles.portionToggleLeft}>
+                      <View
+                        style={[
+                          styles.portionIconBox,
+                          {
+                            backgroundColor: sheetAllowGlass
+                              ? "#fce7f3"
+                              : theme.card,
+                          },
+                        ]}
+                      >
+                        <MaterialCommunityIcons
+                          name="glass-wine"
+                          size={18}
+                          color={sheetAllowGlass ? "#be185d" : theme.textSecondary}
+                        />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={[
+                            styles.portionToggleTitle,
+                            sheetAllowGlass && {
+                              color: "#be185d",
+                              fontWeight: "800",
+                            },
+                          ]}
+                        >
+                          Sellable by the Glass & Carafe
+                        </Text>
+                        <Text style={styles.portionToggleSub}>
+                          Enables 1/6 glass pours and 2/6 decanter carafe sales in POS
+                        </Text>
+                      </View>
+                    </View>
+                    <Switch
+                      value={sheetAllowGlass}
+                      onValueChange={(val) => {
+                        setSheetAllowGlass(val);
+                        setSheetAllowCarafe(val);
+                        if (!val) {
+                          setSheetGlassPrice("");
+                          setSheetCarafePrice("");
+                        }
+                      }}
+                      trackColor={{ false: "#e2e8f0", true: "#f472b6" }}
+                      thumbColor={sheetAllowGlass ? "#be185d" : "#94a3b8"}
+                    />
+                  </View>
+                </View>
+              </View>
+
+              {/* --- RETAIL PRICING & VAT --- */}
+              <View style={[styles.settingsCard, { marginTop: 14 }]}>
+                <View style={{ flexDirection: "column", gap: 12, paddingVertical: 14 }}>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                    }}
+                  >
+                    <View style={styles.settingTextContainer}>
+                      <Text style={styles.fieldLabel}>RETAIL PRICING</Text>
+                      <Text style={styles.fieldHint}>
+                        Set prices for whole bottle, glass (1/6), carafe (2/6).
+                      </Text>
+                    </View>
+                    <View style={styles.vatToggleContainer}>
+                      <TouchableOpacity
+                        onPress={() => setSheetVatMode("excluded")}
+                        style={[
+                          styles.vatPill,
+                          sheetVatMode === "excluded" && styles.vatPillActive,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.vatPillText,
+                            sheetVatMode === "excluded" && styles.vatPillTextActive,
+                          ]}
+                        >
+                          EX VAT
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => setSheetVatMode("included")}
+                        style={[
+                          styles.vatPill,
+                          sheetVatMode === "included" && styles.vatPillActive,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.vatPillText,
+                            sheetVatMode === "included" && styles.vatPillTextActive,
+                          ]}
+                        >
+                          INC VAT
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  {/* Bottle Price */}
+                  <View style={styles.priceRow}>
+                    <View style={styles.priceRowTitleGroup}>
+                      <View style={styles.priceIconBadge}>
+                        <MaterialCommunityIcons
+                          name="bottle-wine-outline"
+                          size={18}
+                          color={theme.primary}
+                        />
+                      </View>
+                      <View>
+                        <Text style={styles.priceRowLabel}>Bottle Retail</Text>
+                        <Text style={styles.priceRowSubLabel}>Full 75cl Bottle</Text>
+                      </View>
+                    </View>
+                    <View style={styles.priceInputContainer}>
+                      <Text style={styles.currencyPrefix}>₱</Text>
+                      <TextInput
+                        style={[styles.input, styles.inputPrice]}
+                        value={sheetSellingPrice}
+                        onChangeText={setSheetSellingPrice}
+                        keyboardType="decimal-pad"
+                        placeholder="0.00"
+                        placeholderTextColor="#94a3b8"
+                      />
+                    </View>
+                  </View>
+
+                  {/* Glass Price (Conditional on sheetAllowGlass) */}
+                  {sheetAllowGlass && (
+                    <View style={styles.priceRow}>
+                      <View style={styles.priceRowTitleGroup}>
+                        <View style={[styles.priceIconBadge, { backgroundColor: "#fce7f3", borderColor: "#fbcfe8" }]}>
+                          <MaterialCommunityIcons
+                            name="glass-wine"
+                            size={18}
+                            color="#be185d"
+                          />
+                        </View>
+                        <View>
+                          <Text style={[styles.priceRowLabel, { color: "#be185d" }]}>Glass Price</Text>
+                          <Text style={styles.priceRowSubLabel}>1/6 Pour Portion</Text>
+                        </View>
+                      </View>
+                      <View style={styles.priceInputContainer}>
+                        <Text style={styles.currencyPrefix}>₱</Text>
+                        <TextInput
+                          style={[styles.input, styles.inputPrice]}
+                          value={sheetGlassPrice}
+                          onChangeText={setSheetGlassPrice}
+                          keyboardType="decimal-pad"
+                          placeholder="0.00"
+                          placeholderTextColor="#94a3b8"
+                        />
+                      </View>
+                    </View>
+                  )}
+
+                  {/* Carafe Price (Conditional on sheetAllowCarafe) */}
+                  {sheetAllowCarafe && (
+                    <View style={styles.priceRow}>
+                      <View style={styles.priceRowTitleGroup}>
+                        <View style={[styles.priceIconBadge, { backgroundColor: "#e0f2fe", borderColor: "#bae6fd" }]}>
+                          <MaterialCommunityIcons
+                            name="cup-water"
+                            size={18}
+                            color="#0284c7"
+                          />
+                        </View>
+                        <View>
+                          <Text style={[styles.priceRowLabel, { color: "#0284c7" }]}>Carafe Price</Text>
+                          <Text style={styles.priceRowSubLabel}>2/6 Decanter Portion</Text>
+                        </View>
+                      </View>
+                      <View style={styles.priceInputContainer}>
+                        <Text style={styles.currencyPrefix}>₱</Text>
+                        <TextInput
+                          style={[styles.input, styles.inputPrice]}
+                          value={sheetCarafePrice}
+                          onChangeText={setSheetCarafePrice}
+                          keyboardType="decimal-pad"
+                          placeholder="0.00"
+                          placeholderTextColor="#94a3b8"
+                        />
+                      </View>
+                    </View>
+                  )}
+                </View>
+              </View>
+
+              {/* --- CATEGORY & DISCONTINUED --- */}
+              <View style={[styles.settingsCard, { marginTop: 14 }]}>
+                <View style={[styles.settingRow, { alignItems: "flex-start", paddingVertical: 14 }]}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.fieldLabel}>WINE CATEGORY</Text>
+                    <Text style={styles.fieldHint}>
+                      Defines menu prominence, promotion, and staff priority.
+                    </Text>
+
+                    <View style={styles.categorySelectorGrid}>
+                      {[
+                        { id: "none", label: "Standard", icon: null, color: theme.textSecondary },
+                        { id: "fun", label: "Fun Wine", icon: Zap, color: "#d97706", bg: "#fef3c7" },
+                        { id: "fine", label: "Fine Wine", icon: Star, color: "#be185d", bg: "#fce7f3" },
+                        { id: "reserve", label: "Reserved Wine", icon: Lock, color: "#4338ca", bg: "#e0e7ff" },
+                      ].map((cat) => {
+                        const isSelected = sheetWineCategory === cat.id;
+                        const Icon = cat.icon;
+                        return (
+                          <TouchableOpacity
+                            key={cat.id}
+                            onPress={() => setSheetWineCategory(cat.id as any)}
+                            style={[
+                              styles.catSelectBtn,
+                              {
+                                borderColor: isSelected ? cat.color : theme.border,
+                                backgroundColor: isSelected
+                                  ? cat.bg || theme.card
+                                  : "transparent",
+                              },
+                            ]}
+                          >
+                            {Icon && (
+                              <Icon
+                                size={14}
+                                color={isSelected ? cat.color : theme.textSecondary}
+                              />
+                            )}
+                            <Text
+                              style={{
+                                fontSize: 12,
+                                fontWeight: isSelected ? "800" : "500",
+                                color: isSelected ? cat.color : theme.textSecondary,
+                              }}
+                            >
+                              {cat.label}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+                </View>
+
+                <View style={styles.divider} />
+
+                {/* Discontinued Switch */}
+                <View style={styles.settingRow}>
+                  <View style={styles.settingTextContainer}>
+                    <Text style={styles.fieldLabel}>DISCONTINUED / INACTIVE</Text>
+                    <Text style={styles.fieldHint}>
+                      Stop reorder alerts and auto-replenishment requests.
+                    </Text>
+                  </View>
+                  <Switch
+                    value={sheetDiscontinued}
+                    onValueChange={setSheetDiscontinued}
+                    trackColor={{ false: "#e2e8f0", true: "#ef444460" }}
+                    thumbColor={sheetDiscontinued ? "#ef4444" : "#94a3b8"}
+                  />
+                </View>
+              </View>
+
+              {/* ACTION BUTTONS */}
+              <TouchableOpacity
+                style={[styles.saveBtn, saving && styles.btnDisabled]}
+                onPress={handleSaveSettings}
+                disabled={saving}
               >
-                CLOSE
-              </Text>
-            </TouchableOpacity>
+                {saving ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.saveBtnText}>SAVE SETTINGS</Text>
+                )}
+              </TouchableOpacity>
+
+              {/* SINGLE WINE REQUEST OR ACTIVE TRACKER */}
+              {selected?.activeRequest ? (
+                <TouchableOpacity
+                  style={styles.requestBtn}
+                  onPress={() => {
+                    closeSheet();
+                    router.push(`/wine-requests/${selected.activeRequest!.id}`);
+                  }}
+                >
+                  {selected.activeRequest.status === "outbound" ||
+                    selected.activeRequest.status === "converted" ? (
+                    <Truck size={18} color={theme.primary} strokeWidth={2.5} />
+                  ) : selected.activeRequest.status === "receiving" ? (
+                    <CheckCircle2 size={18} color={theme.primary} strokeWidth={2.5} />
+                  ) : (
+                    <Clock size={18} color={theme.primary} strokeWidth={2.5} />
+                  )}
+                  <Text style={styles.requestBtnText}>VIEW ACTIVE REQUEST</Text>
+                </TouchableOpacity>
+              ) : (
+                selected &&
+                selected.requestedQty > 0 &&
+                !sheetDiscontinued && (
+                  <TouchableOpacity
+                    style={[styles.requestBtn, requesting && styles.btnDisabled]}
+                    onPress={handleRequestStock}
+                    disabled={requesting}
+                  >
+                    {requesting ? (
+                      <ActivityIndicator color={theme.primary} />
+                    ) : (
+                      <>
+                        <TrendingUp size={18} color={theme.primary} strokeWidth={2.5} />
+                        <Text style={styles.requestBtnText}>
+                          REQUEST {selected.requestedQty} BOTTLES NOW
+                        </Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                )
+              )}
+
+              <View style={{ height: 40 }} />
+            </ScrollView>
           </View>
         </View>
       </Modal>
 
+      {/* BATCH CONFIRMATION MODAL */}
       <Modal
         visible={isBatchConfirmVisible}
         animationType="slide"
@@ -975,14 +2165,11 @@ export default function StoreMasterListScreen() {
             <View style={styles.sheetHandle} />
             <View style={styles.sheetHeader}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.sheetWineName}>Confirm Batch Request</Text>
+                <Text style={styles.sheetWineName}>Confirm Batch Replenishment</Text>
                 <Text style={styles.sheetWineMeta}>
                   Requesting {itemsToRequest.length} wines (
-                  {itemsToRequest.reduce(
-                    (sum, item) => sum + item.requestedQty,
-                    0,
-                  )}{" "}
-                  total bottles)
+                  {itemsToRequest.reduce((sum, item) => sum + item.requestedQty, 0)} total
+                  bottles)
                 </Text>
               </View>
               <TouchableOpacity
@@ -998,38 +2185,27 @@ export default function StoreMasterListScreen() {
               keyExtractor={(item) => item.masterWine.id}
               renderItem={({ item }) => (
                 <View style={styles.confirmItemRow}>
-                  <View
-                    style={[
-                      styles.confirmItemQty,
-                      { backgroundColor: theme.primary + "15" },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.confirmItemQtyText,
-                        { color: theme.primary },
-                      ]}
-                    >
-                      {item.requestedQty}x
+                  <View style={styles.confirmItemQty}>
+                    <Text style={styles.confirmItemQtyText}>
+                      +{item.requestedQty}
                     </Text>
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text
-                      style={[styles.confirmItemName, { color: theme.text }]}
-                      numberOfLines={1}
-                    >
+                    <Text style={styles.confirmItemName} numberOfLines={1}>
                       {item.masterWine.name}
                     </Text>
-                    <Text
-                      style={[
-                        styles.confirmItemMeta,
-                        { color: theme.textSecondary },
-                      ]}
-                    >
-                      {item.masterWine.vintage}
-                      {item.masterWine.format
-                        ? ` · ${item.masterWine.format}`
-                        : ""}
+                    <Text style={styles.confirmItemMeta}>
+                      {[item.masterWine.vintage, item.masterWine.producer, item.masterWine.format]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </Text>
+                  </View>
+                  <View style={{ alignItems: "flex-end" }}>
+                    <Text style={styles.confirmItemStock}>
+                      In Store: {item.stockCount}
+                    </Text>
+                    <Text style={styles.confirmItemTarget}>
+                      Target: {item.setting?.safetyStock}
                     </Text>
                   </View>
                 </View>
@@ -1053,506 +2229,48 @@ export default function StoreMasterListScreen() {
                 onPress={executeBatchRequest}
                 disabled={batchRequesting}
               >
-                <Text style={styles.saveBtnText}>CONFIRM & SUBMIT</Text>
+                <Text style={styles.saveBtnText}>SUBMIT TO WAREHOUSE</Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
 
-      {/* Adjustment Sheet Modal */}
-      <Modal
-        visible={!!selected}
-        animationType="slide"
-        transparent
-        onRequestClose={closeSheet}
-      >
-        <View style={styles.sheetOverlay}>
-          <View style={styles.sheet}>
-            <View style={styles.sheetHandle} />
-
-            <View style={styles.sheetHeader}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.sheetWineName} numberOfLines={2}>
-                  {selected?.masterWine.name}
-                </Text>
-                <Text style={styles.sheetWineMeta}>
-                  {selected?.masterWine.vintage}
-                  {selected?.masterWine.format
-                    ? ` · ${selected.masterWine.format}`
-                    : ""}
-                </Text>
-              </View>
-              <TouchableOpacity onPress={closeSheet} style={styles.closeBtn}>
-                <X size={22} color={theme.textSecondary} />
-              </TouchableOpacity>
+      {/* SUCCESS CONFIRMATION MODAL */}
+      <Modal visible={isSuccessVisible} animationType="fade" transparent>
+        <View style={styles.successOverlay}>
+          <View style={styles.successContainer}>
+            <View style={styles.successIconContainer}>
+              <CheckCircle2 size={48} color={theme.primary} strokeWidth={1.5} />
             </View>
-
-            <View style={styles.stockRow}>
-              <View style={styles.stockPill}>
-                <Text style={styles.stockCount}>
-                  {selected?.stockCount !== undefined ? (selected.stockCount % 1 === 0 ? selected.stockCount : selected.stockCount.toFixed(2)) : 0}
-                </Text>
-                <Text style={styles.stockLabel}>
-                  {selected?.openGlassesCount && selected.openGlassesCount > 0
-                    ? `bottles (${selected.fullBottlesCount} full + ${selected.openGlassesCount}/6 glasses)`
-                    : "bottles in store"}
-                </Text>
-              </View>
-              {selected && (
-                <View
-                  style={[
-                    styles.statusBadge,
-                    { backgroundColor: STATUS_CONFIG[selected.status].bg },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.statusText,
-                      { color: STATUS_CONFIG[selected.status].color },
-                    ]}
-                  >
-                    {STATUS_CONFIG[selected.status].label}
-                  </Text>
-                </View>
-              )}
-            </View>
-
-            <ScrollView showsVerticalScrollIndicator={false}>
-
-              {/* --- SETTINGS LIST: INPUTS --- */}
-              <View style={styles.settingsCard}>
-
-                {/* Par Level */}
-                <View style={styles.settingRow}>
-                  <View style={styles.settingTextContainer}>
-                    <Text style={styles.fieldLabel}>PAR LEVEL</Text>
-                    <Text style={styles.fieldHint}>
-                      When stock reaches this number, a reorder is triggered.
-                    </Text>
-                  </View>
-                  <TextInput
-                    style={[styles.input, styles.inputSmall]}
-                    value={sheetPar}
-                    onChangeText={setSheetPar}
-                    keyboardType="number-pad"
-                    placeholder="0"
-                    placeholderTextColor="#94a3b8"
-                  />
-                </View>
-                <View style={styles.divider} />
-
-                {/* Safety Stock */}
-                <View style={styles.settingRow}>
-                  <View style={styles.settingTextContainer}>
-                    <Text style={styles.fieldLabel}>SAFETY STOCK</Text>
-                    <Text style={styles.fieldHint}>
-                      Target quantity to restore when reordering.
-                    </Text>
-                  </View>
-                  <TextInput
-                    style={[styles.input, styles.inputSmall]}
-                    value={sheetSafety}
-                    onChangeText={setSheetSafety}
-                    keyboardType="number-pad"
-                    placeholder="0"
-                    placeholderTextColor="#94a3b8"
-                  />
-                </View>
-                <View style={styles.divider} />
-
-                {/* Selling Prices (Bottle, Glass, Carafe) */}
-                <View style={[styles.settingRow, { flexDirection: "column", alignItems: "stretch", gap: 12 }]}>
-                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                    <View style={styles.settingTextContainer}>
-                      <Text style={styles.fieldLabel}>PRICING & VAT</Text>
-                      <Text style={styles.fieldHint}>
-                        Set retail prices per bottle, glass (1/6), and carafe (2/6).
-                      </Text>
-                    </View>
-                    <View style={{ flexDirection: "row", backgroundColor: Colors.store.primary + "1A", borderRadius: 8, padding: 2 }}>
-                      <TouchableOpacity
-                        onPress={() => setSheetVatMode("excluded")}
-                        style={{
-                          paddingHorizontal: 10,
-                          paddingVertical: 4,
-                          borderRadius: 6,
-                          backgroundColor: sheetVatMode === "excluded" ? Colors.store.card : "transparent",
-                          shadowColor: sheetVatMode === "excluded" ? "#000" : "transparent",
-                          shadowOffset: { width: 0, height: 1 },
-                          shadowOpacity: 0.1,
-                          shadowRadius: 1,
-                          elevation: sheetVatMode === "excluded" ? 1 : 0,
-                        }}
-                      >
-                        <Text style={{ fontSize: 10, fontWeight: "800", color: sheetVatMode === "excluded" ? Colors.store.primary : Colors.store.primary + "80" }}>EX VAT</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        onPress={() => setSheetVatMode("included")}
-                        style={{
-                          paddingHorizontal: 10,
-                          paddingVertical: 4,
-                          borderRadius: 6,
-                          backgroundColor: sheetVatMode === "included" ? Colors.store.card : "transparent",
-                          shadowColor: sheetVatMode === "included" ? "#000" : "transparent",
-                          shadowOffset: { width: 0, height: 1 },
-                          shadowOpacity: 0.1,
-                          shadowRadius: 1,
-                          elevation: sheetVatMode === "included" ? 1 : 0,
-                        }}
-                      >
-                        <Text style={{ fontSize: 10, fontWeight: "800", color: sheetVatMode === "included" ? Colors.store.primary : Colors.store.primary + "80" }}>INC VAT</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-
-                  {/* Bottle Price */}
-                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                    <Text style={{ fontSize: 13, fontWeight: "600", color: theme.text }}>🍾 Bottle Price</Text>
-                    <View style={styles.priceInputContainer}>
-                      <Text style={styles.currencyPrefix}>₱</Text>
-                      <TextInput
-                        style={[styles.input, styles.inputPrice]}
-                        value={sheetSellingPrice}
-                        onChangeText={setSheetSellingPrice}
-                        keyboardType="decimal-pad"
-                        placeholder="0.00"
-                        placeholderTextColor="#94a3b8"
-                      />
-                    </View>
-                  </View>
-
-                  {/* Glass Price */}
-                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                    <Text style={{ fontSize: 13, fontWeight: "600", color: theme.text }}>🍷 Glass Price (1/6)</Text>
-                    <View style={styles.priceInputContainer}>
-                      <Text style={styles.currencyPrefix}>₱</Text>
-                      <TextInput
-                        style={[styles.input, styles.inputPrice]}
-                        value={sheetGlassPrice}
-                        onChangeText={setSheetGlassPrice}
-                        keyboardType="decimal-pad"
-                        placeholder="0.00"
-                        placeholderTextColor="#94a3b8"
-                      />
-                    </View>
-                  </View>
-
-                  {/* Carafe Price */}
-                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                    <Text style={{ fontSize: 13, fontWeight: "600", color: theme.text }}>🫗 Carafe Price (2/6)</Text>
-                    <View style={styles.priceInputContainer}>
-                      <Text style={styles.currencyPrefix}>₱</Text>
-                      <TextInput
-                        style={[styles.input, styles.inputPrice]}
-                        value={sheetCarafePrice}
-                        onChangeText={setSheetCarafePrice}
-                        keyboardType="decimal-pad"
-                        placeholder="0.00"
-                        placeholderTextColor="#94a3b8"
-                      />
-                    </View>
-                  </View>
-                </View>
-              </View>
-
-              {/* Dynamic Formula Display */}
-              {sheetPar && sheetSafety && (
-                <View style={styles.formulaBox}>
-                  <Text style={styles.formulaLabel}>REQUEST FORMULA</Text>
-                  <Text style={styles.formulaText}>
-                    Safety Stock ({sheetSafety}) − Current (
-                    {selected?.stockCount !== undefined ? (selected.stockCount % 1 === 0 ? selected.stockCount : selected.stockCount.toFixed(2)) : 0}) ={" "}
-                    <Text style={{ color: theme.primary, fontWeight: "900" }}>
-                      {Math.ceil(
-                        Math.max(
-                          0,
-                          parseInt(sheetSafety, 10) - (selected?.stockCount ?? 0),
-                        )
-                      )}{" "}
-                      bottles
-                    </Text>
-                  </Text>
-                </View>
-              )}
-
-              {/* --- SETTINGS LIST: SWITCHES --- */}
-              <View style={[styles.settingsCard, { marginTop: 20 }]}>
-
-                {/* Wine Category Selection */}
-                <View style={[styles.settingRow, { alignItems: "flex-start", paddingVertical: 16 }]}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.fieldLabel}>WINE CATEGORY</Text>
-                    <Text style={styles.fieldHint}>
-                      Classify this wine to affect its prominence and handling.
-                    </Text>
-
-                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
-                      {[
-                        { id: "none", label: "Standard", icon: null, color: theme.textSecondary },
-                        { id: "fast", label: "Fast Wine", icon: Zap, color: "#d97706", bg: "#fef3c7" },
-                        { id: "fine", label: "Fine Wine", icon: Star, color: "#be185d", bg: "#fce7f3" },
-                        { id: "reserve", label: "Reserved Wine", icon: Lock, color: "#4338ca", bg: "#e0e7ff" }
-                      ].map(cat => {
-                        const isSelected = sheetWineCategory === cat.id;
-                        const Icon = cat.icon;
-                        return (
-                          <TouchableOpacity
-                            key={cat.id}
-                            onPress={() => setSheetWineCategory(cat.id as any)}
-                            style={{
-                              flexDirection: "row",
-                              alignItems: "center",
-                              gap: 6,
-                              paddingVertical: 8,
-                              paddingHorizontal: 12,
-                              borderRadius: 16,
-                              borderWidth: 1,
-                              borderColor: isSelected ? cat.color : theme.border,
-                              backgroundColor: isSelected ? (cat.bg || theme.card) : "transparent",
-                            }}
-                          >
-                            {Icon && <Icon size={14} color={isSelected ? cat.color : theme.textSecondary} />}
-                            <Text style={{
-                              fontSize: 12,
-                              fontWeight: isSelected ? "700" : "500",
-                              color: isSelected ? cat.color : theme.textSecondary
-                            }}>
-                              {cat.label}
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-                  </View>
-                </View>
-                <View style={styles.divider} />
-
-                {/* Discontinued */}
-                <View style={styles.settingRow}>
-                  <View style={styles.settingTextContainer}>
-                    <Text style={styles.fieldLabel}>DISCONTINUED</Text>
-                    <Text style={styles.fieldHint}>
-                      No alerts or requests will be generated.
-                    </Text>
-                  </View>
-                  <Switch
-                    value={sheetDiscontinued}
-                    onValueChange={setSheetDiscontinued}
-                    trackColor={{
-                      false: "#e2e8f0",
-                      true: "#ef444460", // Red track for negative action
-                    }}
-                    thumbColor={sheetDiscontinued ? "#ef4444" : "#94a3b8"}
-                  />
-                </View>
-              </View>
-
-              <TouchableOpacity
-                style={[styles.saveBtn, saving && styles.btnDisabled]}
-                onPress={handleSaveSettings}
-                disabled={saving}
-              >
-                {saving ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.saveBtnText}>SAVE SETTINGS</Text>
-                )}
-              </TouchableOpacity>
-
-
-
-              {selected?.activeRequest ? (
-                <TouchableOpacity
-                  style={styles.requestBtn}
-                  onPress={() => {
-                    closeSheet();
-                    router.push(`/wine-requests/${selected.activeRequest!.id}`);
-                  }}
-                >
-                  {selected.activeRequest.status === "outbound" ||
-                    selected.activeRequest.status === "converted" ? (
-                    <Truck size={18} color={theme.primary} strokeWidth={2.5} />
-                  ) : selected.activeRequest.status === "receiving" ? (
-                    <CheckCircle2
-                      size={18}
-                      color={theme.primary}
-                      strokeWidth={2.5}
-                    />
-                  ) : (
-                    <Clock size={18} color={theme.primary} strokeWidth={2.5} />
-                  )}
-                  <Text style={styles.requestBtnText}>VIEW ACTIVE REQUEST</Text>
-                </TouchableOpacity>
-              ) : (
-                selected &&
-                selected.requestedQty > 0 &&
-                !sheetDiscontinued && (
-                  <TouchableOpacity
-                    style={[
-                      styles.requestBtn,
-                      requesting && styles.btnDisabled,
-                    ]}
-                    onPress={handleRequestStock}
-                    disabled={requesting}
-                  >
-                    {requesting ? (
-                      <ActivityIndicator color={theme.primary} />
-                    ) : (
-                      <>
-                        <TrendingUp
-                          size={18}
-                          color={theme.primary}
-                          strokeWidth={2.5}
-                        />
-                        <Text style={styles.requestBtnText}>
-                          REQUEST {selected.requestedQty} BOTTLES
-                        </Text>
-                      </>
-                    )}
-                  </TouchableOpacity>
-                )
-              )}
-
-              <View style={{ height: 40 }} />
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal visible={isWineFilterModalOpen} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View
-            style={[
-              styles.modalContent,
-              { backgroundColor: theme.card, height: "80%" },
-            ]}
-          >
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: theme.text }]}>
-                Select Wine
-              </Text>
-              <TouchableOpacity
-                onPress={() => {
-                  setIsWineFilterModalOpen(false);
-                  setWineSearchTerm("");
-                }}
-              >
-                <X size={24} color={theme.textSecondary} />
-              </TouchableOpacity>
-            </View>
-
-            <View
-              style={[
-                styles.searchWrapper,
-                {
-                  backgroundColor: theme.background,
-                  borderColor: theme.border,
-                  marginBottom: 16,
-                },
-              ]}
+            <Text style={styles.successTitle}>Replenishment Sent!</Text>
+            <Text style={styles.successMessage}>
+              Your stock request has been submitted to the central warehouse. You can
+              track its pulling and delivery in Wine Requests.
+            </Text>
+            <TouchableOpacity
+              style={[styles.successViewButton, { backgroundColor: theme.primary }]}
+              onPress={() => {
+                setIsSuccessVisible(false);
+                fetchData();
+                router.push("/wine-requests");
+              }}
             >
-              <Search
-                size={18}
-                color={theme.textSecondary}
-                style={styles.searchIcon}
-              />
-              <TextInput
-                style={[styles.searchInput, { color: theme.text }]}
-                placeholder="Search catalog..."
-                placeholderTextColor={theme.textSecondary}
-                value={wineSearchTerm}
-                onChangeText={setWineSearchTerm}
-                autoFocus
-                clearButtonMode="while-editing"
-              />
-            </View>
-
-            <FlatList
-              data={filteredMasterWines}
-              keyExtractor={(item) => item.id}
-              showsVerticalScrollIndicator={false}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={[
-                    styles.modalOption,
-                    { borderColor: theme.border, paddingVertical: 10 },
-                    selectedWineFilter?.id === item.id && {
-                      borderColor: theme.primary,
-                      backgroundColor: theme.primary + "10",
-                    },
-                  ]}
-                  onPress={() => {
-                    setSelectedWineFilter(item);
-                    setIsWineFilterModalOpen(false);
-                    setWineSearchTerm("");
-                  }}
-                >
-                  <View
-                    style={{
-                      flex: 1,
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: 10,
-                    }}
-                  >
-                    <View
-                      style={{
-                        width: 40,
-                        height: 40,
-                        borderRadius: 10,
-                        backgroundColor:
-                          selectedWineFilter?.id === item.id
-                            ? theme.primary + "20"
-                            : theme.background,
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                    >
-                      <Wine
-                        size={20}
-                        color={
-                          selectedWineFilter?.id === item.id
-                            ? theme.primary
-                            : theme.textSecondary
-                        }
-                      />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text
-                        style={[styles.modalOptionText, { color: theme.text }]}
-                        numberOfLines={1}
-                      >
-                        {item.name}
-                      </Text>
-                      <Text
-                        style={{
-                          fontSize: 12,
-                          color: theme.textSecondary,
-                          marginTop: 2,
-                          fontWeight: "500",
-                        }}
-                        numberOfLines={1}
-                      >
-                        {[item.vintage, item.producer, item.format]
-                          .filter(Boolean)
-                          .join(" • ")}
-                      </Text>
-                    </View>
-                  </View>
-                  {selectedWineFilter?.id === item.id && (
-                    <Check size={20} color={theme.primary} />
-                  )}
-                </TouchableOpacity>
-              )}
-              ListEmptyComponent={
-                <View style={{ padding: 20, alignItems: "center" }}>
-                  <Text style={{ color: theme.textSecondary, fontSize: 14 }}>
-                    No wines found in catalog.
-                  </Text>
-                </View>
-              }
-            />
+              <Text style={styles.successViewButtonText}>VIEW REQUESTS</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.successCloseButton}
+              onPress={() => {
+                setIsSuccessVisible(false);
+                fetchData();
+              }}
+            >
+              <Text
+                style={[styles.successCloseButtonText, { color: theme.textSecondary }]}
+              >
+                CLOSE
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -1565,75 +2283,276 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     paddingTop: 8,
-    paddingBottom: 16,
+    paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: theme.border,
+    backgroundColor: theme.card,
   },
-  backBtn: { marginRight: 12 },
+  backBtn: { marginRight: 10 },
   refreshBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: 38,
+    height: 38,
+    borderRadius: 10,
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: theme.primary + "10",
     borderWidth: 1,
-    borderColor: theme.primary + "30",
+    borderColor: theme.primary + "25",
+  },
+  viewModeBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 10,
+    backgroundColor: theme.primary + "0C",
+    borderWidth: 1,
+    borderColor: theme.primary + "25",
+    marginRight: 8,
+  },
+  viewModeBtnText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: theme.primary,
   },
   title: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: "900",
     color: theme.text,
-    letterSpacing: -0.5,
+    letterSpacing: -0.4,
   },
   subtitle: {
     fontSize: 12,
     color: theme.textSecondary,
     fontWeight: "600",
+    marginTop: 1,
+  },
+
+  // KPI TILES HEADER
+  kpiContainer: {
+    backgroundColor: theme.card,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.border,
+  },
+  kpiScrollContent: {
+    paddingHorizontal: 16,
+    gap: 10,
+  },
+  kpiCard: {
+    backgroundColor: theme.background,
+    borderRadius: 14,
+    padding: 12,
+    minWidth: 130,
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  kpiCardActive: {
+    borderColor: theme.primary,
+    backgroundColor: theme.primary + "0A",
+  },
+  kpiCardAlert: {
+    backgroundColor: "#fff7ed",
+    borderColor: "#fed7aa",
+  },
+  kpiCardAlertActive: {
+    borderColor: "#ea580c",
+    backgroundColor: "#ffedd5",
+  },
+  kpiCardOptimalActive: {
+    borderColor: "#10b981",
+    backgroundColor: "#ecfdf5",
+  },
+  kpiCardOverstockActive: {
+    borderColor: "#3b82f6",
+    backgroundColor: "#eff6ff",
+  },
+  kpiCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 6,
+  },
+  kpiCardLabel: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: theme.textSecondary,
+    letterSpacing: 0.5,
+  },
+  kpiCardValue: {
+    fontSize: 20,
+    fontWeight: "900",
+    color: theme.text,
+    lineHeight: 22,
+  },
+  kpiCardSub: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: theme.textSecondary,
     marginTop: 2,
   },
 
-  alertBanner: {
+  // SEARCH AND TOOLBAR
+  searchAndToolbar: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    backgroundColor: "#fef3c7",
-    marginHorizontal: 20,
-    marginTop: 12,
     paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#fcd34d",
-  },
-  alertBannerText: { color: "#92400e", fontWeight: "700", fontSize: 13 },
-
-  wineFilterBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderRadius: 14,
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    height: 48,
+    paddingTop: 10,
+    paddingBottom: 6,
     gap: 10,
   },
-  wineFilterBtnText: {
+  searchBox: {
     flex: 1,
-    fontSize: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: theme.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: theme.border,
+    paddingHorizontal: 12,
+    height: 42,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 13,
     fontWeight: "600",
+    color: theme.text,
+  },
+  sortButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: theme.card,
+    borderWidth: 1,
+    borderColor: theme.border,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 42,
+  },
+  sortButtonActive: {
+    borderColor: theme.primary,
+    backgroundColor: theme.primary + "0A",
+  },
+  sortButtonText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: theme.textSecondary,
   },
 
-  filterRow: {
+  filterToggleButton: {
     flexDirection: "row",
-    gap: 8,
-    paddingHorizontal: 20,
-    paddingVertical: 14,
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: theme.card,
+    borderWidth: 1,
+    borderColor: theme.border,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 42,
+  },
+  filterToggleButtonActive: {
+    borderColor: theme.primary,
+    backgroundColor: theme.primary + "0D",
+  },
+  filterToggleButtonText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: theme.textSecondary,
+  },
+  filterCountBadge: {
+    backgroundColor: theme.primary,
+    borderRadius: 9,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    minWidth: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  filterCountBadgeText: {
+    color: "#ffffff",
+    fontSize: 10,
+    fontWeight: "900",
+  },
+  filtersHeaderBar: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    paddingBottom: 2,
+  },
+  filtersHeaderTitle: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: theme.textSecondary,
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+  },
+  hideFiltersBtnText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: theme.primary,
+  },
+  activeFilterSummaryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingTop: 2,
+    paddingBottom: 6,
+    gap: 6,
+    flexWrap: "wrap",
+  },
+  activeFilterSummaryLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: theme.textSecondary,
+  },
+  activeFilterPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: theme.primary + "12",
+    borderColor: theme.primary + "30",
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  activeFilterPillText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: theme.primary,
+  },
+  clearAllFiltersBtn: {
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+  },
+  clearAllFiltersText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: theme.textSecondary,
+    textDecorationLine: "underline",
+  },
+
+  // FILTERS SECTION
+  filtersSection: {
+    paddingBottom: 8,
+  },
+  filterChipsRow: {
+    paddingHorizontal: 16,
+    paddingTop: 6,
+    paddingBottom: 4,
+    gap: 6,
   },
   filterChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
     paddingHorizontal: 14,
-    paddingVertical: 7,
+    paddingVertical: 8,
     borderRadius: 20,
     backgroundColor: theme.card,
     borderWidth: 1,
@@ -1644,31 +2563,266 @@ const styles = StyleSheet.create({
     borderColor: theme.primary,
   },
   filterChipText: {
+    fontSize: 12.5,
+    fontWeight: "800",
+    color: theme.textSecondary,
+  },
+  filterChipTextActive: {
+    color: "#fff",
+  },
+
+  categoryChipsRow: {
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    gap: 8,
+  },
+  categoryChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 12,
+    backgroundColor: theme.card,
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  categoryChipActive: {
+    backgroundColor: theme.text,
+    borderColor: theme.text,
+  },
+  categoryChipText: {
     fontSize: 12,
+    fontWeight: "800",
+    color: theme.textSecondary,
+  },
+  categoryChipTextActive: {
+    color: "#fff",
+  },
+
+  // LIST & EMPTY
+  list: {
+    paddingHorizontal: 16,
+    paddingTop: 6,
+    paddingBottom: 80,
+  },
+  empty: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingTop: 60,
+    paddingHorizontal: 32,
+    gap: 8,
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: theme.text,
+    marginTop: 8,
+  },
+  emptyText: {
+    fontSize: 13,
+    color: theme.textSecondary,
+    textAlign: "center",
+    lineHeight: 18,
+  },
+  resetFilterBtn: {
+    marginTop: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: theme.primary + "12",
+  },
+  resetFilterBtnText: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: theme.primary,
+  },
+
+  // COMPACT ROW STYLES (~70px height)
+  compactRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: theme.card,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: theme.border,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.02,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  rowStockoutHighlight: {
+    borderColor: "#fecaca",
+    backgroundColor: "#fffafa",
+  },
+  compactLeft: {
+    flex: 1,
+    paddingRight: 10,
+  },
+  compactTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  miniCatBadge: {
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  compactWineName: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: theme.text,
+    letterSpacing: -0.1,
+  },
+  compactMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 3,
+  },
+  compactMetaText: {
+    fontSize: 11,
+    color: theme.textSecondary,
+    fontWeight: "500",
+    flexShrink: 1,
+  },
+  compactPriceText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: theme.primary,
+  },
+  compactRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginRight: 6,
+  },
+  compactStockPill: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    backgroundColor: theme.background,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  compactStockVal: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: theme.text,
+  },
+  compactStockTarget: {
+    fontSize: 10,
     fontWeight: "700",
     color: theme.textSecondary,
   },
-  filterChipTextActive: { color: "#fff" },
+  compactStatusBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  compactStatusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  compactStatusText: {
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+  },
+  compactDeficitBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    backgroundColor: "#fff7ed",
+    borderColor: "#ffedd5",
+    borderWidth: 1,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  compactDeficitText: {
+    fontSize: 9.5,
+    fontWeight: "900",
+    color: "#ea580c",
+  },
+  compactGlassBadge: {
+    backgroundColor: "#3b82f612",
+    borderColor: "#3b82f630",
+    borderWidth: 1,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  compactGlassText: {
+    fontSize: 9.5,
+    fontWeight: "800",
+    color: "#2563eb",
+  },
+  portionTagGlass: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#fce7f3",
+    borderColor: "#fbcfe8",
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 3.5,
+    borderRadius: 6,
+    marginLeft: 4,
+  },
+  portionTagTextGlass: {
+    fontSize: 10.5,
+    fontWeight: "800",
+    color: "#be185d",
+  },
+  portionTagCarafe: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#e0f2fe",
+    borderColor: "#bae6fd",
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 3.5,
+    borderRadius: 6,
+    marginLeft: 4,
+  },
+  portionTagTextCarafe: {
+    fontSize: 10.5,
+    fontWeight: "800",
+    color: "#0284c7",
+  },
 
-  list: { paddingHorizontal: 16, paddingBottom: 100 },
-
-  card: {
+  // DETAILED CARD STYLES
+  detailedCard: {
     backgroundColor: theme.card,
     borderRadius: 16,
     padding: 16,
-    marginBottom: 12,
+    marginBottom: 10,
     borderWidth: 1,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
+    shadowOpacity: 0.03,
+    shadowRadius: 5,
     elevation: 2,
   },
   cardHeaderRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    marginBottom: 8,
+    marginBottom: 6,
   },
   wineName: {
     fontSize: 15,
@@ -1677,45 +2831,58 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
     marginBottom: 2,
   },
-  wineMeta: { fontSize: 12, color: theme.textSecondary, fontWeight: "500" },
-  statusBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
+  wineMeta: {
+    fontSize: 12,
+    color: theme.textSecondary,
+    fontWeight: "500",
+  },
+  statusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
   statusText: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "900",
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   sellingPrice: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "800",
     color: theme.primary,
-    marginTop: 4,
+    marginTop: 3,
     textAlign: "right",
   },
-
-  tagsRow: { flexDirection: "row", gap: 6, marginBottom: 12 },
+  tagsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginBottom: 10,
+  },
   indicatorBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 6,
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
   },
   indicatorText: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "800",
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
-
-  barContainer: { marginBottom: 12, marginTop: 4 },
-
+  barContainer: {
+    marginBottom: 8,
+    marginTop: 2,
+  },
   barStatsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-end",
-    marginBottom: 14,
+    marginBottom: 10,
   },
   stockHeaderRow: {
     flexDirection: "row",
@@ -1723,26 +2890,38 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   stockPrimaryValue: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: "900",
     color: theme.text,
-    lineHeight: 24,
+    lineHeight: 22,
   },
   stockPrimaryLabel: {
     fontSize: 10,
     fontWeight: "800",
     color: theme.textSecondary,
     letterSpacing: 0.5,
-    paddingBottom: 2,
   },
-
+  openGlassesBadge: {
+    backgroundColor: "#3b82f612",
+    borderColor: "#3b82f630",
+    borderWidth: 1,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginLeft: 4,
+  },
+  openGlassesText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#2563eb",
+  },
   deficitBadge: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
     backgroundColor: "#fff7ed",
     paddingHorizontal: 8,
-    paddingVertical: 5,
+    paddingVertical: 4,
     borderRadius: 6,
     borderWidth: 1,
     borderColor: "#ffedd5",
@@ -1753,43 +2932,43 @@ const styles = StyleSheet.create({
     color: "#ea580c",
     letterSpacing: 0.5,
   },
-
   barTrack: {
-    height: 8,
+    height: 7,
     backgroundColor: "#f1f5f9",
     borderRadius: 4,
     position: "relative",
   },
-  barFill: { height: "100%", borderRadius: 4 },
-
+  barFill: {
+    height: "100%",
+    borderRadius: 4,
+  },
   parMarkerContainer: {
     position: "absolute",
-    top: -12,
-    width: 20,
-    marginLeft: -10,
+    top: -11,
+    width: 18,
+    marginLeft: -9,
     alignItems: "center",
     zIndex: 10,
   },
   parMarkerArrow: {
-    fontSize: 10,
+    fontSize: 9,
     color: "#ea580c",
-    lineHeight: 10,
+    lineHeight: 9,
     marginBottom: 1,
   },
   parMarkerLine: {
-    width: 4,
-    height: 12,
+    width: 3,
+    height: 10,
     backgroundColor: "#ea580c",
     borderRadius: 2,
     borderWidth: 1,
     borderColor: "#fff",
   },
-
   barLabelsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginTop: 8,
+    marginTop: 6,
   },
   barLabelSecondary: {
     fontSize: 10,
@@ -1801,33 +2980,484 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: theme.textSecondary,
   },
-
   unconfiguredStockRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    marginTop: 8,
-    marginBottom: 8,
+    marginTop: 6,
+    marginBottom: 6,
   },
-
   requestedFooter: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    marginTop: 12,
-    padding: 10,
+    marginTop: 8,
+    padding: 8,
     borderRadius: 8,
   },
   requestedFooterText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "800",
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
 
-  empty: { alignItems: "center", paddingTop: 80, gap: 12 },
-  emptyText: { color: theme.textSecondary, fontWeight: "600", fontSize: 15 },
+  // FLOATING BATCH BUTTON
+  batchRequestContainer: {
+    position: "absolute",
+    bottom: 24,
+    left: 16,
+    right: 16,
+    alignItems: "center",
+  },
+  batchRequestButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    backgroundColor: theme.primary,
+    height: 52,
+    borderRadius: 26,
+    paddingHorizontal: 20,
+    shadowColor: theme.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    elevation: 8,
+    width: "100%",
+    maxWidth: 480,
+  },
+  batchCountBadge: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  batchCountBadgeText: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: theme.primary,
+  },
+  batchRequestButtonText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "900",
+    letterSpacing: 0.5,
+  },
 
+  // SORT MODAL
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+  },
+  sortModalSheet: {
+    backgroundColor: theme.card,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 20,
+    paddingBottom: 36,
+  },
+  sortModalTitle: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: theme.text,
+    marginBottom: 16,
+    letterSpacing: -0.3,
+  },
+  sortOptionItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    marginBottom: 6,
+    backgroundColor: theme.background,
+  },
+  sortOptionSelected: {
+    backgroundColor: theme.primary + "12",
+    borderWidth: 1,
+    borderColor: theme.primary + "30",
+  },
+  sortOptionText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: theme.text,
+  },
+
+  // SETTINGS DRAWER SHEET
+  sheetOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "flex-end",
+  },
+  sheet: {
+    backgroundColor: theme.card,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    padding: 20,
+    maxHeight: "92%",
+  },
+  sheetHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: theme.border,
+    alignSelf: "center",
+    marginBottom: 16,
+  },
+  sheetHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 12,
+  },
+  sheetWineName: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: theme.text,
+    marginBottom: 2,
+    letterSpacing: -0.4,
+  },
+  sheetWineMeta: {
+    fontSize: 12,
+    color: theme.textSecondary,
+    fontWeight: "500",
+  },
+  closeBtn: { padding: 4 },
+  sheetStockBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: theme.background,
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  sheetStockInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  sheetStockVal: {
+    fontSize: 26,
+    fontWeight: "900",
+    color: theme.text,
+  },
+  sheetStockLabel: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: theme.textSecondary,
+    letterSpacing: 0.5,
+  },
+  sheetStockSubLabel: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: theme.textSecondary,
+  },
+
+  settingsCard: {
+    backgroundColor: theme.background,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: theme.border,
+    paddingHorizontal: 14,
+  },
+  settingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+  },
+  settingTextContainer: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: theme.border,
+  },
+  fieldLabel: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: theme.textSecondary,
+    letterSpacing: 1,
+    textTransform: "uppercase",
+    marginBottom: 2,
+  },
+  fieldHint: {
+    fontSize: 11,
+    color: "#94a3b8",
+    fontWeight: "500",
+    lineHeight: 15,
+    marginTop: 2,
+  },
+  portionToggleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 8,
+  },
+  portionToggleLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flex: 1,
+    paddingRight: 12,
+  },
+  portionIconBox: {
+    width: 34,
+    height: 34,
+    borderRadius: 9,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  portionToggleTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: theme.text,
+  },
+  portionToggleSub: {
+    fontSize: 10,
+    fontWeight: "500",
+    color: theme.textSecondary,
+    marginTop: 1,
+  },
+  stepperContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: theme.card,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: theme.border,
+    overflow: "hidden",
+  },
+  stepperBtn: {
+    width: 34,
+    height: 38,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: theme.background,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: theme.border,
+    borderRadius: 10,
+    height: 40,
+    fontSize: 14,
+    fontWeight: "800",
+    color: theme.text,
+    backgroundColor: theme.card,
+  },
+  inputStepper: {
+    width: 50,
+    textAlign: "center",
+    borderWidth: 0,
+    borderRadius: 0,
+  },
+  vatToggleContainer: {
+    flexDirection: "row",
+    backgroundColor: theme.primary + "12",
+    borderRadius: 8,
+    padding: 2,
+  },
+  vatPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  vatPillActive: {
+    backgroundColor: theme.card,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 1,
+    elevation: 1,
+  },
+  vatPillText: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: theme.primary + "80",
+  },
+  vatPillTextActive: {
+    color: theme.primary,
+  },
+
+  priceRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 4,
+  },
+  priceRowTitleGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flex: 1,
+  },
+  priceIconBadge: {
+    width: 34,
+    height: 34,
+    borderRadius: 9,
+    backgroundColor: theme.primary + "0E",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: theme.primary + "1A",
+  },
+  priceRowLabel: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: theme.text,
+  },
+  priceRowSubLabel: {
+    fontSize: 10,
+    fontWeight: "500",
+    color: theme.textSecondary,
+    marginTop: 1,
+  },
+  priceInputContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    width: 130,
+  },
+  currencyPrefix: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: theme.textSecondary,
+    marginRight: 6,
+  },
+  inputPrice: {
+    flex: 1,
+    paddingHorizontal: 8,
+    textAlign: "right",
+  },
+
+  categorySelectorGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: 8,
+  },
+  catSelectBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+
+  formulaBox: {
+    backgroundColor: theme.primary + "08",
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: theme.primary + "20",
+  },
+  formulaLabel: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: theme.primary,
+    letterSpacing: 1,
+    marginBottom: 4,
+  },
+  formulaText: {
+    fontSize: 13,
+    color: theme.text,
+    fontWeight: "600",
+    lineHeight: 18,
+  },
+
+  saveBtn: {
+    backgroundColor: theme.primary,
+    height: 50,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    borderRadius: 14,
+    marginTop: 18,
+  },
+  saveBtnText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+  },
+  requestBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    borderWidth: 1.5,
+    borderColor: theme.primary,
+    height: 50,
+    borderRadius: 14,
+    marginTop: 10,
+  },
+  requestBtnText: {
+    color: theme.primary,
+    fontSize: 13,
+    fontWeight: "900",
+    letterSpacing: 0.5,
+  },
+  btnDisabled: { opacity: 0.4 },
+
+  // BATCH CONFIRM MODAL
+  confirmItemRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.border,
+  },
+  confirmItemQty: {
+    backgroundColor: theme.primary + "12",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  confirmItemQtyText: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: theme.primary,
+  },
+  confirmItemName: { fontSize: 13, fontWeight: "700", color: theme.text },
+  confirmItemMeta: { fontSize: 11, color: theme.textSecondary, marginTop: 1 },
+  confirmItemStock: { fontSize: 11, color: theme.textSecondary, fontWeight: "600" },
+  confirmItemTarget: { fontSize: 11, color: theme.primary, fontWeight: "700" },
+  confirmActions: {
+    flexDirection: "row",
+    gap: 10,
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: theme.border,
+  },
+  confirmCancelBtn: {
+    flex: 1,
+    height: 50,
+    borderRadius: 14,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: theme.card,
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  confirmCancelBtnText: {
+    color: theme.textSecondary,
+    fontSize: 13,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+  },
+
+  // SUCCESS OVERLAY
   successOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.6)",
@@ -1837,343 +3467,47 @@ const styles = StyleSheet.create({
   },
   successContainer: {
     backgroundColor: theme.card,
-    borderRadius: 24,
-    padding: 32,
-    paddingTop: 24,
+    borderRadius: 20,
+    padding: 24,
     alignItems: "center",
     width: "100%",
-    maxWidth: 400,
+    maxWidth: 380,
   },
   successIconContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 68,
+    height: 68,
+    borderRadius: 34,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 20,
+    backgroundColor: theme.primary + "12",
+    marginBottom: 16,
   },
   successTitle: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: "900",
     color: theme.text,
-    marginBottom: 8,
+    marginBottom: 6,
   },
   successMessage: {
-    fontSize: 14,
+    fontSize: 13,
     color: theme.textSecondary,
     textAlign: "center",
-    marginBottom: 28,
-    lineHeight: 20,
+    marginBottom: 20,
+    lineHeight: 18,
   },
   successViewButton: {
     width: "100%",
-    height: 56,
-    borderRadius: 16,
+    height: 48,
+    borderRadius: 14,
     justifyContent: "center",
     alignItems: "center",
   },
   successViewButtonText: {
     color: "#fff",
-    fontSize: 14,
-    fontWeight: "900",
-    letterSpacing: 1,
-  },
-  successCloseButton: { marginTop: 8, padding: 12 },
-  successCloseButtonText: { fontSize: 14, fontWeight: "800" },
-
-  confirmItemRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.border,
-  },
-  confirmItemQty: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  confirmItemQtyText: { fontSize: 13, fontWeight: "900" },
-  confirmItemName: { fontSize: 14, fontWeight: "700" },
-  confirmItemMeta: { fontSize: 12, fontWeight: "500", marginTop: 2 },
-  confirmActions: {
-    flexDirection: "row",
-    gap: 12,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: theme.border,
-  },
-  confirmCancelBtn: {
-    flex: 1,
-    height: 58,
-    borderRadius: 18,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: theme.card,
-    borderWidth: 1.5,
-    borderColor: theme.border,
-  },
-  confirmCancelBtnText: {
-    color: theme.textSecondary,
-    fontSize: 14,
-    fontWeight: "900",
-    letterSpacing: 1,
-  },
-
-  batchRequestContainer: {
-    position: "absolute",
-    bottom: 30,
-    left: 20,
-    right: 20,
-    alignItems: "center",
-  },
-  batchRequestButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 12,
-    backgroundColor: theme.primary,
-    height: 58,
-    borderRadius: 29,
-    paddingHorizontal: 24,
-    shadowColor: theme.primary,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
-    elevation: 8,
-  },
-  batchRequestButtonText: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "900",
-    letterSpacing: 0.5,
-    textTransform: "uppercase",
-  },
-
-  sheetOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    justifyContent: "flex-end",
-  },
-  sheet: {
-    backgroundColor: theme.card,
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
-    padding: 24,
-    maxHeight: "95%", // gave a tiny bit more room since we added descriptive cards
-  },
-  sheetHandle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: theme.border,
-    alignSelf: "center",
-    marginBottom: 24,
-  },
-  sheetHeader: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    marginBottom: 16,
-  },
-  sheetWineName: {
-    fontSize: 20,
-    fontWeight: "900",
-    color: theme.text,
-    marginBottom: 4,
-    letterSpacing: -0.5,
-  },
-  sheetWineMeta: {
     fontSize: 13,
-    color: theme.textSecondary,
-    fontWeight: "500",
-  },
-  closeBtn: { padding: 4 },
-  stockRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    marginBottom: 16,
-  },
-  stockPill: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    gap: 6,
-    backgroundColor: theme.background,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: theme.border,
-  },
-  stockCount: { fontSize: 28, fontWeight: "900", color: theme.text },
-  stockLabel: { fontSize: 12, color: theme.textSecondary, fontWeight: "600" },
-
-  // --- NEW SETTINGS CARD LIST STYLES ---
-  settingsCard: {
-    backgroundColor: theme.background,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: theme.border,
-    paddingHorizontal: 16,
-  },
-  settingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 16,
-    minHeight: 84, // Ensure comfortable tap height and space for text wrapping
-  },
-  settingTextContainer: {
-    flex: 1,
-    paddingRight: 16,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: theme.border,
-  },
-
-  fieldLabel: {
-    fontSize: 10,
     fontWeight: "900",
-    color: theme.textSecondary,
-    letterSpacing: 1.5,
-    textTransform: "uppercase",
-    marginBottom: 4,
+    letterSpacing: 0.8,
   },
-  fieldHint: {
-    fontSize: 12,
-    color: "#94a3b8",
-    fontWeight: "500",
-    lineHeight: 16,
-  },
-
-  input: {
-    borderWidth: 1.5,
-    borderColor: theme.border,
-    borderRadius: 12,
-    height: 48,
-    fontSize: 16,
-    fontWeight: "800",
-    color: theme.text,
-    backgroundColor: theme.card, // Stand out from the background slightly
-  },
-  inputSmall: {
-    width: 80,
-    textAlign: "center",
-    paddingHorizontal: 8,
-  },
-  priceInputContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    width: 160,
-  },
-  currencyPrefix: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: theme.textSecondary,
-    marginRight: 8,
-  },
-  inputPrice: {
-    flex: 1,
-    paddingHorizontal: 12,
-  },
-
-  formulaBox: {
-    backgroundColor: theme.primary + "08",
-    borderRadius: 14,
-    padding: 16,
-    marginTop: 16,
-    borderWidth: 1,
-    borderColor: theme.primary + "20",
-  },
-  formulaLabel: {
-    fontSize: 9,
-    fontWeight: "900",
-    color: theme.primary,
-    letterSpacing: 1.5,
-    marginBottom: 6,
-  },
-  formulaText: {
-    fontSize: 14,
-    color: theme.text,
-    fontWeight: "600",
-    lineHeight: 20,
-  },
-
-  saveBtn: {
-    backgroundColor: theme.primary,
-    height: 58,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 24,
-    borderRadius: 18,
-    marginTop: 24,
-  },
-  saveBtnText: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "900",
-    letterSpacing: 1,
-  },
-  requestBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-    borderWidth: 2,
-    borderColor: theme.primary,
-    height: 58,
-    borderRadius: 18,
-    marginTop: 12,
-  },
-  requestBtnText: {
-    color: theme.primary,
-    fontSize: 14,
-    fontWeight: "900",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-  btnDisabled: { opacity: 0.4 },
-
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    justifyContent: "flex-end",
-  },
-  modalContent: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-    minHeight: "40%",
-  },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 20,
-  },
-  modalTitle: { fontSize: 20, fontWeight: "900" },
-  modalOption: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    marginBottom: 10,
-  },
-  modalOptionText: { fontSize: 15, fontWeight: "700" },
-  searchWrapper: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderRadius: 14,
-    marginBottom: 16,
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    height: 52,
-  },
-  searchIcon: { marginRight: 10 },
-  searchInput: { flex: 1, fontSize: 15, fontWeight: "600" },
+  successCloseButton: { marginTop: 8, padding: 8 },
+  successCloseButtonText: { fontSize: 13, fontWeight: "700" },
 });

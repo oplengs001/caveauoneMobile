@@ -101,7 +101,7 @@ export default function SalesScreen() {
     totalGrossSales: 0,
     totalCost: 0,
     totalBottles: 0,
-    categoryCounts: { fast: 0, fine: 0, reserve: 0, standard: 0 },
+    categoryCounts: { fun: 0, fine: 0, reserve: 0, standard: 0 },
     portionCounts: { bottle: 0, glass: 0, carafe: 0 },
   });
 
@@ -181,7 +181,7 @@ export default function SalesScreen() {
 
       let totalCost = 0;
       let totalVolume = 0;
-      const catCounts = { fast: 0, fine: 0, reserve: 0, standard: 0 };
+      const catCounts = { fun: 0, fine: 0, reserve: 0, standard: 0 };
       const portionCounts = { bottle: 0, glass: 0, carafe: 0 };
 
       salesData.forEach((s: any) => {
@@ -201,7 +201,8 @@ export default function SalesScreen() {
           portionCounts.bottle += 1;
         }
 
-        const cat = (s.wineCategory || s.masterWine?.wineCategory || "standard").toLowerCase();
+        const rawCat = (s.wineCategory || s.masterWine?.wineCategory || "standard").toLowerCase();
+        const cat = rawCat === "fast" ? "fun" : rawCat;
         if (cat in catCounts) {
           catCounts[cat as keyof typeof catCounts] += 1;
         } else {
