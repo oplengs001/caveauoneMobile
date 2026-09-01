@@ -386,7 +386,7 @@ export default function BottleTaggingScreen() {
               {selectedWine.sku && <Text style={styles.wineMeta}>SKU: {selectedWine.sku}</Text>}
               {selectedWine.format && <Text style={styles.wineMeta}>Format: {selectedWine.format}</Text>}
               {selectedWine.region && <Text style={styles.wineMeta}>Region: {selectedWine.region}</Text>}
-              {selectedWine.type && <Text style={styles.wineMeta}>Type: {selectedWine.type}</Text>}
+              {selectedWine.type && <Text style={styles.wineMeta}>Type: {selectedWine.type === "Dessert" ? "Sweet Wine" : selectedWine.type}</Text>}
               {selectedWine.grapeVariety && <Text style={styles.wineMeta}>Grape: {selectedWine.grapeVariety}</Text>}
             </View>
           </View>

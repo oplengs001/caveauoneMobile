@@ -1472,7 +1472,7 @@ export default function HomeScreen() {
                     </View>
 
                     <View style={{ flex: 1, minWidth: 140, backgroundColor: "#6366f115", borderColor: "#6366f140", borderWidth: 1, padding: 12, borderRadius: 12 }}>
-                      <Text style={{ fontSize: 10, fontWeight: "800", color: "#4338ca" }}>🔒 RESERVE</Text>
+                      <Text style={{ fontSize: 10, fontWeight: "800", color: "#4338ca" }}>👻 RESERVE</Text>
                       <Text style={{ fontSize: 18, fontWeight: "900", color: "#3730a3", marginTop: 4 }}>
                         {salesDashboardMetrics.categoryCounts.reserve % 1 === 0
                           ? `${salesDashboardMetrics.categoryCounts.reserve} btl`

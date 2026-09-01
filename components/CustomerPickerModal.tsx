@@ -69,7 +69,7 @@ export const PREDEFINED_WINE_STYLES = [
   "Oaky & Rich White",
   "Champagne / Sparkling",
   "Rosé Wine",
-  "Dessert & Sweet",
+  "Sweet Wine",
   "Fortified / Port",
   "Natural / Biodynamic",
 ];

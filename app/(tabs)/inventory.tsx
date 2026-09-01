@@ -185,7 +185,7 @@ const WineCard = memo(function WineCard({
               <View style={styles.detailItem}>
                 <WineIcon size={12} color={theme.textSecondary} />
                 <Text style={[styles.detailText, { color: theme.text }]}>
-                  {masterWineData.type || "N/A"}
+                  {masterWineData.type === "Dessert" ? "Sweet Wine" : masterWineData.type || "N/A"}
                 </Text>
               </View>
               <View style={styles.detailItem}>
@@ -521,7 +521,11 @@ export default function InventoryScreen() {
     let filteredBottles = bottles;
 
     if (filterType) {
-      filteredBottles = filteredBottles.filter((b) => b.masterWineData?.type === filterType);
+      filteredBottles = filteredBottles.filter((b) => {
+        const raw = b.masterWineData?.type;
+        const normalized = raw === "Dessert" ? "Sweet Wine" : raw;
+        return normalized === filterType;
+      });
     }
 
     if (searchQuery.trim()) {

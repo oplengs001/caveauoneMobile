@@ -115,7 +115,7 @@ const normalizeWineType = (rawType?: string | null): string => {
     return "Rosé";
   }
   if (t.includes("sweet") || t.includes("dessert") || t.includes("fortified") || t.includes("port")) {
-    return "Dessert & Fortified";
+    return "Sweet Wine";
   }
   if (t.includes("red")) {
     return "Red Wine";
@@ -219,6 +219,7 @@ export default function StoreStaffPOSTerminal() {
   const router = useRouter();
   const { width, height } = useWindowDimensions();
   const { profile, refreshProfile } = useAuth();
+  const isManager = profile?.role === "admin" || profile?.role === "store_manager" || profile?.role === "store";
   const isLandscape = width > height;
   const isTabletLandscape = isLandscape && width >= 680;
   const storeId = profile?.locationId || null;
@@ -423,7 +424,7 @@ export default function StoreStaffPOSTerminal() {
               : null,
           };
         })
-        .filter((w) => !w.discontinued && w.wineCategory !== "reserve");
+        .filter((w) => !w.discontinued && (isManager ? true : w.wineCategory !== "reserve"));
 
       setWines(processedWines);
     } catch (error) {
@@ -500,6 +501,7 @@ export default function StoreStaffPOSTerminal() {
       const cat = w.wineCategory || "standard";
       if (cat === "fun" || cat === "fast") counts.fun = (counts.fun || 0) + 1;
       else if (cat === "fine") counts.fine = (counts.fine || 0) + 1;
+      else if (cat === "reserve") counts.reserve = (counts.reserve || 0) + 1;
     });
     return counts;
   }, [wines, salesTypeMode, searchQuery]);
@@ -1533,12 +1535,13 @@ export default function StoreStaffPOSTerminal() {
             )}
           </View>
 
-          {/* ── WINE CATEGORY TIER FILTER (Fun vs Fine) ─── */}
+          {/* ── WINE CATEGORY TIER FILTER (Fun vs Fine vs Reserve) ─── */}
           <View style={styles.tierFilterContainer}>
             {([
               { key: "all", label: "All Wines", icon: "view-grid-outline" as const },
               { key: "fun", label: "Fun Wine", icon: "party-popper" as const },
               { key: "fine", label: "Fine Wine", icon: "diamond-stone" as const },
+              ...(isManager ? [{ key: "reserve", label: "Reserve", icon: "ghost" as const }] : []),
             ] as const).map((tier) => {
               const count = tierCounts[tier.key] ?? 0;
               const isActive = tierFilter === tier.key;
@@ -1596,7 +1599,7 @@ export default function StoreStaffPOSTerminal() {
               { key: "White Wine", label: "White", activeBg: "#b45309", activeText: "#ffffff", activeBorder: "#d97706" },
               { key: "Sparkling", label: "Sparkling", activeBg: "#a16207", activeText: "#ffffff", activeBorder: "#ca8a04" },
               { key: "Rosé", label: "Rosé", activeBg: "#be123c", activeText: "#ffffff", activeBorder: "#f43f5e" },
-              { key: "Dessert & Fortified", label: "Dessert", activeBg: "#7e22ce", activeText: "#ffffff", activeBorder: "#a855f7" },
+              { key: "Sweet Wine", label: "Sweet", activeBg: "#7e22ce", activeText: "#ffffff", activeBorder: "#a855f7" },
             ] as const).map((pill) => {
               const count = wineTypeCounts[pill.key] ?? 0;
               if (pill.key !== "all" && count === 0) return null;
@@ -1736,6 +1739,13 @@ export default function StoreStaffPOSTerminal() {
                         {fullWineTitle}
                       </Text>
                     </View>
+
+                    {/* Fixed Lower Right Ghost Icon for Reserve Wine */}
+                    {item.wineCategory === "reserve" && (
+                      <View style={styles.cardReserveGhostBadge} pointerEvents="none">
+                        <MaterialCommunityIcons name="ghost" size={14} color="#4338ca" />
+                      </View>
+                    )}
                   </TouchableOpacity>
                 );
               }}
@@ -3967,5 +3977,20 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "600",
     marginTop: 1,
+  },
+  cardReserveGhostBadge: {
+    position: "absolute",
+    bottom: 8,
+    right: 8,
+    backgroundColor: "#e0e7ff",
+    borderRadius: 8,
+    padding: 4,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#4338ca",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.15,
+    shadowRadius: 2,
+    elevation: 2,
   },
 });

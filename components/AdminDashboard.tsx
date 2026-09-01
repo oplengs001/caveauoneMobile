@@ -207,7 +207,7 @@ export default function AdminDashboard() {
       > = {
         fun: { label: "Fun Wine", badgeColor: "#f59e0b", iconText: "🎉 FUN", count: 0, revenue: 0, volume: 0, stores: {} },
         fine: { label: "Fine Wine", badgeColor: "#ec4899", iconText: "⭐ FINE", count: 0, revenue: 0, volume: 0, stores: {} },
-        reserve: { label: "Reserve Collection", badgeColor: "#6366f1", iconText: "🔒 RESERVE", count: 0, revenue: 0, volume: 0, stores: {} },
+        reserve: { label: "Reserve Collection", badgeColor: "#6366f1", iconText: "👻 RESERVE", count: 0, revenue: 0, volume: 0, stores: {} },
         other: { label: "Standard Catalog", badgeColor: "#64748b", iconText: "🍷 STANDARD", count: 0, revenue: 0, volume: 0, stores: {} },
       };
 

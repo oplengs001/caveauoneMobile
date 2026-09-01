@@ -13,9 +13,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  Ghost,
   LayoutGrid,
   LayoutList,
-  Lock,
   Minus,
   Package,
   Plus,
@@ -758,7 +758,7 @@ export default function StoreMasterListScreen() {
             )}
             {category === "reserve" && (
               <View style={[styles.miniCatBadge, { backgroundColor: "#e0e7ff" }]}>
-                <Lock size={10} color="#4338ca" />
+                <Ghost size={10} color="#4338ca" />
               </View>
             )}
             <Text style={styles.compactWineName} numberOfLines={1}>
@@ -905,8 +905,8 @@ export default function StoreMasterListScreen() {
           )}
           {category === "reserve" && (
             <View style={[styles.indicatorBadge, { backgroundColor: "#e0e7ff" }]}>
-              <Lock size={12} color="#4338ca" strokeWidth={2.5} />
-              <Text style={[styles.indicatorText, { color: "#4338ca" }]}>Reserved Wine</Text>
+              <Ghost size={12} color="#4338ca" strokeWidth={2.5} />
+              <Text style={[styles.indicatorText, { color: "#4338ca" }]}>Reserve Wine</Text>
             </View>
           )}
           {isPortion ? (
@@ -1307,7 +1307,7 @@ export default function StoreMasterListScreen() {
                         : categoryFilter === "fine"
                           ? "star"
                           : categoryFilter === "reserve"
-                            ? "lock-outline"
+                            ? "ghost"
                             : "bottle-wine-outline"
                 }
                 size={13}
@@ -1468,7 +1468,7 @@ export default function StoreMasterListScreen() {
                 {
                   id: "reserve",
                   label: "Reserve Wine",
-                  icon: "lock-outline",
+                  icon: "ghost",
                   color: "#4338ca",
                 },
                 {
@@ -2033,7 +2033,7 @@ export default function StoreMasterListScreen() {
                         { id: "none", label: "Standard", icon: null, color: theme.textSecondary },
                         { id: "fun", label: "Fun Wine", icon: Zap, color: "#d97706", bg: "#fef3c7" },
                         { id: "fine", label: "Fine Wine", icon: Star, color: "#be185d", bg: "#fce7f3" },
-                        { id: "reserve", label: "Reserved Wine", icon: Lock, color: "#4338ca", bg: "#e0e7ff" },
+                        { id: "reserve", label: "Reserve Wine", icon: Ghost, color: "#4338ca", bg: "#e0e7ff" },
                       ].map((cat) => {
                         const isSelected = sheetWineCategory === cat.id;
                         const Icon = cat.icon;
