@@ -44,6 +44,22 @@ type BottleView = InventoryBottle & {
 
 const PAGE_SIZE = 100;
 
+// Wine type color badge helper (White/Sparkling White = Yellow, Sweet = Orange, Red = Crimson, Rose = Pink)
+const getWineTypeBadge = (rawType?: string | null) => {
+  if (!rawType) return { bg: "#f1f5f9", text: "#64748b", border: "#e2e8f0", dot: "#94a3b8" };
+  const t = rawType.toLowerCase();
+  if (t.includes("ros")) {
+    return { bg: "#fce7f3", text: "#9d174d", border: "#fbcfe8", dot: "#ec4899" };
+  }
+  if (t.includes("sweet") || t.includes("dessert")) {
+    return { bg: "#ffedd5", text: "#9a3412", border: "#fed7aa", dot: "#ea580c" };
+  }
+  if (t.includes("white") || t.includes("sparkling") || t.includes("champagne")) {
+    return { bg: "#fef9c3", text: "#854d0e", border: "#fef08a", dot: "#eab308" };
+  }
+  return { bg: "#fee2e2", text: "#991b1b", border: "#fecaca", dot: "#dc2626" };
+};
+
 // ─── Expandable Wine Card ──────────────────────────────────────────────────────
 
 const WineCard = memo(function WineCard({
@@ -183,10 +199,44 @@ const WineCard = memo(function WineCard({
                 </Text>
               </View>
               <View style={styles.detailItem}>
-                <WineIcon size={12} color={theme.textSecondary} />
-                <Text style={[styles.detailText, { color: theme.text }]}>
-                  {masterWineData.type === "Dessert" ? "Sweet Wine" : masterWineData.type || "N/A"}
-                </Text>
+                <WineIcon size={12} color={masterWineData.type ? getWineTypeBadge(masterWineData.type).dot : theme.textSecondary} />
+                {masterWineData.type ? (
+                  (() => {
+                    const badge = getWineTypeBadge(masterWineData.type);
+                    const displayType = masterWineData.type === "Dessert" ? "Sweet Wine" : masterWineData.type;
+                    return (
+                      <View
+                        style={[
+                          styles.typeBadgePill,
+                          {
+                            backgroundColor: badge.bg,
+                            borderColor: badge.border,
+                          },
+                        ]}
+                      >
+                        <View
+                          style={[
+                            styles.typeBadgeDot,
+                            { backgroundColor: badge.dot },
+                          ]}
+                        />
+                        <Text
+                          style={[
+                            styles.typeBadgeText,
+                            { color: badge.text },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {displayType}
+                        </Text>
+                      </View>
+                    );
+                  })()
+                ) : (
+                  <Text style={[styles.detailText, { color: theme.textSecondary }]}>
+                    N/A
+                  </Text>
+                )}
               </View>
               <View style={styles.detailItem}>
                 <Grape size={12} color={theme.textSecondary} />
@@ -848,36 +898,51 @@ export default function InventoryScreen() {
                 "Sweet Wine",
                 "Sparkling wine",
                 "Rose wine",
-              ].map((type) => (
-                <TouchableOpacity
-                  key={type ?? "__all__"}
-                  style={[
-                    styles.modalOption,
-                    { borderColor: theme.border },
-                    filterType === type && {
-                      borderColor: theme.primary,
-                      backgroundColor: theme.primary + "10",
-                    },
-                  ]}
-                  onPress={() => {
-                    setFilterType(type);
-                    setIsFilterModalOpen(false);
-                  }}
-                >
-                  <Text
+              ].map((type) => {
+                const badge = type ? getWineTypeBadge(type) : null;
+                return (
+                  <TouchableOpacity
+                    key={type ?? "__all__"}
                     style={[
-                      styles.modalOptionText,
-                      { color: theme.text },
-                      filterType === type && { color: theme.primary },
+                      styles.modalOption,
+                      { borderColor: theme.border },
+                      filterType === type && {
+                        borderColor: theme.primary,
+                        backgroundColor: theme.primary + "10",
+                      },
                     ]}
+                    onPress={() => {
+                      setFilterType(type);
+                      setIsFilterModalOpen(false);
+                    }}
                   >
-                    {type ?? "All Types"}
-                  </Text>
-                  {filterType === type && (
-                    <Check size={20} color={theme.primary} />
-                  )}
-                </TouchableOpacity>
-              ))}
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                      {badge && (
+                        <View
+                          style={{
+                            width: 10,
+                            height: 10,
+                            borderRadius: 5,
+                            backgroundColor: badge.dot,
+                          }}
+                        />
+                      )}
+                      <Text
+                        style={[
+                          styles.modalOptionText,
+                          { color: theme.text },
+                          filterType === type && { color: theme.primary, fontWeight: "700" },
+                        ]}
+                      >
+                        {type ?? "All Types"}
+                      </Text>
+                    </View>
+                    {filterType === type && (
+                      <Check size={20} color={theme.primary} />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
             </ScrollView>
           </View>
         </View>
@@ -1272,4 +1337,22 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   modalOptionText: { fontSize: 15, fontWeight: "700" },
+  typeBadgePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  typeBadgeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  typeBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+  },
 });

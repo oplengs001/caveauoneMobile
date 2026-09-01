@@ -968,14 +968,48 @@ export default function StoreStaffPOSTerminal() {
     ]);
   };
 
-  // Sommelier & Maroon Color Theme helper
+  // Sommelier Wine Type Color Theme helper (White = Yellow, Sweet = Orange, Red = Crimson, Rose = Pink)
   const getWineTypeTheme = (wineType?: string) => {
     const t = (wineType || "").toLowerCase();
-    if (t.includes("white")) return { bg: "#fef3c7", accent: "#b45309", color: "#d97706", tag: "WHITE" };
-    if (t.includes("sparkling")) return { bg: "#fef9c3", accent: "#a16207", color: "#ca8a04", tag: "SPARKLING" };
-    if (t.includes("ros")) return { bg: "#ffe4e6", accent: "#be123c", color: "#f43f5e", tag: "ROSÉ" };
-    if (t.includes("sweet") || t.includes("dessert")) return { bg: "#fae8ff", accent: "#7e22ce", color: "#a855f7", tag: "SWEET" };
-    return { bg: "#fff1f2", accent: MAROON.primary, color: MAROON.primary, tag: "RED" };
+    const isSparkling = t.includes("sparkling") || t.includes("champagne") || t.includes("prosecco") || t.includes("cava");
+    const isRose = t.includes("ros");
+    const isSweet = t.includes("sweet") || t.includes("dessert");
+    const isWhite = t.includes("white");
+
+    // 1. Rosé (including Sparkling Rosé) -> Pink
+    if (isRose) {
+      return {
+        bg: "#fce7f3",
+        accent: "#9d174d",
+        color: "#ec4899",
+        tag: isSparkling ? "SPARKLING ROSÉ" : "ROSÉ",
+      };
+    }
+    // 2. Sweet / Dessert -> Orange
+    if (isSweet) {
+      return {
+        bg: "#ffedd5",
+        accent: "#9a3412",
+        color: "#ea580c",
+        tag: "SWEET",
+      };
+    }
+    // 3. White / Sparkling White -> Yellow
+    if (isWhite || isSparkling) {
+      return {
+        bg: "#fef9c3",
+        accent: "#854d0e",
+        color: "#eab308",
+        tag: isSparkling ? "SPARKLING" : "WHITE",
+      };
+    }
+    // 4. Default / Red -> Crimson Red
+    return {
+      bg: "#fee2e2",
+      accent: "#991b1b",
+      color: "#dc2626",
+      tag: "RED",
+    };
   };
 
   // Render Current Service / Dispense Queue Sidebar / Drawer
@@ -1595,11 +1629,11 @@ export default function StoreStaffPOSTerminal() {
           <View style={styles.wineTypeFilterContainer}>
             {([
               { key: "all", label: "All", activeBg: MAROON.primary, activeText: "#ffffff", activeBorder: MAROON.primary },
-              { key: "Red Wine", label: "Red", activeBg: "#4c0519", activeText: "#ffffff", activeBorder: "#9f1239" },
-              { key: "White Wine", label: "White", activeBg: "#b45309", activeText: "#ffffff", activeBorder: "#d97706" },
-              { key: "Sparkling", label: "Sparkling", activeBg: "#a16207", activeText: "#ffffff", activeBorder: "#ca8a04" },
-              { key: "Rosé", label: "Rosé", activeBg: "#be123c", activeText: "#ffffff", activeBorder: "#f43f5e" },
-              { key: "Sweet Wine", label: "Sweet", activeBg: "#7e22ce", activeText: "#ffffff", activeBorder: "#a855f7" },
+              { key: "Red Wine", label: "Red", activeBg: "#dc2626", activeText: "#ffffff", activeBorder: "#b91c1c" },
+              { key: "White Wine", label: "White", activeBg: "#eab308", activeText: "#ffffff", activeBorder: "#ca8a04" },
+              { key: "Sparkling", label: "Sparkling", activeBg: "#ca8a04", activeText: "#ffffff", activeBorder: "#a16207" },
+              { key: "Rosé", label: "Rosé", activeBg: "#ec4899", activeText: "#ffffff", activeBorder: "#db2777" },
+              { key: "Sweet Wine", label: "Sweet", activeBg: "#ea580c", activeText: "#ffffff", activeBorder: "#c2410c" },
             ] as const).map((pill) => {
               const count = wineTypeCounts[pill.key] ?? 0;
               if (pill.key !== "all" && count === 0) return null;
