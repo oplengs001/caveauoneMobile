@@ -21,6 +21,7 @@ import {
   Plus,
   RefreshCw,
   Search,
+  ShieldCheck,
   SlidersHorizontal,
   Star,
   TrendingDown,
@@ -35,6 +36,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  KeyboardAvoidingView,
   Modal,
   Platform,
   RefreshControl,
@@ -45,6 +47,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 
@@ -164,6 +167,8 @@ export default function StoreMasterListScreen() {
   const { profile, loading: authLoading } = useAuth();
   const router = useRouter();
   const storeId = profile?.locationId ?? "";
+  const { width } = useWindowDimensions();
+  const isWide = width >= 600;
 
   const [entries, setEntries] = useState<WineEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -796,8 +801,10 @@ export default function StoreMasterListScreen() {
             <Text style={styles.compactStockVal}>
               {item.stockCount % 1 === 0 ? item.stockCount : item.stockCount.toFixed(2)}
             </Text>
-            {isConfigured && (
+            {isConfigured ? (
               <Text style={styles.compactStockTarget}>/{safetyStock}</Text>
+            ) : (
+              <Text style={styles.compactStockUnset}>· unset</Text>
             )}
           </View>
 
@@ -823,7 +830,10 @@ export default function StoreMasterListScreen() {
           )}
         </View>
 
-        <ChevronRight size={16} color={theme.textSecondary} style={{ opacity: 0.5 }} />
+        {/* Tactile Tuning Dial */}
+        <View style={styles.compactTuneDial}>
+          <SlidersHorizontal size={13} color={theme.primary} strokeWidth={2.2} />
+        </View>
       </TouchableOpacity>
     );
   };
@@ -1023,6 +1033,33 @@ export default function StoreMasterListScreen() {
             <ChevronRight size={14} color={cfg.color} style={{ marginLeft: "auto" }} />
           </TouchableOpacity>
         )}
+
+        {/* Luxury Cellar Target Strip */}
+        <View style={styles.cellarGaugeFooter}>
+          <View style={styles.cellarGaugeLeft}>
+            <SlidersHorizontal size={11} color={theme.primary} strokeWidth={2} />
+            <Text style={styles.cellarGaugeLabel}>
+              {isConfigured
+                ? `TARGETS: PAR ${parLevel} · SAFETY ${safetyStock}`
+                : "NO TARGETS CONFIGURED"}
+            </Text>
+          </View>
+          <View style={styles.cellarGaugeAction}>
+            <Text
+              style={[
+                styles.cellarGaugeActionText,
+                !isConfigured && { color: "#b45309" },
+              ]}
+            >
+              {isConfigured ? "Adjust Targets" : "Set Target"}
+            </Text>
+            <ChevronRight
+              size={12}
+              color={!isConfigured ? "#b45309" : theme.primary}
+              strokeWidth={2.5}
+            />
+          </View>
+        </View>
       </TouchableOpacity>
     );
   };
@@ -1039,7 +1076,7 @@ export default function StoreMasterListScreen() {
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>Stock Management</Text>
           <Text style={styles.subtitle}>
-            {entries.length} wines · {metrics.totalPhysicalBottles} bottles in store
+            {entries.length} wines · {metrics.totalPhysicalBottles} bottles in store · Tap to adjust
           </Text>
         </View>
 
@@ -1658,382 +1695,299 @@ export default function StoreMasterListScreen() {
         transparent
         onRequestClose={closeSheet}
       >
-        <View style={styles.sheetOverlay}>
-          <View style={styles.sheet}>
-            <View style={styles.sheetHandle} />
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
+          <View
+            style={[
+              styles.sheetOverlay,
+              isWide
+                ? { justifyContent: "center", alignItems: "center", padding: 24 }
+                : { justifyContent: "flex-end" },
+            ]}
+          >
+            <View
+              style={[
+                styles.sheet,
+                isWide
+                  ? {
+                      borderRadius: 24,
+                      maxWidth: 580,
+                      width: "100%",
+                      maxHeight: "90%",
+                      alignSelf: "center",
+                    }
+                  : {
+                      borderTopLeftRadius: 28,
+                      borderTopRightRadius: 28,
+                      maxWidth: 540,
+                      width: "100%",
+                      alignSelf: "center",
+                      maxHeight: "94%",
+                    },
+              ]}
+            >
+              <View style={styles.sheetHandle} />
 
-            <View style={styles.sheetHeader}>
-              <View style={{ flex: 1, paddingRight: 8 }}>
-                <Text style={styles.sheetWineName} numberOfLines={2}>
-                  {selected?.masterWine.name}
-                </Text>
-                <Text style={styles.sheetWineMeta}>
-                  {[
-                    selected?.masterWine.vintage,
-                    selected?.masterWine.producer,
-                    selected?.masterWine.format,
-                  ]
-                    .filter(Boolean)
-                    .join(" · ")}
-                </Text>
-              </View>
-              <TouchableOpacity onPress={closeSheet} style={styles.closeBtn}>
-                <X size={22} color={theme.textSecondary} />
-              </TouchableOpacity>
-            </View>
-
-            {/* Current Stock Banner */}
-            <View style={styles.sheetStockBanner}>
-              <View style={styles.sheetStockInfo}>
-                <Text style={styles.sheetStockVal}>
-                  {selected?.stockCount !== undefined
-                    ? selected.stockCount % 1 === 0
-                      ? selected.stockCount
-                      : selected.stockCount.toFixed(2)
-                    : 0}
-                </Text>
-                <View>
-                  <Text style={styles.sheetStockLabel}>BOTTLES IN STORE</Text>
-                  <Text style={styles.sheetStockSubLabel}>
-                    {selected?.openGlassesCount && selected.openGlassesCount > 0
-                      ? `${selected.fullBottlesCount} sealed + ${selected.openGlassesCount}/6 glass open`
-                      : `${selected?.fullBottlesCount ?? 0} sealed bottles`}
+              {/* ── COMPACT HEADER ── */}
+              <View style={styles.sheetHeader}>
+                <View style={{ flex: 1, paddingRight: 8 }}>
+                  <View style={styles.modalHeaderEyebrow}>
+                    <SlidersHorizontal size={11} color={theme.primary} strokeWidth={2.2} />
+                    <Text style={styles.modalHeaderEyebrowText}>CELLAR INVENTORY SETTINGS</Text>
+                  </View>
+                  <Text style={styles.sheetWineName} numberOfLines={2}>
+                    {selected?.masterWine.name}
+                  </Text>
+                  <Text style={styles.sheetWineMeta}>
+                    {[
+                      selected?.masterWine.vintage,
+                      selected?.masterWine.producer,
+                      selected?.masterWine.format,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
                   </Text>
                 </View>
+                <TouchableOpacity onPress={closeSheet} style={styles.closeBtn}>
+                  <X size={22} color={theme.textSecondary} />
+                </TouchableOpacity>
               </View>
 
-              {selected && (
-                <View
-                  style={[
-                    styles.statusBadge,
-                    { backgroundColor: STATUS_CONFIG[selected.status].bg },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.statusText,
-                      { color: STATUS_CONFIG[selected.status].color },
-                    ]}
-                  >
-                    {STATUS_CONFIG[selected.status].label}
-                  </Text>
-                </View>
-              )}
-            </View>
-
-            <ScrollView showsVerticalScrollIndicator={false} style={{ flexGrow: 1 }}>
-              {/* --- PAR LEVEL & SAFETY TARGET CARD --- */}
-              <View style={styles.settingsCard}>
-                {/* Par Level */}
-                <View style={styles.settingRow}>
-                  <View style={styles.settingTextContainer}>
-                    <Text style={styles.fieldLabel}>PAR REORDER LEVEL</Text>
-                    <Text style={styles.fieldHint}>
-                      Trigger reorder alert when stock reaches this amount.
-                    </Text>
-                  </View>
-                  <View style={styles.stepperContainer}>
-                    <TouchableOpacity
-                      style={styles.stepperBtn}
-                      onPress={() => stepPar(-1)}
-                    >
-                      <Minus size={16} color={theme.primary} />
-                    </TouchableOpacity>
-                    <TextInput
-                      style={[styles.input, styles.inputStepper]}
-                      value={sheetPar}
-                      onChangeText={setSheetPar}
-                      keyboardType="number-pad"
-                      placeholder="0"
-                      placeholderTextColor="#94a3b8"
-                    />
-                    <TouchableOpacity
-                      style={styles.stepperBtn}
-                      onPress={() => stepPar(1)}
-                    >
-                      <Plus size={16} color={theme.primary} />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-
-                <View style={styles.divider} />
-
-                {/* Safety Stock */}
-                <View style={styles.settingRow}>
-                  <View style={styles.settingTextContainer}>
-                    <Text style={styles.fieldLabel}>SAFETY TARGET STOCK</Text>
-                    <Text style={styles.fieldHint}>
-                      Ideal target quantity restored upon replenishment.
-                    </Text>
-                  </View>
-                  <View style={styles.stepperContainer}>
-                    <TouchableOpacity
-                      style={styles.stepperBtn}
-                      onPress={() => stepSafety(-1)}
-                    >
-                      <Minus size={16} color={theme.primary} />
-                    </TouchableOpacity>
-                    <TextInput
-                      style={[styles.input, styles.inputStepper]}
-                      value={sheetSafety}
-                      onChangeText={setSheetSafety}
-                      keyboardType="number-pad"
-                      placeholder="0"
-                      placeholderTextColor="#94a3b8"
-                    />
-                    <TouchableOpacity
-                      style={styles.stepperBtn}
-                      onPress={() => stepSafety(1)}
-                    >
-                      <Plus size={16} color={theme.primary} />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              </View>
-
-              {/* Dynamic Formula Display */}
-              {sheetSafety && (
-                <View style={styles.formulaBox}>
-                  <Text style={styles.formulaLabel}>REPLENISHMENT FORMULA</Text>
-                  <Text style={styles.formulaText}>
-                    Target ({sheetSafety}) − Current (
+              {/* ── STOCK SNAPSHOT STRIP ── */}
+              <View style={styles.stockStrip}>
+                <View style={styles.stockStripLeft}>
+                  <Text style={styles.stockStripNum}>
                     {selected?.stockCount !== undefined
                       ? selected.stockCount % 1 === 0
                         ? selected.stockCount
                         : selected.stockCount.toFixed(2)
                       : 0}
-                    ) ={" "}
-                    <Text style={{ color: theme.primary, fontWeight: "900" }}>
-                      {Math.ceil(
-                        Math.max(
-                          0,
-                          parseInt(sheetSafety, 10) - (selected?.stockCount ?? 0)
-                        )
-                      )}{" "}
-                      bottles needed
+                  </Text>
+                  <View>
+                    <Text style={styles.stockStripLabel}>BOTTLES IN STORE</Text>
+                    <Text style={styles.stockStripSub}>
+                      {selected?.openGlassesCount && selected.openGlassesCount > 0
+                        ? `${selected.fullBottlesCount} sealed · ${selected.openGlassesCount}/6 glass open`
+                        : `${selected?.fullBottlesCount ?? 0} sealed bottles`}
                     </Text>
-                  </Text>
+                  </View>
                 </View>
-              )}
+                {selected && (
+                  <View
+                    style={[
+                      styles.statusChip,
+                      { backgroundColor: STATUS_CONFIG[selected.status].bg },
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.statusChipDot,
+                        { backgroundColor: STATUS_CONFIG[selected.status].accent },
+                      ]}
+                    />
+                    <Text
+                      style={[
+                        styles.statusChipText,
+                        { color: STATUS_CONFIG[selected.status].color },
+                      ]}
+                    >
+                      {STATUS_CONFIG[selected.status].label}
+                    </Text>
+                  </View>
+                )}
+              </View>
 
-              {/* --- PORTION SERVING OPTIONS (GLASS & CARAFE) --- */}
-              <View style={[styles.settingsCard, { marginTop: 14 }]}>
-                <View style={{ paddingVertical: 12 }}>
-                  <Text style={styles.fieldLabel}>PORTION SERVING (GLASS & CARAFE)</Text>
-                  <Text style={styles.fieldHint}>
-                    Default: Whole bottle only. Enabling allows both single glass and carafe sales.
-                  </Text>
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                style={{ flexGrow: 1 }}
+                keyboardShouldPersistTaps="handled"
+              >
+                {/* ── INVENTORY TARGETS: 2-COLUMN GRID ── */}
+                <View style={styles.targetGrid}>
+                  {/* PAR Alert Tile */}
+                  <View style={[styles.targetTile, styles.targetTileLeft]}>
+                    <View style={styles.targetTileHeader}>
+                      <AlertTriangle size={13} color="#ea580c" />
+                      <Text style={[styles.targetTileLabel, { color: "#ea580c" }]}>
+                        PAR ALERT
+                      </Text>
+                    </View>
+                    <Text style={styles.targetTileHint}>Reorder trigger level</Text>
+                    <View style={[styles.stepperContainer, { marginTop: 10 }]}>
+                      <TouchableOpacity style={styles.stepperBtn} onPress={() => stepPar(-1)}>
+                        <Minus size={15} color="#ea580c" />
+                      </TouchableOpacity>
+                      <TextInput
+                        style={[styles.input, styles.inputStepper]}
+                        value={sheetPar}
+                        onChangeText={setSheetPar}
+                        keyboardType="number-pad"
+                        placeholder="0"
+                        placeholderTextColor="#94a3b8"
+                      />
+                      <TouchableOpacity style={styles.stepperBtn} onPress={() => stepPar(1)}>
+                        <Plus size={15} color="#ea580c" />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
 
-                  {/* Single Unified Toggle for Glass & Carafe */}
-                  <View style={[styles.portionToggleRow, { marginTop: 10 }]}>
-                    <View style={styles.portionToggleLeft}>
-                      <View
+                  {/* Safety Target Tile */}
+                  <View style={[styles.targetTile, styles.targetTileRight]}>
+                    <View style={styles.targetTileHeader}>
+                      <ShieldCheck size={13} color={theme.primary} />
+                      <Text style={[styles.targetTileLabel, { color: theme.primary }]}>
+                        SAFETY TARGET
+                      </Text>
+                    </View>
+                    <Text style={styles.targetTileHint}>Ideal replenishment level</Text>
+                    <View style={[styles.stepperContainer, { marginTop: 10 }]}>
+                      <TouchableOpacity style={styles.stepperBtn} onPress={() => stepSafety(-1)}>
+                        <Minus size={15} color={theme.primary} />
+                      </TouchableOpacity>
+                      <TextInput
+                        style={[styles.input, styles.inputStepper]}
+                        value={sheetSafety}
+                        onChangeText={setSheetSafety}
+                        keyboardType="number-pad"
+                        placeholder="0"
+                        placeholderTextColor="#94a3b8"
+                      />
+                      <TouchableOpacity style={styles.stepperBtn} onPress={() => stepSafety(1)}>
+                        <Plus size={15} color={theme.primary} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+
+                {/* ── INLINE DEFICIT / BALANCE STATUS PILL ── */}
+                {(() => {
+                  const safetyNum = parseInt(sheetSafety, 10) || 0;
+                  const parNum = parseInt(sheetPar, 10) || 0;
+                  const stock = selected?.stockCount ?? 0;
+                  const deficit = Math.ceil(Math.max(0, safetyNum - stock));
+                  const valid = safetyNum >= parNum || (safetyNum === 0 && parNum === 0);
+                  if (!sheetSafety && !sheetPar) return null;
+                  return (
+                    <View
+                      style={[
+                        styles.statusPill,
+                        !valid
+                          ? { backgroundColor: "#fef3c7", borderColor: "#fde68a" }
+                          : deficit > 0
+                            ? { backgroundColor: "#fef2f2", borderColor: "#fecaca" }
+                            : { backgroundColor: "#f0fdf4", borderColor: "#bbf7d0" },
+                      ]}
+                    >
+                      <Text
                         style={[
-                          styles.portionIconBox,
-                          {
-                            backgroundColor: sheetAllowGlass
-                              ? "#fce7f3"
-                              : theme.card,
-                          },
+                          styles.statusPillText,
+                          !valid
+                            ? { color: "#92400e" }
+                            : deficit > 0
+                              ? { color: "#991b1b" }
+                              : { color: "#166534" },
                         ]}
+                      >
+                        {!valid
+                          ? `⚠️  Safety Target must be ≥ PAR level`
+                          : deficit > 0
+                            ? `↓ ${deficit} bottle${deficit !== 1 ? "s" : ""} deficit  ·  Target (${safetyNum}) − Stock (${stock % 1 === 0 ? stock : stock.toFixed(1)}) = ${deficit}`
+                            : `✓ Healthy stock balance  ·  Target (${safetyNum}) met`}
+                      </Text>
+                    </View>
+                  );
+                })()}
+
+                {/* ── UNIFIED: SERVING MODE + CATEGORY + DISCONTINUED ── */}
+                <View style={[styles.settingsCard, { marginTop: 14 }]}>
+                  {/* Section A: Serving Mode */}
+                  <View style={{ paddingVertical: 12 }}>
+                    <Text style={styles.fieldLabel}>SERVING MODE</Text>
+                    <Text style={styles.fieldHint}>How this wine is sold at POS</Text>
+                    <View style={[styles.servingToggle, { marginTop: 10 }]}>
+                      <TouchableOpacity
+                        style={[
+                          styles.servingToggleBtn,
+                          !sheetAllowGlass && styles.servingToggleBtnActive,
+                        ]}
+                        onPress={() => {
+                          setSheetAllowGlass(false);
+                          setSheetAllowCarafe(false);
+                          setSheetGlassPrice("");
+                          setSheetCarafePrice("");
+                        }}
+                      >
+                        <MaterialCommunityIcons
+                          name="bottle-wine-outline"
+                          size={14}
+                          color={!sheetAllowGlass ? theme.primary : theme.textSecondary}
+                        />
+                        <Text
+                          style={[
+                            styles.servingToggleBtnText,
+                            !sheetAllowGlass && styles.servingToggleBtnTextActive,
+                          ]}
+                        >
+                          Bottle Only
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.servingToggleBtn,
+                          sheetAllowGlass && styles.servingToggleBtnActive,
+                        ]}
+                        onPress={() => {
+                          setSheetAllowGlass(true);
+                          setSheetAllowCarafe(true);
+                        }}
                       >
                         <MaterialCommunityIcons
                           name="glass-wine"
-                          size={18}
+                          size={14}
                           color={sheetAllowGlass ? "#be185d" : theme.textSecondary}
                         />
-                      </View>
-                      <View style={{ flex: 1 }}>
                         <Text
                           style={[
-                            styles.portionToggleTitle,
+                            styles.servingToggleBtnText,
                             sheetAllowGlass && {
                               color: "#be185d",
                               fontWeight: "800",
                             },
                           ]}
                         >
-                          Sellable by the Glass & Carafe
+                          Glass & Carafe
                         </Text>
-                        <Text style={styles.portionToggleSub}>
-                          Enables 1/6 glass pours and 2/6 decanter carafe sales in POS
-                        </Text>
-                      </View>
+                      </TouchableOpacity>
                     </View>
-                    <Switch
-                      value={sheetAllowGlass}
-                      onValueChange={(val) => {
-                        setSheetAllowGlass(val);
-                        setSheetAllowCarafe(val);
-                        if (!val) {
-                          setSheetGlassPrice("");
-                          setSheetCarafePrice("");
-                        }
-                      }}
-                      trackColor={{ false: "#e2e8f0", true: "#f472b6" }}
-                      thumbColor={sheetAllowGlass ? "#be185d" : "#94a3b8"}
-                    />
-                  </View>
-                </View>
-              </View>
-
-              {/* --- RETAIL PRICING & VAT --- */}
-              <View style={[styles.settingsCard, { marginTop: 14 }]}>
-                <View style={{ flexDirection: "column", gap: 12, paddingVertical: 14 }}>
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                    }}
-                  >
-                    <View style={styles.settingTextContainer}>
-                      <Text style={styles.fieldLabel}>RETAIL PRICING</Text>
-                      <Text style={styles.fieldHint}>
-                        Set prices for whole bottle, glass (1/6), carafe (2/6).
+                    {sheetAllowGlass && (
+                      <Text style={[styles.fieldHint, { marginTop: 6, color: "#be185d" + "99" }]}>
+                        Glass & carafe prices visible in pricing below
                       </Text>
-                    </View>
-                    <View style={styles.vatToggleContainer}>
-                      <TouchableOpacity
-                        onPress={() => setSheetVatMode("excluded")}
-                        style={[
-                          styles.vatPill,
-                          sheetVatMode === "excluded" && styles.vatPillActive,
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.vatPillText,
-                            sheetVatMode === "excluded" && styles.vatPillTextActive,
-                          ]}
-                        >
-                          EX VAT
-                        </Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        onPress={() => setSheetVatMode("included")}
-                        style={[
-                          styles.vatPill,
-                          sheetVatMode === "included" && styles.vatPillActive,
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.vatPillText,
-                            sheetVatMode === "included" && styles.vatPillTextActive,
-                          ]}
-                        >
-                          INC VAT
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
+                    )}
                   </View>
 
-                  {/* Bottle Price */}
-                  <View style={styles.priceRow}>
-                    <View style={styles.priceRowTitleGroup}>
-                      <View style={styles.priceIconBadge}>
-                        <MaterialCommunityIcons
-                          name="bottle-wine-outline"
-                          size={18}
-                          color={theme.primary}
-                        />
-                      </View>
-                      <View>
-                        <Text style={styles.priceRowLabel}>Bottle Retail</Text>
-                        <Text style={styles.priceRowSubLabel}>Full 75cl Bottle</Text>
-                      </View>
-                    </View>
-                    <View style={styles.priceInputContainer}>
-                      <Text style={styles.currencyPrefix}>₱</Text>
-                      <TextInput
-                        style={[styles.input, styles.inputPrice]}
-                        value={sheetSellingPrice}
-                        onChangeText={setSheetSellingPrice}
-                        keyboardType="decimal-pad"
-                        placeholder="0.00"
-                        placeholderTextColor="#94a3b8"
-                      />
-                    </View>
-                  </View>
+                  <View style={styles.divider} />
 
-                  {/* Glass Price (Conditional on sheetAllowGlass) */}
-                  {sheetAllowGlass && (
-                    <View style={styles.priceRow}>
-                      <View style={styles.priceRowTitleGroup}>
-                        <View style={[styles.priceIconBadge, { backgroundColor: "#fce7f3", borderColor: "#fbcfe8" }]}>
-                          <MaterialCommunityIcons
-                            name="glass-wine"
-                            size={18}
-                            color="#be185d"
-                          />
-                        </View>
-                        <View>
-                          <Text style={[styles.priceRowLabel, { color: "#be185d" }]}>Glass Price</Text>
-                          <Text style={styles.priceRowSubLabel}>1/6 Pour Portion</Text>
-                        </View>
-                      </View>
-                      <View style={styles.priceInputContainer}>
-                        <Text style={styles.currencyPrefix}>₱</Text>
-                        <TextInput
-                          style={[styles.input, styles.inputPrice]}
-                          value={sheetGlassPrice}
-                          onChangeText={setSheetGlassPrice}
-                          keyboardType="decimal-pad"
-                          placeholder="0.00"
-                          placeholderTextColor="#94a3b8"
-                        />
-                      </View>
-                    </View>
-                  )}
-
-                  {/* Carafe Price (Conditional on sheetAllowCarafe) */}
-                  {sheetAllowCarafe && (
-                    <View style={styles.priceRow}>
-                      <View style={styles.priceRowTitleGroup}>
-                        <View style={[styles.priceIconBadge, { backgroundColor: "#e0f2fe", borderColor: "#bae6fd" }]}>
-                          <MaterialCommunityIcons
-                            name="cup-water"
-                            size={18}
-                            color="#0284c7"
-                          />
-                        </View>
-                        <View>
-                          <Text style={[styles.priceRowLabel, { color: "#0284c7" }]}>Carafe Price</Text>
-                          <Text style={styles.priceRowSubLabel}>2/6 Decanter Portion</Text>
-                        </View>
-                      </View>
-                      <View style={styles.priceInputContainer}>
-                        <Text style={styles.currencyPrefix}>₱</Text>
-                        <TextInput
-                          style={[styles.input, styles.inputPrice]}
-                          value={sheetCarafePrice}
-                          onChangeText={setSheetCarafePrice}
-                          keyboardType="decimal-pad"
-                          placeholder="0.00"
-                          placeholderTextColor="#94a3b8"
-                        />
-                      </View>
-                    </View>
-                  )}
-                </View>
-              </View>
-
-              {/* --- CATEGORY & DISCONTINUED --- */}
-              <View style={[styles.settingsCard, { marginTop: 14 }]}>
-                <View style={[styles.settingRow, { alignItems: "flex-start", paddingVertical: 14 }]}>
-                  <View style={{ flex: 1 }}>
+                  {/* Section B: Wine Category */}
+                  <View style={{ paddingVertical: 12 }}>
                     <Text style={styles.fieldLabel}>WINE CATEGORY</Text>
                     <Text style={styles.fieldHint}>
-                      Defines menu prominence, promotion, and staff priority.
+                      Menu prominence and staff priority level
                     </Text>
-
                     <View style={styles.categorySelectorGrid}>
                       {[
                         { id: "none", label: "Standard", icon: null, color: theme.textSecondary },
                         { id: "fun", label: "Fun Wine", icon: Zap, color: "#d97706", bg: "#fef3c7" },
                         { id: "fine", label: "Fine Wine", icon: Star, color: "#be185d", bg: "#fce7f3" },
-                        { id: "reserve", label: "Reserve Wine", icon: Ghost, color: "#4338ca", bg: "#e0e7ff" },
+                        {
+                          id: "reserve",
+                          label: "Reserve Wine",
+                          icon: Ghost,
+                          color: "#4338ca",
+                          bg: "#e0e7ff",
+                        },
                       ].map((cat) => {
                         const isSelected = sheetWineCategory === cat.id;
                         const Icon = cat.icon;
@@ -2046,7 +2000,7 @@ export default function StoreMasterListScreen() {
                               {
                                 borderColor: isSelected ? cat.color : theme.border,
                                 backgroundColor: isSelected
-                                  ? cat.bg || theme.card
+                                  ? (cat as any).bg || theme.card
                                   : "transparent",
                               },
                             ]}
@@ -2071,86 +2025,233 @@ export default function StoreMasterListScreen() {
                       })}
                     </View>
                   </View>
-                </View>
 
-                <View style={styles.divider} />
+                  <View style={styles.divider} />
 
-                {/* Discontinued Switch */}
-                <View style={styles.settingRow}>
-                  <View style={styles.settingTextContainer}>
-                    <Text style={styles.fieldLabel}>DISCONTINUED / INACTIVE</Text>
-                    <Text style={styles.fieldHint}>
-                      Stop reorder alerts and auto-replenishment requests.
-                    </Text>
+                  {/* Section C: Discontinued */}
+                  <View style={styles.settingRow}>
+                    <View style={styles.settingTextContainer}>
+                      <Text style={styles.fieldLabel}>DISCONTINUED / INACTIVE</Text>
+                      <Text style={styles.fieldHint}>
+                        Stop reorder alerts and auto-replenishment requests.
+                      </Text>
+                    </View>
+                    <Switch
+                      value={sheetDiscontinued}
+                      onValueChange={setSheetDiscontinued}
+                      trackColor={{ false: "#e2e8f0", true: "#ef444460" }}
+                      thumbColor={sheetDiscontinued ? "#ef4444" : "#94a3b8"}
+                    />
                   </View>
-                  <Switch
-                    value={sheetDiscontinued}
-                    onValueChange={setSheetDiscontinued}
-                    trackColor={{ false: "#e2e8f0", true: "#ef444460" }}
-                    thumbColor={sheetDiscontinued ? "#ef4444" : "#94a3b8"}
-                  />
                 </View>
-              </View>
 
-              {/* ACTION BUTTONS */}
-              <TouchableOpacity
-                style={[styles.saveBtn, saving && styles.btnDisabled]}
-                onPress={handleSaveSettings}
-                disabled={saving}
-              >
-                {saving ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.saveBtnText}>SAVE SETTINGS</Text>
-                )}
-              </TouchableOpacity>
-
-              {/* SINGLE WINE REQUEST OR ACTIVE TRACKER */}
-              {selected?.activeRequest ? (
-                <TouchableOpacity
-                  style={styles.requestBtn}
-                  onPress={() => {
-                    closeSheet();
-                    router.push(`/wine-requests/${selected.activeRequest!.id}`);
-                  }}
-                >
-                  {selected.activeRequest.status === "outbound" ||
-                    selected.activeRequest.status === "converted" ? (
-                    <Truck size={18} color={theme.primary} strokeWidth={2.5} />
-                  ) : selected.activeRequest.status === "receiving" ? (
-                    <CheckCircle2 size={18} color={theme.primary} strokeWidth={2.5} />
-                  ) : (
-                    <Clock size={18} color={theme.primary} strokeWidth={2.5} />
-                  )}
-                  <Text style={styles.requestBtnText}>VIEW ACTIVE REQUEST</Text>
-                </TouchableOpacity>
-              ) : (
-                selected &&
-                selected.requestedQty > 0 &&
-                !sheetDiscontinued && (
-                  <TouchableOpacity
-                    style={[styles.requestBtn, requesting && styles.btnDisabled]}
-                    onPress={handleRequestStock}
-                    disabled={requesting}
-                  >
-                    {requesting ? (
-                      <ActivityIndicator color={theme.primary} />
-                    ) : (
-                      <>
-                        <TrendingUp size={18} color={theme.primary} strokeWidth={2.5} />
-                        <Text style={styles.requestBtnText}>
-                          REQUEST {selected.requestedQty} BOTTLES NOW
+                {/* ── RETAIL PRICING ── */}
+                <View style={[styles.settingsCard, { marginTop: 14 }]}>
+                  <View style={{ flexDirection: "column", gap: 12, paddingVertical: 14 }}>
+                    {/* Pricing Header + VAT toggle */}
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                      }}
+                    >
+                      <View style={styles.settingTextContainer}>
+                        <Text style={styles.fieldLabel}>RETAIL PRICING</Text>
+                        <Text style={styles.fieldHint}>
+                          Bottle{sheetAllowGlass ? ", glass (1/6) & carafe (2/6)" : " price"}
                         </Text>
-                      </>
-                    )}
-                  </TouchableOpacity>
-                )
-              )}
+                      </View>
+                      <View style={styles.vatToggleContainer}>
+                        <TouchableOpacity
+                          onPress={() => setSheetVatMode("excluded")}
+                          style={[
+                            styles.vatPill,
+                            sheetVatMode === "excluded" && styles.vatPillActive,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.vatPillText,
+                              sheetVatMode === "excluded" && styles.vatPillTextActive,
+                            ]}
+                          >
+                            EX VAT
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() => setSheetVatMode("included")}
+                          style={[
+                            styles.vatPill,
+                            sheetVatMode === "included" && styles.vatPillActive,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.vatPillText,
+                              sheetVatMode === "included" && styles.vatPillTextActive,
+                            ]}
+                          >
+                            INC VAT
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
 
-              <View style={{ height: 40 }} />
-            </ScrollView>
+                    {/* Bottle Price — full row */}
+                    <View style={styles.priceRow}>
+                      <View style={styles.priceRowTitleGroup}>
+                        <View style={styles.priceIconBadge}>
+                          <MaterialCommunityIcons
+                            name="bottle-wine-outline"
+                            size={16}
+                            color={theme.primary}
+                          />
+                        </View>
+                        <View>
+                          <Text style={styles.priceRowLabel}>Bottle Retail</Text>
+                          <Text style={styles.priceRowSubLabel}>Full 75cl Bottle</Text>
+                        </View>
+                      </View>
+                      <View style={styles.priceInputContainer}>
+                        <Text style={styles.currencyPrefix}>₱</Text>
+                        <TextInput
+                          style={[styles.input, styles.inputPrice]}
+                          value={sheetSellingPrice}
+                          onChangeText={setSheetSellingPrice}
+                          keyboardType="decimal-pad"
+                          placeholder="0.00"
+                          placeholderTextColor="#94a3b8"
+                        />
+                      </View>
+                    </View>
+
+                    {/* Glass & Carafe — side by side when active */}
+                    {sheetAllowGlass && (
+                      <View style={styles.pricingHalfRow}>
+                        {/* Glass */}
+                        <View style={styles.pricingHalf}>
+                          <View style={styles.pricingHalfHeader}>
+                            <MaterialCommunityIcons
+                              name="glass-wine"
+                              size={14}
+                              color="#be185d"
+                            />
+                            <Text style={[styles.pricingHalfLabel, { color: "#be185d" }]}>
+                              Glass Price (1/6)
+                            </Text>
+                          </View>
+                          <View style={[styles.priceInputContainer, { width: "100%" }]}>
+                            <Text style={styles.currencyPrefix}>₱</Text>
+                            <TextInput
+                              style={[styles.input, styles.inputPrice, { flex: 1 }]}
+                              value={sheetGlassPrice}
+                              onChangeText={setSheetGlassPrice}
+                              keyboardType="decimal-pad"
+                              placeholder="0.00"
+                              placeholderTextColor="#94a3b8"
+                            />
+                          </View>
+                        </View>
+
+                        {/* Carafe */}
+                        <View style={styles.pricingHalf}>
+                          <View style={styles.pricingHalfHeader}>
+                            <MaterialCommunityIcons
+                              name="cup-water"
+                              size={14}
+                              color="#0284c7"
+                            />
+                            <Text style={[styles.pricingHalfLabel, { color: "#0284c7" }]}>
+                              Carafe Price (2/6)
+                            </Text>
+                          </View>
+                          <View style={[styles.priceInputContainer, { width: "100%" }]}>
+                            <Text style={styles.currencyPrefix}>₱</Text>
+                            <TextInput
+                              style={[styles.input, styles.inputPrice, { flex: 1 }]}
+                              value={sheetCarafePrice}
+                              onChangeText={setSheetCarafePrice}
+                              keyboardType="decimal-pad"
+                              placeholder="0.00"
+                              placeholderTextColor="#94a3b8"
+                            />
+                          </View>
+                        </View>
+                      </View>
+                    )}
+                  </View>
+                </View>
+
+                <View style={{ height: 24 }} />
+              </ScrollView>
+
+              {/* ── PINNED BOTTOM ACTIONS ── */}
+              <View style={styles.sheetActionRow}>
+                {selected?.activeRequest ? (
+                  <TouchableOpacity
+                    style={[styles.requestBtn, { flex: 1, marginTop: 0 }]}
+                    onPress={() => {
+                      closeSheet();
+                      router.push(`/wine-requests/${selected.activeRequest!.id}`);
+                    }}
+                  >
+                    {selected.activeRequest.status === "outbound" ||
+                    selected.activeRequest.status === "converted" ? (
+                      <Truck size={16} color={theme.primary} strokeWidth={2.5} />
+                    ) : selected.activeRequest.status === "receiving" ? (
+                      <CheckCircle2 size={16} color={theme.primary} strokeWidth={2.5} />
+                    ) : (
+                      <Clock size={16} color={theme.primary} strokeWidth={2.5} />
+                    )}
+                    <Text style={styles.requestBtnText}>VIEW ACTIVE REQUEST</Text>
+                  </TouchableOpacity>
+                ) : (
+                  selected &&
+                  selected.requestedQty > 0 &&
+                  !sheetDiscontinued && (
+                    <TouchableOpacity
+                      style={[
+                        styles.requestBtn,
+                        { flex: 1, marginTop: 0 },
+                        requesting && styles.btnDisabled,
+                      ]}
+                      onPress={handleRequestStock}
+                      disabled={requesting}
+                    >
+                      {requesting ? (
+                        <ActivityIndicator color={theme.primary} />
+                      ) : (
+                        <>
+                          <TrendingUp size={16} color={theme.primary} strokeWidth={2.5} />
+                          <Text style={styles.requestBtnText}>
+                            REQUEST {selected.requestedQty} BOTTLES
+                          </Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  )
+                )}
+
+                <TouchableOpacity
+                  style={[
+                    styles.saveBtn,
+                    { flex: 1, marginTop: 0 },
+                    saving && styles.btnDisabled,
+                  ]}
+                  onPress={handleSaveSettings}
+                  disabled={saving}
+                >
+                  {saving ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.saveBtnText}>SAVE SETTINGS</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* BATCH CONFIRMATION MODAL */}
@@ -3510,4 +3611,252 @@ const styles = StyleSheet.create({
   },
   successCloseButton: { marginTop: 8, padding: 8 },
   successCloseButtonText: { fontSize: 13, fontWeight: "700" },
+
+  // ─── STOCK SNAPSHOT STRIP ───────────────────────────────────────────
+  stockStrip: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: theme.background,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  stockStripLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  stockStripNum: {
+    fontSize: 28,
+    fontWeight: "900",
+    color: theme.text,
+    letterSpacing: -0.5,
+  },
+  stockStripLabel: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: theme.textSecondary,
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+  },
+  stockStripSub: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: theme.textSecondary,
+    marginTop: 1,
+  },
+  statusChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+  },
+  statusChipDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  statusChipText: {
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.3,
+  },
+
+  // ─── 2-COLUMN TARGET GRID ───────────────────────────────────────────
+  targetGrid: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 10,
+  },
+  targetTile: {
+    flex: 1,
+    backgroundColor: theme.background,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: theme.border,
+    padding: 12,
+  },
+  targetTileLeft: {
+    borderLeftWidth: 3,
+    borderLeftColor: "#ea580c",
+  },
+  targetTileRight: {
+    borderLeftWidth: 3,
+    borderLeftColor: theme.primary,
+  },
+  targetTileHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    marginBottom: 2,
+  },
+  targetTileLabel: {
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+  },
+  targetTileHint: {
+    fontSize: 10,
+    color: theme.textSecondary,
+    fontWeight: "500",
+  },
+
+  // ─── INLINE STATUS PILL ─────────────────────────────────────────────
+  statusPill: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 14,
+  },
+  statusPillText: {
+    fontSize: 11,
+    fontWeight: "700",
+    lineHeight: 16,
+  },
+
+  // ─── SERVING MODE TOGGLE ────────────────────────────────────────────
+  servingToggle: {
+    flexDirection: "row",
+    backgroundColor: theme.border + "50",
+    borderRadius: 10,
+    padding: 3,
+    gap: 3,
+  },
+  servingToggleBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+  },
+  servingToggleBtnActive: {
+    backgroundColor: theme.card,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  servingToggleBtnText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: theme.textSecondary,
+  },
+  servingToggleBtnTextActive: {
+    color: theme.primary,
+    fontWeight: "800",
+  },
+
+  // ─── SIDE-BY-SIDE PRICING HALVES ────────────────────────────────────
+  pricingHalfRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  pricingHalf: {
+    flex: 1,
+    gap: 6,
+  },
+  pricingHalfHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    marginBottom: 2,
+  },
+  pricingHalfLabel: {
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.2,
+  },
+
+  // ─── SHEET ACTION ROW ───────────────────────────────────────────────
+  sheetActionRow: {
+    flexDirection: "row",
+    gap: 10,
+    paddingTop: 14,
+    paddingBottom: 20,
+    borderTopWidth: 1,
+    borderTopColor: theme.border,
+    marginTop: 4,
+  },
+
+  // ─── ATELIER LUXURY CONTROLS ─────────────────────────────────────────
+  compactTuneDial: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: theme.primary + "0A",
+    borderWidth: 1,
+    borderColor: theme.primary + "20",
+    justifyContent: "center",
+    alignItems: "center",
+    marginLeft: 6,
+    shadowColor: theme.primary,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  compactStockUnset: {
+    fontSize: 9.5,
+    fontWeight: "700",
+    color: "#b45309",
+    fontStyle: "italic",
+  },
+  cellarGaugeFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 10,
+    paddingTop: 9,
+    borderTopWidth: 1,
+    borderTopColor: theme.border + "70",
+  },
+  cellarGaugeLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flex: 1,
+  },
+  cellarGaugeLabel: {
+    fontSize: 9.5,
+    fontWeight: "800",
+    color: theme.textSecondary,
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+  },
+  cellarGaugeAction: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+  },
+  cellarGaugeActionText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: theme.primary,
+    letterSpacing: 0.2,
+  },
+  modalHeaderEyebrow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginBottom: 4,
+  },
+  modalHeaderEyebrowText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: theme.primary,
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+  },
 });
