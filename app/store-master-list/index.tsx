@@ -3,6 +3,8 @@ import { useAuth } from "@/context/AuthContext";
 import { apiFetch } from "@/lib/api";
 import { MasterWine, StockStatus, StoreWineSetting } from "@/types";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import StoreRequestCartModal, { RequestCartItem } from "@/components/StoreRequestCartModal";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import {
   AlertTriangle,
@@ -22,10 +24,12 @@ import {
   RefreshCw,
   Search,
   ShieldCheck,
+  ShoppingCart,
   SlidersHorizontal,
   Star,
   TrendingDown,
   TrendingUp,
+  Trash2,
   Truck,
   Wine,
   X,
@@ -53,6 +57,22 @@ import {
 } from "react-native";
 
 const theme = Colors.store;
+
+function getProducerAllCaps(producer?: string | null): string {
+  return producer?.trim() ? producer.trim().toUpperCase() : "UNKNOWN PRODUCER";
+}
+
+function getWineDetailsLine(wine: {
+  vintage?: string | null;
+  name?: string | null;
+  format?: string | null;
+}): string {
+  const vintage = wine.vintage?.trim() ? wine.vintage.trim() : "NV";
+  const name = wine.name?.trim() ? wine.name.trim() : "Unnamed Wine";
+  const format = wine.format?.trim() ? wine.format.trim() : "75cl";
+
+  return `${vintage} - ${name} - ${format}`;
+}
 
 interface WineEntry {
   masterWine: MasterWine;
@@ -207,10 +227,13 @@ export default function StoreMasterListScreen() {
 
   // Action states
   const [saving, setSaving] = useState(false);
-  const [requesting, setRequesting] = useState(false);
-  const [isBatchConfirmVisible, setIsBatchConfirmVisible] = useState(false);
-  const [batchRequesting, setBatchRequesting] = useState(false);
   const [isSuccessVisible, setIsSuccessVisible] = useState(false);
+
+  // Request Cart states
+  const [requestCart, setRequestCart] = useState<Record<string, RequestCartItem>>({});
+  const [isCartModalVisible, setIsCartModalVisible] = useState(false);
+  const [submittingCart, setSubmittingCart] = useState(false);
+  const [sheetRequestQty, setSheetRequestQty] = useState(1);
 
   const fetchData = useCallback(async () => {
     if (authLoading) return;
@@ -520,12 +543,20 @@ export default function StoreMasterListScreen() {
 
   const itemsToRequest = useMemo(() => {
     return filteredAndSortedEntries.filter(
-      (entry) => entry.requestedQty > 0 && !entry.setting?.discontinued
+      (entry) => entry.requestedQty > 0 && !entry.setting?.discontinued && !entry.activeRequest
     );
   }, [filteredAndSortedEntries]);
 
   const openSheet = (entry: WineEntry) => {
     setSelected(entry);
+    const existingInCart = requestCart[entry.masterWine.id];
+    setSheetRequestQty(
+      existingInCart
+        ? existingInCart.qty
+        : entry.requestedQty > 0
+          ? entry.requestedQty
+          : 1
+    );
     setSheetPar(entry.setting?.parLevel?.toString() ?? "");
     setSheetSafety(entry.setting?.safetyStock?.toString() ?? "");
     setSheetSellingPrice(entry.setting?.sellingPrice?.toString() ?? "");
@@ -601,79 +632,140 @@ export default function StoreMasterListScreen() {
     }
   };
 
-  const handleRequestStock = async () => {
-    if (!selected || !storeId || !profile) return;
-    const qty = selected.requestedQty;
-    if (qty <= 0) return;
+  const saveCart = useCallback(
+    (updated: Record<string, RequestCartItem>) => {
+      setRequestCart(updated);
+      if (storeId) {
+        AsyncStorage.setItem(
+          `@caveau:store_request_cart_${storeId}`,
+          JSON.stringify(updated)
+        ).catch((err) => console.warn("Failed to persist cart:", err));
+      }
+    },
+    [storeId]
+  );
 
-    Alert.alert(
-      "Submit Replenishment",
-      `Request ${qty} bottles of ${selected.masterWine.name}?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Submit",
-          onPress: async () => {
-            setRequesting(true);
-            try {
-              await apiFetch("/wine-requests", {
-                method: "POST",
-                body: JSON.stringify({
-                  storeId,
-                  targetStoreId: "warehouse",
-                  createdBy: profile.email,
-                  requesterId: profile.id,
-                  status: "pending",
-                  items: [
-                    {
-                      masterWineId: selected.masterWine.id,
-                      wineName: selected.masterWine.name,
-                      vintage: selected.masterWine.vintage,
-                      sku: selected.masterWine.sku ?? "",
-                      format: selected.masterWine.format,
-                      producer: selected.masterWine.producer,
-                      qty,
-                      price: selected.masterWine.price,
-                      pulledQty: 0,
-                      ingressedQty: 0,
-                    },
-                  ],
-                  totalAmount: selected.masterWine.price * qty,
-                }),
-              });
-              Alert.alert(
-                "Submitted!",
-                `Request for ${qty} bottles has been sent to warehouse.`
-              );
-              closeSheet();
-              fetchData();
-            } catch (err) {
-              Alert.alert("Error", "Failed to submit request.");
-              console.error(err);
-            } finally {
-              setRequesting(false);
+  useEffect(() => {
+    if (!storeId) return;
+    AsyncStorage.getItem(`@caveau:store_request_cart_${storeId}`)
+      .then((raw) => {
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed === "object") {
+              setRequestCart(parsed);
             }
-          },
-        },
-      ]
-    );
+          } catch (e) {
+            console.warn("Error parsing stored cart:", e);
+          }
+        }
+      })
+      .catch(() => {});
+  }, [storeId]);
+
+  const addToCart = (entry: WineEntry, customQty?: number) => {
+    if (entry.activeRequest) {
+      Alert.alert(
+        "Active Request Exists",
+        `This wine already has an active request (${entry.activeRequest.status.toUpperCase()}). To prevent duplicate ordering, please track fulfillment or check Wine Requests.`
+      );
+      return;
+    }
+    const finalQty = customQty ?? (entry.requestedQty > 0 ? entry.requestedQty : 1);
+    const updated = {
+      ...requestCart,
+      [entry.masterWine.id]: {
+        entry,
+        qty: Math.max(1, finalQty),
+        selected: true,
+      },
+    };
+    saveCart(updated);
   };
 
-  const executeBatchRequest = async () => {
-    if (!storeId || !profile) return;
-    if (itemsToRequest.length === 0) return;
+  const toggleCartItemSelect = (wineId: string) => {
+    if (!requestCart[wineId]) return;
+    const updated = {
+      ...requestCart,
+      [wineId]: {
+        ...requestCart[wineId],
+        selected: !requestCart[wineId].selected,
+      },
+    };
+    saveCart(updated);
+  };
 
-    setBatchRequesting(true);
+  const selectAllCartItems = (select: boolean) => {
+    const updated: Record<string, RequestCartItem> = {};
+    Object.entries(requestCart).forEach(([id, item]) => {
+      updated[id] = { ...item, selected: select };
+    });
+    saveCart(updated);
+  };
+
+  const updateCartItemQty = (wineId: string, deltaOrValue: number, isAbsolute = false) => {
+    if (!requestCart[wineId]) return;
+    const current = requestCart[wineId].qty;
+    const nextVal = isAbsolute ? deltaOrValue : current + deltaOrValue;
+    const updated = {
+      ...requestCart,
+      [wineId]: {
+        ...requestCart[wineId],
+        qty: Math.max(1, nextVal),
+      },
+    };
+    saveCart(updated);
+  };
+
+  const removeCartItem = (wineId: string) => {
+    const updated = { ...requestCart };
+    delete updated[wineId];
+    saveCart(updated);
+  };
+
+  const clearCart = () => {
+    saveCart({});
+  };
+
+  const addAllDeficitsToCart = () => {
+    const deficitItems = entries.filter(
+      (e) => e.requestedQty > 0 && !e.setting?.discontinued && !e.activeRequest
+    );
+    if (deficitItems.length === 0) {
+      Alert.alert(
+        "No Deficits Found",
+        "All wines are currently at or above optimal stock levels."
+      );
+      return;
+    }
+    const updated = { ...requestCart };
+    deficitItems.forEach((e) => {
+      updated[e.masterWine.id] = {
+        entry: e,
+        qty: Math.max(1, Math.ceil(e.requestedQty)),
+        selected: true,
+      };
+    });
+    saveCart(updated);
+    setIsCartModalVisible(true);
+  };
+
+  const submitGroupedRequest = async () => {
+    if (!storeId || !profile) return;
+    const selectedItems = Object.values(requestCart).filter((it) => it.selected);
+    if (selectedItems.length === 0) return;
+
+    setSubmittingCart(true);
     try {
-      const requestItems = itemsToRequest.map((item) => ({
-        masterWineId: item.masterWine.id,
-        wineName: item.masterWine.name,
-        vintage: item.masterWine.vintage,
-        format: item.masterWine.format,
-        producer: item.masterWine.producer,
-        sku: item.masterWine.sku ?? "",
-        qty: item.requestedQty,
-        price: item.masterWine.price,
+      const requestItems = selectedItems.map((item) => ({
+        masterWineId: item.entry.masterWine.id,
+        wineName: item.entry.masterWine.name,
+        vintage: item.entry.masterWine.vintage,
+        format: item.entry.masterWine.format,
+        producer: item.entry.masterWine.producer,
+        sku: item.entry.masterWine.sku ?? "",
+        qty: item.qty,
+        price: item.entry.masterWine.price || 0,
         pulledQty: 0,
         ingressedQty: 0,
       }));
@@ -696,25 +788,22 @@ export default function StoreMasterListScreen() {
         }),
       });
 
-      setIsBatchConfirmVisible(false);
+      // Remove only the ordered items from the cart
+      const remainingCart = { ...requestCart };
+      selectedItems.forEach((it) => {
+        delete remainingCart[it.entry.masterWine.id];
+      });
+      saveCart(remainingCart);
+
+      setIsCartModalVisible(false);
       setIsSuccessVisible(true);
+      fetchData();
     } catch (err) {
-      Alert.alert("Error", "Failed to submit batch request.");
+      Alert.alert("Error", "Failed to submit grouped wine request.");
       console.error(err);
     } finally {
-      setBatchRequesting(false);
+      setSubmittingCart(false);
     }
-  };
-
-  const handleBatchRequest = () => {
-    if (itemsToRequest.length === 0) {
-      Alert.alert(
-        "No Replenishment Needed",
-        "There are no items currently in deficit under this filter."
-      );
-      return;
-    }
-    setIsBatchConfirmVisible(true);
   };
 
   // Stepper helper for Par and Safety
@@ -742,6 +831,8 @@ export default function StoreMasterListScreen() {
       (item.setting?.glassPrice != null && Number(item.setting.glassPrice) > 0) ||
       (item.setting?.carafePrice != null && Number(item.setting.carafePrice) > 0);
 
+    const cartItem = requestCart[item.masterWine.id];
+
     return (
       <TouchableOpacity
         style={[
@@ -755,30 +846,22 @@ export default function StoreMasterListScreen() {
         <View style={styles.compactLeft}>
           <View style={styles.compactTitleRow}>
             {category === "fun" && (
-              <View style={[styles.miniCatBadge, { backgroundColor: "#fef3c7" }]}>
-                <Zap size={10} color="#d97706" />
-              </View>
+              <Text style={styles.compactCatEmoji}>😁</Text>
             )}
             {category === "fine" && (
-              <View style={[styles.miniCatBadge, { backgroundColor: "#fce7f3" }]}>
-                <Star size={10} color="#be185d" />
-              </View>
+              <Text style={styles.compactCatEmoji}>💎</Text>
             )}
             {category === "reserve" && (
-              <View style={[styles.miniCatBadge, { backgroundColor: "#e0e7ff" }]}>
-                <Ghost size={10} color="#4338ca" />
-              </View>
+              <Text style={styles.compactCatEmoji}>👻</Text>
             )}
-            <Text style={styles.compactWineName} numberOfLines={1}>
-              {item.masterWine.name}
+            <Text style={styles.compactProducerText} numberOfLines={1}>
+              {getProducerAllCaps(item.masterWine.producer)}
             </Text>
           </View>
 
           <View style={styles.compactMetaRow}>
-            <Text style={styles.compactMetaText} numberOfLines={1}>
-              {[item.masterWine.vintage, item.masterWine.producer, item.masterWine.format]
-                .filter(Boolean)
-                .join(" · ")}
+            <Text style={styles.compactWineDetailsText} numberOfLines={1}>
+              {getWineDetailsLine(item.masterWine)}
             </Text>
             {isPortion && (
               <View style={styles.portionTagGlass}>
@@ -831,11 +914,93 @@ export default function StoreMasterListScreen() {
               <Text style={styles.compactGlassText}>{item.openGlassesCount}/6</Text>
             </View>
           )}
+
+          {/* Individual Cart Button or Mini Stepper */}
+          {cartItem ? (
+            <View style={styles.compactCartStepper}>
+              <TouchableOpacity
+                style={styles.compactCartStepperBtn}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  if (cartItem.qty <= 1) {
+                    removeCartItem(item.masterWine.id);
+                  } else {
+                    updateCartItemQty(item.masterWine.id, -1);
+                  }
+                }}
+                hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
+              >
+                {cartItem.qty <= 1 ? (
+                  <Trash2 size={13} color="#dc2626" />
+                ) : (
+                  <Minus size={14} color="#ea580c" strokeWidth={2.5} />
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.compactCartStepperValBtn}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  setIsCartModalVisible(true);
+                }}
+              >
+                <Text style={styles.compactCartStepperVal}>{cartItem.qty}</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.compactCartStepperBtn}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  updateCartItemQty(item.masterWine.id, 1);
+                }}
+                hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
+              >
+                <Plus size={14} color="#ea580c" strokeWidth={2.5} />
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={[
+                styles.compactAddToCartBtn,
+                item.requestedQty > 0 && styles.compactAddToCartBtnDeficit,
+                !!item.activeRequest && styles.compactAddToCartBtnDisabled,
+              ]}
+              onPress={(e) => {
+                e.stopPropagation();
+                addToCart(item);
+              }}
+              disabled={!!item.activeRequest}
+              activeOpacity={0.7}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <ShoppingCart
+                size={15}
+                color={
+                  item.activeRequest
+                    ? "#9ca3af"
+                    : item.requestedQty > 0
+                    ? "#fff"
+                    : theme.primary
+                }
+              />
+              <Plus
+                size={12}
+                color={
+                  item.activeRequest
+                    ? "#9ca3af"
+                    : item.requestedQty > 0
+                    ? "#fff"
+                    : theme.primary
+                }
+                style={{ marginLeft: 1 }}
+              />
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Tactile Tuning Dial */}
         <View style={styles.compactTuneDial}>
-          <SlidersHorizontal size={13} color={theme.primary} strokeWidth={2.2} />
+          <SlidersHorizontal size={16} color={theme.primary} strokeWidth={2.2} />
         </View>
       </TouchableOpacity>
     );
@@ -864,6 +1029,8 @@ export default function StoreMasterListScreen() {
     const parPercentage =
       safetyStock > 0 ? Math.min(100, (parLevel / safetyStock) * 100) : 0;
 
+    const cartItem = requestCart[item.masterWine.id];
+
     return (
       <TouchableOpacity
         style={[
@@ -877,14 +1044,15 @@ export default function StoreMasterListScreen() {
       >
         <View style={styles.cardHeaderRow}>
           <View style={{ flex: 1, paddingRight: 8 }}>
+            <Text style={styles.cardProducerText} numberOfLines={1}>
+              {getProducerAllCaps(item.masterWine.producer)}
+            </Text>
             <Text style={styles.wineName} numberOfLines={2}>
-              {item.masterWine.name}
+              {getWineDetailsLine(item.masterWine)}
             </Text>
-            <Text style={styles.wineMeta}>
-              {[item.masterWine.vintage, item.masterWine.producer, item.masterWine.format]
-                .filter(Boolean)
-                .join(" · ")}
-            </Text>
+            {item.masterWine.sku ? (
+              <Text style={styles.wineSkuText}>SKU: {item.masterWine.sku}</Text>
+            ) : null}
           </View>
           <View style={{ alignItems: "flex-end" }}>
             <View style={[styles.statusBadge, { backgroundColor: cfg.bg }]}>
@@ -905,20 +1073,20 @@ export default function StoreMasterListScreen() {
 
         <View style={styles.tagsRow}>
           {category === "fun" && (
-            <View style={[styles.indicatorBadge, { backgroundColor: "#fef3c7" }]}>
-              <Zap size={12} color="#d97706" strokeWidth={2.5} />
+            <View style={[styles.indicatorBadge, styles.indicatorBadgeTransparent, { borderColor: "#d9770640" }]}>
+              <Text style={styles.catEmojiText}>😁</Text>
               <Text style={[styles.indicatorText, { color: "#d97706" }]}>Fun Wine</Text>
             </View>
           )}
           {category === "fine" && (
-            <View style={[styles.indicatorBadge, { backgroundColor: "#fce7f3" }]}>
-              <Star size={12} color="#be185d" strokeWidth={2.5} />
+            <View style={[styles.indicatorBadge, styles.indicatorBadgeTransparent, { borderColor: "#be185d40" }]}>
+              <Text style={styles.catEmojiText}>💎</Text>
               <Text style={[styles.indicatorText, { color: "#be185d" }]}>Fine Wine</Text>
             </View>
           )}
           {category === "reserve" && (
-            <View style={[styles.indicatorBadge, { backgroundColor: "#e0e7ff" }]}>
-              <Ghost size={12} color="#4338ca" strokeWidth={2.5} />
+            <View style={[styles.indicatorBadge, styles.indicatorBadgeTransparent, { borderColor: "#4338ca40" }]}>
+              <Text style={styles.catEmojiText}>👻</Text>
               <Text style={[styles.indicatorText, { color: "#4338ca" }]}>Reserve Wine</Text>
             </View>
           )}
@@ -931,6 +1099,15 @@ export default function StoreMasterListScreen() {
             <View style={[styles.indicatorBadge, { backgroundColor: "#f1f5f9", borderColor: "#e2e8f0", borderWidth: 1 }]}>
               <MaterialCommunityIcons name="bottle-wine-outline" size={13} color="#64748b" />
               <Text style={[styles.indicatorText, { color: "#64748b" }]}>Bottle Only</Text>
+            </View>
+          )}
+
+          {requestCart[item.masterWine.id] && (
+            <View style={[styles.indicatorBadge, { backgroundColor: "#ffedd5", borderColor: "#fed7aa", borderWidth: 1 }]}>
+              <ShoppingCart size={11} color="#ea580c" />
+              <Text style={[styles.indicatorText, { color: "#ea580c", fontWeight: "800" }]}>
+                {requestCart[item.masterWine.id].qty} in Cart
+              </Text>
             </View>
           )}
         </View>
@@ -1036,6 +1213,108 @@ export default function StoreMasterListScreen() {
             <ChevronRight size={14} color={cfg.color} style={{ marginLeft: "auto" }} />
           </TouchableOpacity>
         )}
+
+        {/* Quick Replenishment Cart Action Strip */}
+        <View style={styles.cardCartActionBar}>
+          {cartItem ? (
+            <View style={styles.cardCartActiveRow}>
+              <View style={styles.cardCartInfo}>
+                <ShoppingCart size={16} color="#ea580c" />
+                <Text style={styles.cardCartInfoText}>
+                  In Cart:{" "}
+                  <Text style={{ fontWeight: "900", color: "#ea580c" }}>
+                    {cartItem.qty} {cartItem.qty === 1 ? "bottle" : "bottles"}
+                  </Text>
+                </Text>
+              </View>
+              <View style={styles.cardCartStepper}>
+                <TouchableOpacity
+                  style={styles.cardCartStepperBtn}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    if (cartItem.qty <= 1) {
+                      removeCartItem(item.masterWine.id);
+                    } else {
+                      updateCartItemQty(item.masterWine.id, -1);
+                    }
+                  }}
+                  hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
+                >
+                  {cartItem.qty <= 1 ? (
+                    <Trash2 size={15} color="#dc2626" />
+                  ) : (
+                    <Minus size={16} color="#374151" strokeWidth={2.5} />
+                  )}
+                </TouchableOpacity>
+
+                <Text style={styles.cardCartStepperVal}>{cartItem.qty}</Text>
+
+                <TouchableOpacity
+                  style={styles.cardCartStepperBtn}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    updateCartItemQty(item.masterWine.id, 1);
+                  }}
+                  hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
+                >
+                  <Plus size={16} color="#374151" strokeWidth={2.5} />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.cardCartViewBtn}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    setIsCartModalVisible(true);
+                  }}
+                  hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                >
+                  <Text style={styles.cardCartViewBtnText}>View Cart</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : (
+            <View style={styles.cardCartInactiveRow}>
+              <View style={styles.cardCartPrompt}>
+                <Text style={styles.cardCartPromptText} numberOfLines={1}>
+                  {item.requestedQty > 0
+                    ? `Deficit: ${item.requestedQty} btls below safety`
+                    : "Need replenishment from warehouse?"}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={[
+                  styles.cardAddToCartBtn,
+                  item.requestedQty > 0 && styles.cardAddToCartBtnDeficit,
+                  !!item.activeRequest && styles.cardAddToCartBtnDisabled,
+                ]}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  addToCart(item);
+                }}
+                disabled={!!item.activeRequest}
+                activeOpacity={0.8}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <ShoppingCart
+                  size={16}
+                  color={item.activeRequest ? "#9ca3af" : "#fff"}
+                />
+                <Text
+                  style={[
+                    styles.cardAddToCartBtnText,
+                    item.activeRequest && { color: "#9ca3af" },
+                  ]}
+                >
+                  {item.activeRequest
+                    ? "In Transit"
+                    : item.requestedQty > 0
+                    ? `+ Add ${item.requestedQty} Deficit`
+                    : "+ Add to Cart"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
 
         {/* Luxury Cellar Target Strip */}
         <View style={styles.cellarGaugeFooter}>
@@ -1285,19 +1564,17 @@ export default function StoreMasterListScreen() {
       </Text>
       <View style={styles.categorySelectorGrid}>
         {[
-          { id: "none", label: "Standard", icon: null, color: theme.textSecondary },
-          { id: "fun", label: "Fun Wine", icon: Zap, color: "#d97706", bg: "#fef3c7" },
-          { id: "fine", label: "Fine Wine", icon: Star, color: "#be185d", bg: "#fce7f3" },
+          { id: "none", label: "Standard", emoji: null, color: theme.textSecondary },
+          { id: "fun", label: "Fun Wine", emoji: "😁", color: "#d97706" },
+          { id: "fine", label: "Fine Wine", emoji: "💎", color: "#be185d" },
           {
             id: "reserve",
             label: "Reserve Wine",
-            icon: Ghost,
+            emoji: "👻",
             color: "#4338ca",
-            bg: "#e0e7ff",
           },
         ].map((cat) => {
           const isSelected = sheetWineCategory === cat.id;
-          const Icon = cat.icon;
           return (
             <TouchableOpacity
               key={cat.id}
@@ -1306,17 +1583,14 @@ export default function StoreMasterListScreen() {
                 styles.catSelectBtn,
                 {
                   borderColor: isSelected ? cat.color : theme.border,
-                  backgroundColor: isSelected
-                    ? (cat as any).bg || theme.card
-                    : "transparent",
+                  backgroundColor: isSelected ? `${cat.color}15` : "transparent",
                 },
               ]}
             >
-              {Icon && (
-                <Icon
-                  size={14}
-                  color={isSelected ? cat.color : theme.textSecondary}
-                />
+              {cat.emoji && (
+                <Text style={{ fontSize: 13, opacity: isSelected ? 1 : 0.75 }}>
+                  {cat.emoji}
+                </Text>
               )}
               <Text
                 style={{
@@ -2025,36 +2299,48 @@ export default function StoreMasterListScreen() {
         />
       )}
 
-      {/* FLOATING BATCH REPLENISHMENT BAR */}
-      {itemsToRequest.length > 0 && !loading && (
+      {/* FLOATING REQUEST CART BAR */}
+      {(Object.keys(requestCart).length > 0 || itemsToRequest.length > 0) && !loading && (
         <View style={styles.batchRequestContainer}>
-          <TouchableOpacity
-            style={[
-              styles.batchRequestButton,
-              batchRequesting && styles.btnDisabled,
-            ]}
-            onPress={handleBatchRequest}
-            disabled={batchRequesting}
-            activeOpacity={0.85}
-          >
-            {batchRequesting ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <>
-                <View style={styles.batchCountBadge}>
-                  <Text style={styles.batchCountBadgeText}>
-                    {itemsToRequest.length}
-                  </Text>
-                </View>
-                <Text style={styles.batchRequestButtonText}>
-                  REQUEST REPLENISHMENT (
-                  {itemsToRequest.reduce((sum, item) => sum + item.requestedQty, 0)}{" "}
-                  BOTTLES)
+          {Object.keys(requestCart).length > 0 ? (
+            <TouchableOpacity
+              style={styles.batchRequestButton}
+              onPress={() => setIsCartModalVisible(true)}
+              activeOpacity={0.85}
+            >
+              <View style={styles.batchCountBadge}>
+                <Text style={styles.batchCountBadgeText}>
+                  {Object.values(requestCart).filter((i) => i.selected).length}
                 </Text>
-                <TrendingUp size={18} color="#fff" strokeWidth={2.5} />
-              </>
-            )}
-          </TouchableOpacity>
+              </View>
+              <Text style={styles.batchRequestButtonText}>
+                REQUEST CART (
+                {Object.values(requestCart)
+                  .filter((i) => i.selected)
+                  .reduce((sum, item) => sum + item.qty, 0)}{" "}
+                BOTTLES)
+              </Text>
+              <ShoppingCart size={18} color="#fff" />
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={[styles.batchRequestButton, { backgroundColor: "#ea580c" }]}
+              onPress={addAllDeficitsToCart}
+              activeOpacity={0.85}
+            >
+              <View style={[styles.batchCountBadge, { backgroundColor: "#fff" }]}>
+                <Text style={[styles.batchCountBadgeText, { color: "#ea580c" }]}>
+                  {itemsToRequest.length}
+                </Text>
+              </View>
+              <Text style={styles.batchRequestButtonText}>
+                STAGE DEFICITS (
+                {itemsToRequest.reduce((sum, item) => sum + item.requestedQty, 0)}{" "}
+                BOTTLES)
+              </Text>
+              <Zap size={18} color="#fff" />
+            </TouchableOpacity>
+          )}
         </View>
       )}
 
@@ -2178,18 +2464,17 @@ export default function StoreMasterListScreen() {
                     <SlidersHorizontal size={11} color={theme.primary} strokeWidth={2.2} />
                     <Text style={styles.modalHeaderEyebrowText}>CELLAR INVENTORY SETTINGS</Text>
                   </View>
+                  <Text style={styles.sheetProducerText} numberOfLines={1}>
+                    {getProducerAllCaps(selected?.masterWine.producer)}
+                  </Text>
                   <Text style={[styles.sheetWineName, isLandscape && { fontSize: 16, marginBottom: 1 }]} numberOfLines={isLandscape ? 1 : 2}>
-                    {selected?.masterWine.name}
+                    {selected ? getWineDetailsLine(selected.masterWine) : ""}
                   </Text>
-                  <Text style={styles.sheetWineMeta} numberOfLines={1}>
-                    {[
-                      selected?.masterWine.vintage,
-                      selected?.masterWine.producer,
-                      selected?.masterWine.format,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </Text>
+                  {selected?.masterWine.sku ? (
+                    <Text style={styles.sheetWineMeta} numberOfLines={1}>
+                      SKU: {selected.masterWine.sku}
+                    </Text>
+                  ) : null}
                 </View>
                 <TouchableOpacity onPress={closeSheet} style={styles.closeBtn}>
                   <X size={22} color={theme.textSecondary} />
@@ -2266,29 +2551,55 @@ export default function StoreMasterListScreen() {
                   </TouchableOpacity>
                 ) : (
                   selected &&
-                  selected.requestedQty > 0 &&
                   !sheetDiscontinued && (
-                    <TouchableOpacity
-                      style={[
-                        styles.requestBtn,
-                        { flex: 1, marginTop: 0 },
-                        isLandscape && styles.btnLandscape,
-                        requesting && styles.btnDisabled,
-                      ]}
-                      onPress={handleRequestStock}
-                      disabled={requesting}
-                    >
-                      {requesting ? (
-                        <ActivityIndicator color={theme.primary} />
-                      ) : (
-                        <>
-                          <TrendingUp size={15} color={theme.primary} strokeWidth={2.5} />
-                          <Text style={[styles.requestBtnText, isLandscape && { fontSize: 12 }]}>
-                            REQUEST {selected.requestedQty} BOTTLES
-                          </Text>
-                        </>
-                      )}
-                    </TouchableOpacity>
+                    <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 6 }}>
+                      {/* Mini Stepper for cart */}
+                      <View style={styles.sheetCartStepper}>
+                        <TouchableOpacity
+                          style={styles.sheetCartStepperBtn}
+                          onPress={() => setSheetRequestQty((q) => Math.max(1, q - 1))}
+                          hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
+                        >
+                          <Minus size={16} color={theme.text} strokeWidth={2.5} />
+                        </TouchableOpacity>
+                        <Text style={styles.sheetCartStepperVal}>{sheetRequestQty}</Text>
+                        <TouchableOpacity
+                          style={styles.sheetCartStepperBtn}
+                          onPress={() => setSheetRequestQty((q) => q + 1)}
+                          hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
+                        >
+                          <Plus size={16} color={theme.text} strokeWidth={2.5} />
+                        </TouchableOpacity>
+                      </View>
+
+                      <TouchableOpacity
+                        style={[
+                          styles.requestBtn,
+                          { flex: 1, marginTop: 0 },
+                          isLandscape && styles.btnLandscape,
+                          requestCart[selected.masterWine.id] && styles.requestBtnInCart,
+                        ]}
+                        onPress={() => {
+                          addToCart(selected, sheetRequestQty);
+                          Alert.alert("Added to Cart", `${sheetRequestQty} bottles staged in Request Cart.`);
+                        }}
+                      >
+                        <ShoppingCart
+                          size={17}
+                          color={requestCart[selected.masterWine.id] ? "#ffffff" : theme.primary}
+                          strokeWidth={2.5}
+                        />
+                        <Text
+                          style={[
+                            styles.requestBtnText,
+                            isLandscape && { fontSize: 11 },
+                            requestCart[selected.masterWine.id] && { color: "#ffffff" },
+                          ]}
+                        >
+                          {requestCart[selected.masterWine.id] ? "UPDATE CART" : "ADD TO CART"}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
                   )
                 )}
 
@@ -2314,94 +2625,22 @@ export default function StoreMasterListScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* BATCH CONFIRMATION MODAL */}
-      <Modal
-        visible={isBatchConfirmVisible}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setIsBatchConfirmVisible(false)}
-      >
-        <View style={[styles.sheetOverlay, isLandscape && { justifyContent: "center", alignItems: "center", padding: 16 }]}>
-          <View
-            style={[
-              styles.sheet,
-              { maxHeight: isLandscape ? "90%" : "80%" },
-              isLandscape && { maxWidth: 680, width: "100%", borderRadius: 20, alignSelf: "center" },
-            ]}
-          >
-            {!isLandscape && <View style={styles.sheetHandle} />}
-            <View style={styles.sheetHeader}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.sheetWineName}>Confirm Batch Replenishment</Text>
-                <Text style={styles.sheetWineMeta}>
-                  Requesting {itemsToRequest.length} wines (
-                  {itemsToRequest.reduce((sum, item) => sum + item.requestedQty, 0)} total
-                  bottles)
-                </Text>
-              </View>
-              <TouchableOpacity
-                onPress={() => setIsBatchConfirmVisible(false)}
-                style={styles.closeBtn}
-              >
-                <X size={22} color={theme.textSecondary} />
-              </TouchableOpacity>
-            </View>
-
-            <FlatList
-              data={itemsToRequest}
-              keyExtractor={(item) => item.masterWine.id}
-              renderItem={({ item }) => (
-                <View style={styles.confirmItemRow}>
-                  <View style={styles.confirmItemQty}>
-                    <Text style={styles.confirmItemQtyText}>
-                      +{item.requestedQty}
-                    </Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.confirmItemName} numberOfLines={1}>
-                      {item.masterWine.name}
-                    </Text>
-                    <Text style={styles.confirmItemMeta}>
-                      {[item.masterWine.vintage, item.masterWine.producer, item.masterWine.format]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </Text>
-                  </View>
-                  <View style={{ alignItems: "flex-end" }}>
-                    <Text style={styles.confirmItemStock}>
-                      In Store: {item.stockCount}
-                    </Text>
-                    <Text style={styles.confirmItemTarget}>
-                      Target: {item.setting?.safetyStock}
-                    </Text>
-                  </View>
-                </View>
-              )}
-              contentContainerStyle={{ paddingBottom: 20, paddingTop: 10 }}
-            />
-
-            <View style={styles.confirmActions}>
-              <TouchableOpacity
-                style={styles.confirmCancelBtn}
-                onPress={() => setIsBatchConfirmVisible(false)}
-              >
-                <Text style={styles.confirmCancelBtnText}>CANCEL</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.saveBtn,
-                  { flex: 2, marginTop: 0 },
-                  batchRequesting && styles.btnDisabled,
-                ]}
-                onPress={executeBatchRequest}
-                disabled={batchRequesting}
-              >
-                <Text style={styles.saveBtnText}>SUBMIT TO WAREHOUSE</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      {/* STORE REQUEST CART MODAL */}
+      <StoreRequestCartModal
+        visible={isCartModalVisible}
+        onClose={() => setIsCartModalVisible(false)}
+        cart={requestCart}
+        onUpdateQty={updateCartItemQty}
+        onToggleSelect={toggleCartItemSelect}
+        onSelectAll={selectAllCartItems}
+        onRemoveItem={removeCartItem}
+        onClearCart={clearCart}
+        onAddAllDeficits={addAllDeficitsToCart}
+        availableDeficitCount={itemsToRequest.length}
+        onSubmit={submitGroupedRequest}
+        submitting={submittingCart}
+        isLandscape={isLandscape}
+      />
 
       {/* SUCCESS CONFIRMATION MODAL */}
       <Modal visible={isSuccessVisible} animationType="fade" transparent>
@@ -2846,6 +3085,24 @@ const styles = StyleSheet.create({
     color: theme.text,
     letterSpacing: -0.1,
   },
+  compactProducerText: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: theme.primary,
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+  },
+  compactCatEmoji: {
+    fontSize: 13,
+    opacity: 0.85,
+    marginRight: 2,
+  },
+  compactWineDetailsText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: theme.textSecondary,
+    flexShrink: 1,
+  },
   compactMetaRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -2991,12 +3248,27 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     marginBottom: 6,
   },
-  wineName: {
-    fontSize: 15,
-    fontWeight: "800",
-    color: theme.text,
-    letterSpacing: -0.2,
+  cardProducerText: {
+    fontSize: 11.5,
+    fontWeight: "900",
+    color: theme.primary,
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
     marginBottom: 2,
+  },
+  wineName: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: theme.text,
+    letterSpacing: -0.1,
+    lineHeight: 19,
+    marginBottom: 2,
+  },
+  wineSkuText: {
+    fontSize: 10,
+    color: theme.textSecondary,
+    fontWeight: "600",
+    marginTop: 2,
   },
   wineMeta: {
     fontSize: 12,
@@ -3034,6 +3306,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 8,
+  },
+  indicatorBadgeTransparent: {
+    backgroundColor: "transparent",
+    borderWidth: 1,
+  },
+  catEmojiText: {
+    fontSize: 12,
+    opacity: 0.85,
   },
   indicatorText: {
     fontSize: 11,
@@ -3181,11 +3461,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 10,
+    gap: 12,
     backgroundColor: theme.primary,
-    height: 52,
-    borderRadius: 26,
-    paddingHorizontal: 20,
+    height: 58,
+    borderRadius: 29,
+    paddingHorizontal: 22,
     shadowColor: theme.primary,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.35,
@@ -3196,18 +3476,21 @@ const styles = StyleSheet.create({
   },
   batchCountBadge: {
     backgroundColor: "#fff",
-    borderRadius: 12,
-    paddingHorizontal: 7,
-    paddingVertical: 2,
+    borderRadius: 14,
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+    minWidth: 26,
+    alignItems: "center",
+    justifyContent: "center",
   },
   batchCountBadgeText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "900",
     color: theme.primary,
   },
   batchRequestButtonText: {
     color: "#fff",
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "900",
     letterSpacing: 0.5,
   },
@@ -3279,17 +3562,26 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     marginBottom: 12,
   },
-  sheetWineName: {
-    fontSize: 18,
+  sheetProducerText: {
+    fontSize: 12,
     fontWeight: "900",
-    color: theme.text,
+    color: theme.primary,
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
     marginBottom: 2,
-    letterSpacing: -0.4,
+  },
+  sheetWineName: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: theme.text,
+    marginBottom: 3,
+    letterSpacing: -0.2,
+    lineHeight: 22,
   },
   sheetWineMeta: {
-    fontSize: 12,
+    fontSize: 11.5,
     color: theme.textSecondary,
-    fontWeight: "500",
+    fontWeight: "600",
   },
   closeBtn: { padding: 4 },
   sheetStockBanner: {
@@ -3544,16 +3836,16 @@ const styles = StyleSheet.create({
 
   saveBtn: {
     backgroundColor: theme.primary,
-    height: 50,
+    height: 54,
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 20,
-    borderRadius: 14,
+    borderRadius: 16,
     marginTop: 18,
   },
   saveBtnText: {
     color: "#fff",
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "900",
     letterSpacing: 0.8,
   },
@@ -3564,13 +3856,13 @@ const styles = StyleSheet.create({
     gap: 8,
     borderWidth: 1.5,
     borderColor: theme.primary,
-    height: 50,
-    borderRadius: 14,
+    height: 54,
+    borderRadius: 16,
     marginTop: 10,
   },
   requestBtnText: {
     color: theme.primary,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "900",
     letterSpacing: 0.5,
   },
@@ -3875,15 +4167,15 @@ const styles = StyleSheet.create({
 
   // ─── ATELIER LUXURY CONTROLS ─────────────────────────────────────────
   compactTuneDial: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: theme.primary + "0A",
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: theme.primary + "20",
     justifyContent: "center",
     alignItems: "center",
-    marginLeft: 6,
+    marginLeft: 8,
     shadowColor: theme.primary,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
@@ -3900,8 +4192,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginTop: 10,
-    paddingTop: 9,
+    marginTop: 12,
+    paddingTop: 11,
     borderTopWidth: 1,
     borderTopColor: theme.border + "70",
   },
@@ -3912,7 +4204,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   cellarGaugeLabel: {
-    fontSize: 9.5,
+    fontSize: 10,
     fontWeight: "800",
     color: theme.textSecondary,
     letterSpacing: 0.6,
@@ -3924,7 +4216,7 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   cellarGaugeActionText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "800",
     color: theme.primary,
     letterSpacing: 0.2,
@@ -3941,5 +4233,209 @@ const styles = StyleSheet.create({
     color: theme.primary,
     letterSpacing: 0.8,
     textTransform: "uppercase",
+  },
+  compactInCartBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    paddingHorizontal: 5,
+    paddingVertical: 1.5,
+    borderRadius: 6,
+    backgroundColor: "#ffedd5",
+    borderWidth: 1,
+    borderColor: "#fed7aa",
+  },
+  compactInCartText: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: "#ea580c",
+  },
+  sheetCartStepper: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f1f5f9",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    overflow: "hidden",
+    height: 48,
+  },
+  sheetCartStepperBtn: {
+    width: 44,
+    height: 48,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  sheetCartStepperVal: {
+    minWidth: 32,
+    textAlign: "center",
+    fontSize: 16,
+    fontWeight: "900",
+    color: theme.text,
+  },
+  requestBtnInCart: {
+    backgroundColor: theme.primary,
+    borderColor: theme.primary,
+  },
+
+  // COMPACT INDIVIDUAL CART STYLES
+  compactAddToCartBtn: {
+    height: 38,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 3,
+    backgroundColor: theme.primary + "12",
+    borderWidth: 1.5,
+    borderColor: theme.primary + "35",
+  },
+  compactAddToCartBtnDeficit: {
+    backgroundColor: "#ea580c",
+    borderColor: "#c2410c",
+  },
+  compactAddToCartBtnDisabled: {
+    backgroundColor: "#f1f5f9",
+    borderColor: "#e2e8f0",
+    opacity: 0.6,
+  },
+  compactCartStepper: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fff7ed",
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: "#fed7aa",
+    overflow: "hidden",
+    height: 38,
+  },
+  compactCartStepperBtn: {
+    width: 36,
+    height: 38,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#ffedd5",
+  },
+  compactCartStepperValBtn: {
+    paddingHorizontal: 4,
+    height: 38,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  compactCartStepperVal: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#ea580c",
+    minWidth: 22,
+    textAlign: "center",
+  },
+
+  // DETAILED CARD CART BAR STYLES
+  cardCartActionBar: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: theme.border + "60",
+  },
+  cardCartActiveRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#fff7ed",
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: "#fed7aa",
+  },
+  cardCartInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+  },
+  cardCartInfoText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: theme.textSecondary,
+  },
+  cardCartStepper: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  cardCartStepperBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    backgroundColor: "#ffedd5",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cardCartStepperVal: {
+    minWidth: 26,
+    textAlign: "center",
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#ea580c",
+  },
+  cardCartViewBtn: {
+    marginLeft: 6,
+    paddingHorizontal: 14,
+    height: 38,
+    borderRadius: 10,
+    backgroundColor: "#ea580c",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  cardCartViewBtnText: {
+    fontSize: 12.5,
+    fontWeight: "900",
+    color: "#ffffff",
+    letterSpacing: 0.3,
+  },
+  cardCartInactiveRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  cardCartPrompt: {
+    flex: 1,
+  },
+  cardCartPromptText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: theme.textSecondary,
+  },
+  cardAddToCartBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    paddingHorizontal: 18,
+    height: 46,
+    borderRadius: 12,
+    backgroundColor: theme.primary,
+    shadowColor: theme.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  cardAddToCartBtnDeficit: {
+    backgroundColor: "#ea580c",
+    shadowColor: "#ea580c",
+  },
+  cardAddToCartBtnDisabled: {
+    backgroundColor: "#f1f5f9",
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  cardAddToCartBtnText: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#ffffff",
+    letterSpacing: 0.4,
   },
 });
