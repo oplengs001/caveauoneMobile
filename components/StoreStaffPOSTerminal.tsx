@@ -25,7 +25,6 @@ import {
   Scan,
   Search,
   ShoppingBag,
-  SlidersHorizontal,
   UserCheck,
   Users,
   Wine,
@@ -2196,14 +2195,7 @@ export default function StoreStaffPOSTerminal() {
               )}
             </View>
 
-            {isTabletLandscape && (
-              <TouchableOpacity
-                onPress={() => router.push({ pathname: "/sell" })}
-                style={styles.filterBtn}
-              >
-                <SlidersHorizontal size={18} color={MAROON.primary} />
-              </TouchableOpacity>
-            )}
+
           </View>
 
           {/* ── WINE CATEGORY TIER FILTER (Fun: 😁 vs Fine: 💎 vs Reserve: 👻) ─── */}
