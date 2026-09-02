@@ -8,7 +8,7 @@ import { AuthProvider } from '@/context/AuthContext';
 
 import * as Updates from 'expo-updates';
 import { useEffect } from 'react';
-import { Alert } from 'react-native';
+import { Alert, AppState } from 'react-native';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -18,6 +18,31 @@ export default function RootLayout() {
   const colorScheme = useColorScheme();
   const { isUpdatePending } = Updates.useUpdates();
 
+  // Proactively check and download OTA updates on launch and whenever returning to foreground
+  useEffect(() => {
+    async function checkAndFetchUpdate() {
+      try {
+        if (!__DEV__ && Updates.isEnabled) {
+          const update = await Updates.checkForUpdateAsync();
+          if (update.isAvailable) {
+            await Updates.fetchUpdateAsync();
+          }
+        }
+      } catch (error) {
+        console.log('Expo update check error:', error);
+      }
+    }
+
+    checkAndFetchUpdate();
+
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active') {
+        checkAndFetchUpdate();
+      }
+    });
+
+    return () => subscription.remove();
+  }, []);
 
   useEffect(() => {
     if (isUpdatePending) {

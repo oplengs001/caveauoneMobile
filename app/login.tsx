@@ -20,7 +20,7 @@ import {
   View,
 } from "react-native";
 
-const BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || "https://pre-caveauone.vercel.app";
+const BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || "https://stg-caveauone.grapey.io";
 
 export default function LoginScreen() {
   const [email, setEmail] = useState("");
@@ -84,6 +84,12 @@ export default function LoginScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Upper Left Version Tag for OTA Testing */}
+      <View style={styles.topLeftVersionContainer}>
+        <View style={styles.versionDot} />
+        <Text style={styles.versionBadgeText}>v1.0.0 (OTA Test)</Text>
+      </View>
+
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -210,6 +216,33 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#0f172a",
+  },
+  topLeftVersionContainer: {
+    position: "absolute",
+    top: Platform.OS === "ios" ? 14 : 16,
+    left: 20,
+    zIndex: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: "rgba(30, 41, 59, 0.85)",
+    borderWidth: 1,
+    borderColor: "#334155",
+  },
+  versionDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#10b981",
+  },
+  versionBadgeText: {
+    color: "#94a3b8",
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 0.5,
   },
   scrollContent: {
     flexGrow: 1,
