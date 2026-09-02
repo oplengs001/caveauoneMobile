@@ -1,6 +1,6 @@
 import { getToken } from "./auth";
 
-const BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || "https://pre-caveauone.vercel.app";
+const BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || "https://stg-caveauone.grapey.io";
 
 export async function apiFetch(path: string, init?: RequestInit) {
   const token = await getToken();
