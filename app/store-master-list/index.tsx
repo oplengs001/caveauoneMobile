@@ -1,10 +1,10 @@
+import StoreRequestCartModal, { RequestCartItem } from "@/components/StoreRequestCartModal";
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { apiFetch } from "@/lib/api";
 import { MasterWine, StockStatus, StoreWineSetting } from "@/types";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import StoreRequestCartModal, { RequestCartItem } from "@/components/StoreRequestCartModal";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import {
   AlertTriangle,
@@ -15,7 +15,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
-  Ghost,
   LayoutGrid,
   LayoutList,
   Minus,
@@ -26,14 +25,13 @@ import {
   ShieldCheck,
   ShoppingCart,
   SlidersHorizontal,
-  Star,
+  Trash2,
   TrendingDown,
   TrendingUp,
-  Trash2,
   Truck,
   Wine,
   X,
-  Zap,
+  Zap
 } from "lucide-react-native";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -660,7 +658,7 @@ export default function StoreMasterListScreen() {
           }
         }
       })
-      .catch(() => {});
+      .catch(() => { });
   }, [storeId]);
 
   const addToCart = (entry: WineEntry, customQty?: number) => {
@@ -979,8 +977,8 @@ export default function StoreMasterListScreen() {
                   item.activeRequest
                     ? "#9ca3af"
                     : item.requestedQty > 0
-                    ? "#fff"
-                    : theme.primary
+                      ? "#fff"
+                      : theme.primary
                 }
               />
               <Plus
@@ -989,8 +987,8 @@ export default function StoreMasterListScreen() {
                   item.activeRequest
                     ? "#9ca3af"
                     : item.requestedQty > 0
-                    ? "#fff"
-                    : theme.primary
+                      ? "#fff"
+                      : theme.primary
                 }
                 style={{ marginLeft: 1 }}
               />
@@ -1308,8 +1306,8 @@ export default function StoreMasterListScreen() {
                   {item.activeRequest
                     ? "In Transit"
                     : item.requestedQty > 0
-                    ? `+ Add ${item.requestedQty} Deficit`
-                    : "+ Add to Cart"}
+                      ? `+ Add ${item.requestedQty} Deficit`
+                      : "+ Add to Cart"}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -2533,7 +2531,11 @@ export default function StoreMasterListScreen() {
               <View style={[styles.sheetActionRow, isLandscape && styles.sheetActionRowLandscape]}>
                 {selected?.activeRequest ? (
                   <TouchableOpacity
-                    style={[styles.requestBtn, { flex: 1, marginTop: 0 }, isLandscape && styles.btnLandscape]}
+                    style={[
+                      styles.requestBtn,
+                      { marginTop: 0 },
+                      isLandscape ? [styles.btnLandscape, { flex: 1 }] : { width: "100%", height: 48 },
+                    ]}
                     onPress={() => {
                       closeSheet();
                       router.push(`/wine-requests/${selected.activeRequest!.id}`);
@@ -2552,11 +2554,11 @@ export default function StoreMasterListScreen() {
                 ) : (
                   selected &&
                   !sheetDiscontinued && (
-                    <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 6 }}>
+                    <View style={[styles.sheetCartRow, isLandscape && styles.sheetCartRowLandscape]}>
                       {/* Mini Stepper for cart */}
-                      <View style={styles.sheetCartStepper}>
+                      <View style={[styles.sheetCartStepper, isLandscape && { height: 42 }]}>
                         <TouchableOpacity
-                          style={styles.sheetCartStepperBtn}
+                          style={[styles.sheetCartStepperBtn, isLandscape && { width: 36, height: 42 }]}
                           onPress={() => setSheetRequestQty((q) => Math.max(1, q - 1))}
                           hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
                         >
@@ -2564,7 +2566,7 @@ export default function StoreMasterListScreen() {
                         </TouchableOpacity>
                         <Text style={styles.sheetCartStepperVal}>{sheetRequestQty}</Text>
                         <TouchableOpacity
-                          style={styles.sheetCartStepperBtn}
+                          style={[styles.sheetCartStepperBtn, isLandscape && { width: 36, height: 42 }]}
                           onPress={() => setSheetRequestQty((q) => q + 1)}
                           hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
                         >
@@ -2575,7 +2577,7 @@ export default function StoreMasterListScreen() {
                       <TouchableOpacity
                         style={[
                           styles.requestBtn,
-                          { flex: 1, marginTop: 0 },
+                          { flex: 1, marginTop: 0, height: isLandscape ? 42 : 48 },
                           isLandscape && styles.btnLandscape,
                           requestCart[selected.masterWine.id] && styles.requestBtnInCart,
                         ]}
@@ -2595,6 +2597,7 @@ export default function StoreMasterListScreen() {
                             isLandscape && { fontSize: 11 },
                             requestCart[selected.masterWine.id] && { color: "#ffffff" },
                           ]}
+                          numberOfLines={1}
                         >
                           {requestCart[selected.masterWine.id] ? "UPDATE CART" : "ADD TO CART"}
                         </Text>
@@ -2606,8 +2609,8 @@ export default function StoreMasterListScreen() {
                 <TouchableOpacity
                   style={[
                     styles.saveBtn,
-                    { flex: 1, marginTop: 0 },
-                    isLandscape && styles.btnLandscape,
+                    { marginTop: 0, height: isLandscape ? 42 : 48 },
+                    isLandscape ? [styles.btnLandscape, { flex: 1 }] : { width: "100%" },
                     saving && styles.btnDisabled,
                   ]}
                   onPress={handleSaveSettings}
@@ -4139,18 +4142,31 @@ const styles = StyleSheet.create({
 
   // ─── SHEET ACTION ROW ───────────────────────────────────────────────
   sheetActionRow: {
-    flexDirection: "row",
-    gap: 10,
-    paddingTop: 14,
-    paddingBottom: 20,
+    flexDirection: "column",
+    gap: 8,
+    paddingTop: 12,
+    paddingBottom: 16,
     borderTopWidth: 1,
     borderTopColor: theme.border,
     marginTop: 4,
   },
   sheetActionRowLandscape: {
+    flexDirection: "row",
+    gap: 10,
     paddingTop: 10,
     paddingBottom: 10,
     marginTop: 0,
+  },
+  sheetCartRow: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  sheetCartRowLandscape: {
+    flex: 1,
+    width: "auto",
+    gap: 6,
   },
   btnLandscape: {
     height: 42,

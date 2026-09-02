@@ -2664,7 +2664,7 @@ export default function StoreStaffPOSTerminal() {
                   <ActivityIndicator size="small" color="#b45309" />
                 ) : (
                   <>
-                    <MaterialCommunityIcons name="undo-variant" size={16} color="#b45309" />
+                    <MaterialCommunityIcons name="cancel" size={16} color="#b45309" />
                     <Text style={styles.voidBtnText}>Void Transaction</Text>
                   </>
                 )}
