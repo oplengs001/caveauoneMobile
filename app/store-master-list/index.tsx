@@ -1214,7 +1214,7 @@ export default function StoreMasterListScreen() {
           </TouchableOpacity>
         )}
 
-        {/* Quick Replenishment Cart Action Strip */}
+        {/* Wine Request Cart Action Strip */}
         <View style={styles.cardCartActionBar}>
           {cartItem ? (
             <View style={styles.cardCartActiveRow}>
@@ -1278,7 +1278,7 @@ export default function StoreMasterListScreen() {
                 <Text style={styles.cardCartPromptText} numberOfLines={1}>
                   {item.requestedQty > 0
                     ? `Deficit: ${item.requestedQty} btls below safety`
-                    : "Need replenishment from warehouse?"}
+                    : "Need wine request from warehouse?"}
                 </Text>
               </View>
               <TouchableOpacity
@@ -1613,7 +1613,7 @@ export default function StoreMasterListScreen() {
       <View style={styles.settingTextContainer}>
         <Text style={styles.fieldLabel}>DISCONTINUED / INACTIVE</Text>
         <Text style={styles.fieldHint}>
-          Stop reorder alerts and auto-replenishment requests.
+          Stop reorder alerts and wine requests.
         </Text>
       </View>
       <Switch
@@ -2649,9 +2649,9 @@ export default function StoreMasterListScreen() {
             <View style={styles.successIconContainer}>
               <CheckCircle2 size={48} color={theme.primary} strokeWidth={1.5} />
             </View>
-            <Text style={styles.successTitle}>Replenishment Sent!</Text>
+            <Text style={styles.successTitle}>Wine Request Sent!</Text>
             <Text style={styles.successMessage}>
-              Your stock request has been submitted to the central warehouse. You can
+              Your wine request has been submitted to the central warehouse. You can
               track its pulling and delivery in Wine Requests.
             </Text>
             <TouchableOpacity
