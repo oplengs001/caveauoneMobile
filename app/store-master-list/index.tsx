@@ -191,6 +191,14 @@ export default function StoreMasterListScreen() {
   const isWide = width >= 600;
   const isCompactHeight = height < 520;
 
+  // Responsive horizontal padding to squeeze content on wider screens & tablets
+  const horizontalPadding = useMemo(() => {
+    if (width >= 1024) return 60;
+    if (width >= 768) return 48;
+    if (width >= 600) return 36;
+    return 28;
+  }, [width]);
+
   const [entries, setEntries] = useState<WineEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -1801,535 +1809,556 @@ export default function StoreMasterListScreen() {
       <Stack.Screen options={{ headerShown: false }} />
 
       {/* Top Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <ChevronLeft size={28} color={theme.primary} strokeWidth={2.5} />
-        </TouchableOpacity>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.title}>Stock Management</Text>
-          <Text style={styles.subtitle}>
-            {entries.length} wines · {metrics.totalPhysicalBottles} bottles in store · Tap to adjust
-          </Text>
+      <View style={[styles.header, { paddingHorizontal: horizontalPadding }]}>
+        <View style={styles.headerInner}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+            <ChevronLeft size={28} color={theme.primary} strokeWidth={2.5} />
+          </TouchableOpacity>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.title}>Stock Management</Text>
+            <Text style={styles.subtitle}>
+              {entries.length} wines · {metrics.totalPhysicalBottles} bottles in store · Tap to adjust
+            </Text>
+          </View>
+
+          {/* View Mode Toggle */}
+          <TouchableOpacity
+            style={styles.viewModeBtn}
+            onPress={() => setViewMode((v) => (v === "compact" ? "detailed" : "compact"))}
+            activeOpacity={0.7}
+          >
+            {viewMode === "compact" ? (
+              <LayoutList size={18} color={theme.primary} />
+            ) : (
+              <LayoutGrid size={18} color={theme.primary} />
+            )}
+            <Text style={styles.viewModeBtnText}>
+              {viewMode === "compact" ? "Compact" : "Cards"}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity onPress={onRefresh} style={styles.refreshBtn}>
+            <RefreshCw size={18} color={theme.primary} strokeWidth={2.5} />
+          </TouchableOpacity>
         </View>
-
-        {/* View Mode Toggle */}
-        <TouchableOpacity
-          style={styles.viewModeBtn}
-          onPress={() => setViewMode((v) => (v === "compact" ? "detailed" : "compact"))}
-          activeOpacity={0.7}
-        >
-          {viewMode === "compact" ? (
-            <LayoutList size={18} color={theme.primary} />
-          ) : (
-            <LayoutGrid size={18} color={theme.primary} />
-          )}
-          <Text style={styles.viewModeBtnText}>
-            {viewMode === "compact" ? "Compact" : "Cards"}
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity onPress={onRefresh} style={styles.refreshBtn}>
-          <RefreshCw size={18} color={theme.primary} strokeWidth={2.5} />
-        </TouchableOpacity>
       </View>
 
       {/* AT-A-GLANCE INVENTORY HEALTH DASHBOARD (KPI TILES) */}
       <View style={styles.kpiContainer}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.kpiScrollContent}
-        >
-          {/* Card 1: Total Inventory */}
-          <TouchableOpacity
-            style={[styles.kpiCard, filter === "all" && styles.kpiCardActive]}
-            onPress={() => setFilter("all")}
-            activeOpacity={0.8}
-          >
-            <View style={styles.kpiCardHeader}>
-              <Wine size={16} color={theme.primary} />
-              <Text style={styles.kpiCardLabel}>TOTAL STORE</Text>
-            </View>
-            <Text style={styles.kpiCardValue}>{metrics.totalPhysicalBottles}</Text>
-            <Text style={styles.kpiCardSub}>
-              {metrics.totalWines} wines · {metrics.totalFullBottles} sealed
-            </Text>
-          </TouchableOpacity>
-
-          {/* Card 2: Needs Reorder (Alerts) */}
-          <TouchableOpacity
-            style={[
-              styles.kpiCard,
-              styles.kpiCardAlert,
-              filter === "needs_reorder" && styles.kpiCardAlertActive,
+        <View style={styles.kpiInner}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={[
+              styles.kpiScrollContent,
+              { paddingHorizontal: horizontalPadding },
+              (isWide || width >= 600) && { justifyContent: "center" },
             ]}
-            onPress={() => setFilter(filter === "needs_reorder" ? "all" : "needs_reorder")}
-            activeOpacity={0.8}
           >
-            <View style={styles.kpiCardHeader}>
-              <AlertTriangle
-                size={16}
-                color={metrics.needsReorderCount > 0 ? theme.danger : theme.textSecondary}
-              />
+            {/* Card 1: Total Inventory */}
+            <TouchableOpacity
+              style={[styles.kpiCard, isWide && styles.kpiCardWide, filter === "all" && styles.kpiCardActive]}
+              onPress={() => setFilter("all")}
+              activeOpacity={0.8}
+            >
+              <View style={styles.kpiCardHeader}>
+                <Wine size={16} color={theme.primary} />
+                <Text style={styles.kpiCardLabel}>TOTAL STORE</Text>
+              </View>
+              <Text style={styles.kpiCardValue}>{metrics.totalPhysicalBottles}</Text>
+              <Text style={styles.kpiCardSub}>
+                {metrics.totalWines} wines · {metrics.totalFullBottles} sealed
+              </Text>
+            </TouchableOpacity>
+
+            {/* Card 2: Needs Reorder (Alerts) */}
+            <TouchableOpacity
+              style={[
+                styles.kpiCard,
+                isWide && styles.kpiCardWide,
+                styles.kpiCardAlert,
+                filter === "needs_reorder" && styles.kpiCardAlertActive,
+              ]}
+              onPress={() => setFilter(filter === "needs_reorder" ? "all" : "needs_reorder")}
+              activeOpacity={0.8}
+            >
+              <View style={styles.kpiCardHeader}>
+                <AlertTriangle
+                  size={16}
+                  color={metrics.needsReorderCount > 0 ? theme.danger : theme.textSecondary}
+                />
+                <Text
+                  style={[
+                    styles.kpiCardLabel,
+                    metrics.needsReorderCount > 0 && { color: theme.danger },
+                  ]}
+                >
+                  REORDER NEEDED
+                </Text>
+              </View>
               <Text
                 style={[
-                  styles.kpiCardLabel,
+                  styles.kpiCardValue,
                   metrics.needsReorderCount > 0 && { color: theme.danger },
                 ]}
               >
-                REORDER NEEDED
+                {metrics.needsReorderCount}
               </Text>
-            </View>
-            <Text
+              <Text style={styles.kpiCardSub}>
+                {metrics.totalDeficit > 0
+                  ? `${metrics.totalDeficit} bottles deficit`
+                  : "All targets met"}
+              </Text>
+            </TouchableOpacity>
+
+            {/* Card 3: Optimal Stock */}
+            <TouchableOpacity
               style={[
-                styles.kpiCardValue,
-                metrics.needsReorderCount > 0 && { color: theme.danger },
+                styles.kpiCard,
+                isWide && styles.kpiCardWide,
+                filter === "optimal" && styles.kpiCardOptimalActive,
               ]}
+              onPress={() => setFilter(filter === "optimal" ? "all" : "optimal")}
+              activeOpacity={0.8}
             >
-              {metrics.needsReorderCount}
-            </Text>
-            <Text style={styles.kpiCardSub}>
-              {metrics.totalDeficit > 0
-                ? `${metrics.totalDeficit} bottles deficit`
-                : "All targets met"}
-            </Text>
-          </TouchableOpacity>
+              <View style={styles.kpiCardHeader}>
+                <CheckCircle2 size={16} color="#166534" />
+                <Text style={[styles.kpiCardLabel, { color: "#166534" }]}>OPTIMAL</Text>
+              </View>
+              <Text style={[styles.kpiCardValue, { color: "#166534" }]}>
+                {metrics.optimalCount}
+              </Text>
+              <Text style={styles.kpiCardSub}>Healthy stock balance</Text>
+            </TouchableOpacity>
 
-          {/* Card 3: Optimal Stock */}
-          <TouchableOpacity
-            style={[styles.kpiCard, filter === "optimal" && styles.kpiCardOptimalActive]}
-            onPress={() => setFilter(filter === "optimal" ? "all" : "optimal")}
-            activeOpacity={0.8}
-          >
-            <View style={styles.kpiCardHeader}>
-              <CheckCircle2 size={16} color="#166534" />
-              <Text style={[styles.kpiCardLabel, { color: "#166534" }]}>OPTIMAL</Text>
-            </View>
-            <Text style={[styles.kpiCardValue, { color: "#166534" }]}>
-              {metrics.optimalCount}
-            </Text>
-            <Text style={styles.kpiCardSub}>Healthy stock balance</Text>
-          </TouchableOpacity>
-
-          {/* Card 4: Overstock */}
-          <TouchableOpacity
-            style={[styles.kpiCard, filter === "overstock" && styles.kpiCardOverstockActive]}
-            onPress={() => setFilter(filter === "overstock" ? "all" : "overstock")}
-            activeOpacity={0.8}
-          >
-            <View style={styles.kpiCardHeader}>
-              <TrendingUp size={16} color={theme.textSecondary} />
-              <Text style={[styles.kpiCardLabel, { color: theme.textSecondary }]}>OVERSTOCK</Text>
-            </View>
-            <Text style={[styles.kpiCardValue, { color: theme.text }]}>
-              {metrics.overstockCount}
-            </Text>
-            <Text style={styles.kpiCardSub}>Above safety levels</Text>
-          </TouchableOpacity>
-        </ScrollView>
+            {/* Card 4: Overstock */}
+            <TouchableOpacity
+              style={[
+                styles.kpiCard,
+                isWide && styles.kpiCardWide,
+                filter === "overstock" && styles.kpiCardOverstockActive,
+              ]}
+              onPress={() => setFilter(filter === "overstock" ? "all" : "overstock")}
+              activeOpacity={0.8}
+            >
+              <View style={styles.kpiCardHeader}>
+                <TrendingUp size={16} color={theme.textSecondary} />
+                <Text style={[styles.kpiCardLabel, { color: theme.textSecondary }]}>OVERSTOCK</Text>
+              </View>
+              <Text style={[styles.kpiCardValue, { color: theme.text }]}>
+                {metrics.overstockCount}
+              </Text>
+              <Text style={styles.kpiCardSub}>Above safety levels</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
       </View>
 
-      {/* SEARCH, FILTER TOGGLE & SORT TOOLBAR */}
-      <View style={styles.searchAndToolbar}>
-        <View style={styles.searchBox}>
-          <Search size={16} color={theme.textSecondary} style={{ marginRight: 8 }} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search wine, vintage, SKU..."
-            placeholderTextColor={theme.textSecondary}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            clearButtonMode="while-editing"
-          />
-          {searchQuery.length > 0 && Platform.OS !== "ios" && (
-            <TouchableOpacity onPress={() => setSearchQuery("")} style={{ padding: 4 }}>
-              <X size={16} color={theme.textSecondary} />
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* Hide / Show Filters Toggle Button */}
-        <TouchableOpacity
-          style={[
-            styles.filterToggleButton,
-            (showFilters || activeFiltersCount > 0) && styles.filterToggleButtonActive,
-          ]}
-          onPress={() => setShowFilters(!showFilters)}
-          activeOpacity={0.7}
-        >
-          <SlidersHorizontal
-            size={16}
-            color={
-              showFilters || activeFiltersCount > 0
-                ? theme.primary
-                : theme.textSecondary
-            }
-          />
-          <Text
-            style={[
-              styles.filterToggleButtonText,
-              (showFilters || activeFiltersCount > 0) && {
-                color: theme.primary,
-                fontWeight: "800",
-              },
-            ]}
-          >
-            Filters
-          </Text>
-          {activeFiltersCount > 0 && (
-            <View style={styles.filterCountBadge}>
-              <Text style={styles.filterCountBadgeText}>{activeFiltersCount}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
-
-        {/* Sort Button */}
-        <TouchableOpacity
-          style={[styles.sortButton, sortBy !== "urgency" && styles.sortButtonActive]}
-          onPress={() => setIsSortModalOpen(true)}
-          activeOpacity={0.7}
-        >
-          <ArrowUpDown
-            size={16}
-            color={sortBy !== "urgency" ? theme.primary : theme.textSecondary}
-          />
-          <Text
-            style={[
-              styles.sortButtonText,
-              sortBy !== "urgency" && { color: theme.primary, fontWeight: "800" },
-            ]}
-          >
-            {sortBy === "urgency"
-              ? "Sort"
-              : sortBy === "stock_asc"
-                ? "Stock ↑"
-                : sortBy === "stock_desc"
-                  ? "Stock ↓"
-                  : sortBy === "name_asc"
-                    ? "A-Z"
-                    : "Price ↓"}
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* COLLAPSED ACTIVE FILTERS BAR (when filters are hidden but active) */}
-      {!showFilters && activeFiltersCount > 0 && (
-        <View style={styles.activeFilterSummaryRow}>
-          <Text style={styles.activeFilterSummaryLabel}>Active:</Text>
-          {filter !== "all" && (
-            <TouchableOpacity
-              style={styles.activeFilterPill}
-              onPress={() => setFilter("all")}
-            >
-              <MaterialCommunityIcons
-                name={
-                  filter === "needs_reorder"
-                    ? "alert-octagon-outline"
-                    : filter === "stockout"
-                      ? "close-circle-outline"
-                      : filter === "par_alert"
-                        ? "lightning-bolt-outline"
-                        : filter === "under_safety"
-                          ? "shield-alert-outline"
-                          : filter === "optimal"
-                            ? "check-circle-outline"
-                            : filter === "overstock"
-                              ? "trending-up"
-                              : "cancel"
-                }
-                size={13}
-                color={theme.primary}
-              />
-              <Text style={styles.activeFilterPillText}>
-                {filter === "needs_reorder"
-                  ? "Reorder"
-                  : filter === "stockout"
-                    ? "Stockout"
-                    : filter === "par_alert"
-                      ? "PAR Alert"
-                      : filter === "under_safety"
-                        ? "Under Safety"
-                        : filter === "optimal"
-                          ? "Optimal"
-                          : filter === "overstock"
-                            ? "Overstock"
-                            : filter === "discontinued"
-                              ? "Discontinued"
-                              : filter}
-              </Text>
-              <X size={12} color={theme.primary} />
-            </TouchableOpacity>
-          )}
-          {categoryFilter !== "all" && (
-            <TouchableOpacity
-              style={styles.activeFilterPill}
-              onPress={() => setCategoryFilter("all")}
-            >
-              <MaterialCommunityIcons
-                name={
-                  (categoryFilter === "portions"
-                    ? "glass-wine"
-                    : categoryFilter === "bottle_only"
-                      ? "bottle-wine-outline"
-                      : categoryFilter === "fun"
-                        ? "glass-cocktail"
-                        : categoryFilter === "fine"
-                          ? "shield-check"
-                          : categoryFilter === "reserve"
-                            ? "shield-star-outline"
-                            : "bottle-wine-outline") as any
-                }
-                size={13}
-                color={theme.primary}
-              />
-              <Text style={styles.activeFilterPillText}>
-                {categoryFilter === "portions"
-                  ? "Glass & Carafe"
-                  : categoryFilter === "bottle_only"
-                    ? "Bottle Only"
-                    : categoryFilter === "fun"
-                      ? "Fun Wine"
-                      : categoryFilter === "fine"
-                        ? "Fine Wine"
-                        : categoryFilter === "reserve"
-                          ? "Reserve Wine"
-                          : "Standard"}
-              </Text>
-              <X size={12} color={theme.primary} />
-            </TouchableOpacity>
-          )}
-          <TouchableOpacity
-            onPress={() => {
-              setFilter("all");
-              setCategoryFilter("all");
-            }}
-            style={styles.clearAllFiltersBtn}
-          >
-            <Text style={styles.clearAllFiltersText}>Clear</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* EXPANDABLE STATUS & CATEGORY FILTERS STRIP */}
-      {showFilters && (
-        <View style={styles.filtersSection}>
-          <View style={styles.filtersHeaderBar}>
-            <Text style={styles.filtersHeaderTitle}>FILTER BY STATUS & SERVING</Text>
-            <TouchableOpacity onPress={() => setShowFilters(false)}>
-              <Text style={styles.hideFiltersBtnText}>Hide filters ▲</Text>
-            </TouchableOpacity>
+      {/* MAIN SQUEEZED CONTENT WRAPPER */}
+      <View style={styles.mainContent}>
+        {/* SEARCH, FILTER TOGGLE & SORT TOOLBAR */}
+        <View style={[styles.searchAndToolbar, { paddingHorizontal: horizontalPadding }]}>
+          <View style={styles.searchBox}>
+            <Search size={16} color={theme.textSecondary} style={{ marginRight: 8 }} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search wine, vintage, SKU..."
+              placeholderTextColor={theme.textSecondary}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              clearButtonMode="while-editing"
+            />
+            {searchQuery.length > 0 && Platform.OS !== "ios" && (
+              <TouchableOpacity onPress={() => setSearchQuery("")} style={{ padding: 4 }}>
+                <X size={16} color={theme.textSecondary} />
+              </TouchableOpacity>
+            )}
           </View>
 
-          {/* Status Chips */}
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.filterChipsRow}
+          {/* Hide / Show Filters Toggle Button */}
+          <TouchableOpacity
+            style={[
+              styles.filterToggleButton,
+              (showFilters || activeFiltersCount > 0) && styles.filterToggleButtonActive,
+            ]}
+            onPress={() => setShowFilters(!showFilters)}
+            activeOpacity={0.7}
           >
-            {(
-              [
-                { key: "all", label: `All (${entries.length})`, icon: "layers-outline" },
-                {
-                  key: "needs_reorder",
-                  label: `Reorder (${metrics.needsReorderCount})`,
-                  icon: "alert-octagon-outline",
-                  color: "#c2410c",
-                },
-                {
-                  key: "stockout",
-                  label: `Stockout (${metrics.stockoutCount})`,
-                  icon: "close-circle-outline",
-                  color: "#dc2626",
-                },
-                {
-                  key: "par_alert",
-                  label: `PAR Alert (${metrics.parAlertCount})`,
-                  icon: "lightning-bolt-outline",
-                  color: theme.accent,
-                },
-                {
-                  key: "under_safety",
-                  label: `Under Safety (${metrics.underSafetyCount})`,
-                  icon: "shield-alert-outline",
-                  color: theme.accent,
-                },
-                {
-                  key: "optimal",
-                  label: `Optimal (${metrics.optimalCount})`,
-                  icon: "check-circle-outline",
-                  color: "#166534",
-                },
-                {
-                  key: "overstock",
-                  label: `Overstock (${metrics.overstockCount})`,
-                  icon: "trending-up",
-                  color: theme.textSecondary,
-                },
-                {
-                  key: "discontinued",
-                  label: `Discontinued (${metrics.discontinuedCount})`,
-                  icon: "cancel",
-                  color: theme.textSecondary,
-                },
-              ] as { key: FilterType; label: string; icon?: string; color?: string }[]
-            ).map((chip) => {
-              const isActive = filter === chip.key;
-              return (
-                <TouchableOpacity
-                  key={chip.key}
-                  style={[styles.filterChip, isActive && styles.filterChipActive]}
-                  onPress={() => setFilter(chip.key)}
-                >
-                  {chip.icon && (
-                    <MaterialCommunityIcons
-                      name={chip.icon as any}
-                      size={14}
-                      color={isActive ? "#ffffff" : chip.color || theme.textSecondary}
-                    />
-                  )}
-                  <Text
-                    style={[
-                      styles.filterChipText,
-                      isActive && styles.filterChipTextActive,
-                      !isActive && chip.color ? { color: chip.color } : null,
-                    ]}
-                  >
-                    {chip.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-
-          {/* Category & Serving Option Pills */}
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.categoryChipsRow}
-          >
-            {(
-              [
-                { id: "all", label: "All Servings", icon: "layers-outline", color: theme.textSecondary },
-                {
-                  id: "portions",
-                  label: "By Glass & Carafe",
-                  icon: "glass-wine",
-                  color: theme.primary,
-                },
-                {
-                  id: "bottle_only",
-                  label: "Bottle Only",
-                  icon: "bottle-wine-outline",
-                  color: theme.textSecondary,
-                },
-                {
-                  id: "fun",
-                  label: "Fun Wine",
-                  icon: "glass-cocktail",
-                  color: theme.accent,
-                },
-                {
-                  id: "fine",
-                  label: "Fine Wine",
-                  icon: "shield-check",
-                  color: theme.accent,
-                },
-                {
-                  id: "reserve",
-                  label: "Reserve Wine",
-                  icon: "shield-star-outline",
-                  color: theme.accent,
-                },
-                {
-                  id: "standard",
-                  label: "Standard",
-                  icon: "bottle-wine-outline",
-                  color: theme.textSecondary,
-                },
-              ] as const
-            ).map((cat) => {
-              const isCatActive = categoryFilter === cat.id;
-              return (
-                <TouchableOpacity
-                  key={cat.id}
-                  onPress={() => setCategoryFilter(cat.id as CategoryFilterType)}
-                  style={[
-                    styles.categoryChip,
-                    isCatActive && styles.categoryChipActive,
-                  ]}
-                >
-                  <MaterialCommunityIcons
-                    name={cat.icon as any}
-                    size={14}
-                    color={isCatActive ? "#ffffff" : cat.color || theme.textSecondary}
-                  />
-                  <Text
-                    style={[
-                      styles.categoryChipText,
-                      isCatActive && styles.categoryChipTextActive,
-                    ]}
-                  >
-                    {cat.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        </View>
-      )}
-
-      {/* Wine List */}
-      {loading ? (
-        <ActivityIndicator
-          size="large"
-          color={theme.primary}
-          style={{ flex: 1, marginTop: 40 }}
-        />
-      ) : (
-        <FlatList
-          data={filteredAndSortedEntries}
-          renderItem={viewMode === "compact" ? renderCompactItem : renderDetailedItem}
-          keyExtractor={(e) => e.masterWine.id}
-          contentContainerStyle={[
-            styles.list,
-            itemsToRequest.length > 0 && { paddingBottom: 110 },
-          ]}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={theme.primary}
+            <SlidersHorizontal
+              size={16}
+              color={
+                showFilters || activeFiltersCount > 0
+                  ? theme.primary
+                  : theme.textSecondary
+              }
             />
-          }
-          ListEmptyComponent={
-            <View style={styles.empty}>
-              <BarChart3 size={52} color={theme.border} strokeWidth={1.2} />
-              <Text style={styles.emptyTitle}>No matching wines</Text>
-              <Text style={styles.emptyText}>
-                {searchQuery
-                  ? `No wines matched "${searchQuery}" under current filters.`
-                  : "No wines found under the selected status/category."}
-              </Text>
-              {(searchQuery || filter !== "all" || categoryFilter !== "all") && (
-                <TouchableOpacity
-                  style={styles.resetFilterBtn}
-                  onPress={() => {
-                    setSearchQuery("");
-                    setFilter("all");
-                    setCategoryFilter("all");
-                  }}
-                >
-                  <Text style={styles.resetFilterBtnText}>Reset All Filters</Text>
-                </TouchableOpacity>
-              )}
+            <Text
+              style={[
+                styles.filterToggleButtonText,
+                (showFilters || activeFiltersCount > 0) && {
+                  color: theme.primary,
+                  fontWeight: "800",
+                },
+              ]}
+            >
+              Filters
+            </Text>
+            {activeFiltersCount > 0 && (
+              <View style={styles.filterCountBadge}>
+                <Text style={styles.filterCountBadgeText}>{activeFiltersCount}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+
+          {/* Sort Button */}
+          <TouchableOpacity
+            style={[styles.sortButton, sortBy !== "urgency" && styles.sortButtonActive]}
+            onPress={() => setIsSortModalOpen(true)}
+            activeOpacity={0.7}
+          >
+            <ArrowUpDown
+              size={16}
+              color={sortBy !== "urgency" ? theme.primary : theme.textSecondary}
+            />
+            <Text
+              style={[
+                styles.sortButtonText,
+                sortBy !== "urgency" && { color: theme.primary, fontWeight: "800" },
+              ]}
+            >
+              {sortBy === "urgency"
+                ? "Sort"
+                : sortBy === "stock_asc"
+                  ? "Stock ↑"
+                  : sortBy === "stock_desc"
+                    ? "Stock ↓"
+                    : sortBy === "name_asc"
+                      ? "A-Z"
+                      : "Price ↓"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* COLLAPSED ACTIVE FILTERS BAR (when filters are hidden but active) */}
+        {!showFilters && activeFiltersCount > 0 && (
+          <View style={[styles.activeFilterSummaryRow, { paddingHorizontal: horizontalPadding }]}>
+            <Text style={styles.activeFilterSummaryLabel}>Active:</Text>
+            {filter !== "all" && (
+              <TouchableOpacity
+                style={styles.activeFilterPill}
+                onPress={() => setFilter("all")}
+              >
+                <MaterialCommunityIcons
+                  name={
+                    filter === "needs_reorder"
+                      ? "alert-octagon-outline"
+                      : filter === "stockout"
+                        ? "close-circle-outline"
+                        : filter === "par_alert"
+                          ? "lightning-bolt-outline"
+                          : filter === "under_safety"
+                            ? "shield-alert-outline"
+                            : filter === "optimal"
+                              ? "check-circle-outline"
+                              : filter === "overstock"
+                                ? "trending-up"
+                                : "cancel"
+                  }
+                  size={13}
+                  color={theme.primary}
+                />
+                <Text style={styles.activeFilterPillText}>
+                  {filter === "needs_reorder"
+                    ? "Reorder"
+                    : filter === "stockout"
+                      ? "Stockout"
+                      : filter === "par_alert"
+                        ? "PAR Alert"
+                        : filter === "under_safety"
+                          ? "Under Safety"
+                          : filter === "optimal"
+                            ? "Optimal"
+                            : filter === "overstock"
+                              ? "Overstock"
+                              : filter === "discontinued"
+                                ? "Discontinued"
+                                : filter}
+                </Text>
+                <X size={12} color={theme.primary} />
+              </TouchableOpacity>
+            )}
+            {categoryFilter !== "all" && (
+              <TouchableOpacity
+                style={styles.activeFilterPill}
+                onPress={() => setCategoryFilter("all")}
+              >
+                <MaterialCommunityIcons
+                  name={
+                    (categoryFilter === "portions"
+                      ? "glass-wine"
+                      : categoryFilter === "bottle_only"
+                        ? "bottle-wine-outline"
+                        : categoryFilter === "fun"
+                          ? "glass-cocktail"
+                          : categoryFilter === "fine"
+                            ? "shield-check"
+                            : categoryFilter === "reserve"
+                              ? "shield-star-outline"
+                              : "bottle-wine-outline") as any
+                  }
+                  size={13}
+                  color={theme.primary}
+                />
+                <Text style={styles.activeFilterPillText}>
+                  {categoryFilter === "portions"
+                    ? "Glass & Carafe"
+                    : categoryFilter === "bottle_only"
+                      ? "Bottle Only"
+                      : categoryFilter === "fun"
+                        ? "Fun Wine"
+                        : categoryFilter === "fine"
+                          ? "Fine Wine"
+                          : categoryFilter === "reserve"
+                            ? "Reserve Wine"
+                            : "Standard"}
+                </Text>
+                <X size={12} color={theme.primary} />
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              onPress={() => {
+                setFilter("all");
+                setCategoryFilter("all");
+              }}
+              style={styles.clearAllFiltersBtn}
+            >
+              <Text style={styles.clearAllFiltersText}>Clear</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* EXPANDABLE STATUS & CATEGORY FILTERS STRIP */}
+        {showFilters && (
+          <View style={styles.filtersSection}>
+            <View style={[styles.filtersHeaderBar, { paddingHorizontal: horizontalPadding }]}>
+              <Text style={styles.filtersHeaderTitle}>FILTER BY STATUS & SERVING</Text>
+              <TouchableOpacity onPress={() => setShowFilters(false)}>
+                <Text style={styles.hideFiltersBtnText}>Hide filters ▲</Text>
+              </TouchableOpacity>
             </View>
-          }
-        />
-      )}
+
+            {/* Status Chips */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={[styles.filterChipsRow, { paddingHorizontal: horizontalPadding }]}
+            >
+              {(
+                [
+                  { key: "all", label: `All (${entries.length})`, icon: "layers-outline" },
+                  {
+                    key: "needs_reorder",
+                    label: `Reorder (${metrics.needsReorderCount})`,
+                    icon: "alert-octagon-outline",
+                    color: "#c2410c",
+                  },
+                  {
+                    key: "stockout",
+                    label: `Stockout (${metrics.stockoutCount})`,
+                    icon: "close-circle-outline",
+                    color: "#dc2626",
+                  },
+                  {
+                    key: "par_alert",
+                    label: `PAR Alert (${metrics.parAlertCount})`,
+                    icon: "lightning-bolt-outline",
+                    color: theme.accent,
+                  },
+                  {
+                    key: "under_safety",
+                    label: `Under Safety (${metrics.underSafetyCount})`,
+                    icon: "shield-alert-outline",
+                    color: theme.accent,
+                  },
+                  {
+                    key: "optimal",
+                    label: `Optimal (${metrics.optimalCount})`,
+                    icon: "check-circle-outline",
+                    color: "#166534",
+                  },
+                  {
+                    key: "overstock",
+                    label: `Overstock (${metrics.overstockCount})`,
+                    icon: "trending-up",
+                    color: theme.textSecondary,
+                  },
+                  {
+                    key: "discontinued",
+                    label: `Discontinued (${metrics.discontinuedCount})`,
+                    icon: "cancel",
+                    color: theme.textSecondary,
+                  },
+                ] as { key: FilterType; label: string; icon?: string; color?: string }[]
+              ).map((chip) => {
+                const isActive = filter === chip.key;
+                return (
+                  <TouchableOpacity
+                    key={chip.key}
+                    style={[styles.filterChip, isActive && styles.filterChipActive]}
+                    onPress={() => setFilter(chip.key)}
+                  >
+                    {chip.icon && (
+                      <MaterialCommunityIcons
+                        name={chip.icon as any}
+                        size={14}
+                        color={isActive ? "#ffffff" : chip.color || theme.textSecondary}
+                      />
+                    )}
+                    <Text
+                      style={[
+                        styles.filterChipText,
+                        isActive && styles.filterChipTextActive,
+                        !isActive && chip.color ? { color: chip.color } : null,
+                      ]}
+                    >
+                      {chip.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            {/* Category & Serving Option Pills */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={[styles.categoryChipsRow, { paddingHorizontal: horizontalPadding }]}
+            >
+              {(
+                [
+                  { id: "all", label: "All Servings", icon: "layers-outline", color: theme.textSecondary },
+                  {
+                    id: "portions",
+                    label: "By Glass & Carafe",
+                    icon: "glass-wine",
+                    color: theme.primary,
+                  },
+                  {
+                    id: "bottle_only",
+                    label: "Bottle Only",
+                    icon: "bottle-wine-outline",
+                    color: theme.textSecondary,
+                  },
+                  {
+                    id: "fun",
+                    label: "Fun Wine",
+                    icon: "glass-cocktail",
+                    color: theme.accent,
+                  },
+                  {
+                    id: "fine",
+                    label: "Fine Wine",
+                    icon: "shield-check",
+                    color: theme.accent,
+                  },
+                  {
+                    id: "reserve",
+                    label: "Reserve Wine",
+                    icon: "shield-star-outline",
+                    color: theme.accent,
+                  },
+                  {
+                    id: "standard",
+                    label: "Standard",
+                    icon: "bottle-wine-outline",
+                    color: theme.textSecondary,
+                  },
+                ] as const
+              ).map((cat) => {
+                const isCatActive = categoryFilter === cat.id;
+                return (
+                  <TouchableOpacity
+                    key={cat.id}
+                    onPress={() => setCategoryFilter(cat.id as CategoryFilterType)}
+                    style={[
+                      styles.categoryChip,
+                      isCatActive && styles.categoryChipActive,
+                    ]}
+                  >
+                    <MaterialCommunityIcons
+                      name={cat.icon as any}
+                      size={14}
+                      color={isCatActive ? "#ffffff" : cat.color || theme.textSecondary}
+                    />
+                    <Text
+                      style={[
+                        styles.categoryChipText,
+                        isCatActive && styles.categoryChipTextActive,
+                      ]}
+                    >
+                      {cat.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* Wine List */}
+        {loading ? (
+          <ActivityIndicator
+            size="large"
+            color={theme.primary}
+            style={{ flex: 1, marginTop: 40 }}
+          />
+        ) : (
+          <FlatList
+            data={filteredAndSortedEntries}
+            renderItem={viewMode === "compact" ? renderCompactItem : renderDetailedItem}
+            keyExtractor={(e) => e.masterWine.id}
+            contentContainerStyle={[
+              styles.list,
+              { paddingHorizontal: horizontalPadding },
+              itemsToRequest.length > 0 && { paddingBottom: 110 },
+            ]}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                tintColor={theme.primary}
+              />
+            }
+            ListEmptyComponent={
+              <View style={styles.empty}>
+                <BarChart3 size={52} color={theme.border} strokeWidth={1.2} />
+                <Text style={styles.emptyTitle}>No matching wines</Text>
+                <Text style={styles.emptyText}>
+                  {searchQuery
+                    ? `No wines matched "${searchQuery}" under current filters.`
+                    : "No wines found under the selected status/category."}
+                </Text>
+                {(searchQuery || filter !== "all" || categoryFilter !== "all") && (
+                  <TouchableOpacity
+                    style={styles.resetFilterBtn}
+                    onPress={() => {
+                      setSearchQuery("");
+                      setFilter("all");
+                      setCategoryFilter("all");
+                    }}
+                  >
+                    <Text style={styles.resetFilterBtnText}>Reset All Filters</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            }
+          />
+        )}
+      </View>
 
       {/* FLOATING REQUEST CART BAR */}
       {(Object.keys(requestCart).length > 0 || itemsToRequest.length > 0) && !loading && (
-        <View style={styles.batchRequestContainer}>
+        <View style={[styles.batchRequestContainer, { paddingHorizontal: horizontalPadding }]}>
           {Object.keys(requestCart).length > 0 ? (
             <TouchableOpacity
               style={styles.batchRequestButton}
@@ -2667,14 +2696,30 @@ export default function StoreMasterListScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.background },
   header: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingTop: 8,
+    paddingHorizontal: 28,
+    paddingTop: 10,
     paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: theme.border,
     backgroundColor: theme.card,
+  },
+  headerInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    width: "100%",
+    maxWidth: 760,
+    alignSelf: "center",
+  },
+  kpiInner: {
+    width: "100%",
+    maxWidth: 760,
+    alignSelf: "center",
+  },
+  mainContent: {
+    flex: 1,
+    width: "100%",
+    maxWidth: 760,
+    alignSelf: "center",
   },
   backBtn: { marginRight: 10 },
   refreshBtn: {
@@ -2725,7 +2770,8 @@ const styles = StyleSheet.create({
     borderBottomColor: theme.border,
   },
   kpiScrollContent: {
-    paddingHorizontal: 16,
+    flexGrow: 1,
+    paddingHorizontal: 28,
     gap: 10,
   },
   kpiCard: {
@@ -2735,6 +2781,12 @@ const styles = StyleSheet.create({
     minWidth: 130,
     borderWidth: 1,
     borderColor: theme.border,
+    alignItems: "center",
+  },
+  kpiCardWide: {
+    flex: 1,
+    minWidth: 130,
+    maxWidth: 180,
   },
   kpiCardActive: {
     borderColor: theme.primary,
@@ -2759,6 +2811,7 @@ const styles = StyleSheet.create({
   kpiCardHeader: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     gap: 6,
     marginBottom: 6,
   },
@@ -2767,27 +2820,30 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: theme.textSecondary,
     letterSpacing: 0.5,
+    textAlign: "center",
   },
   kpiCardValue: {
     fontSize: 20,
     fontWeight: "900",
     color: theme.text,
     lineHeight: 22,
+    textAlign: "center",
   },
   kpiCardSub: {
     fontSize: 10,
     fontWeight: "600",
     color: theme.textSecondary,
     marginTop: 2,
+    textAlign: "center",
   },
 
   // SEARCH AND TOOLBAR
   searchAndToolbar: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 6,
+    paddingHorizontal: 28,
+    paddingTop: 12,
+    paddingBottom: 8,
     gap: 10,
   },
   searchBox: {
@@ -2866,9 +2922,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingTop: 4,
-    paddingBottom: 2,
+    paddingHorizontal: 28,
+    paddingTop: 6,
+    paddingBottom: 4,
   },
   filtersHeaderTitle: {
     fontSize: 10,
@@ -2885,9 +2941,9 @@ const styles = StyleSheet.create({
   activeFilterSummaryRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingTop: 2,
-    paddingBottom: 6,
+    paddingHorizontal: 28,
+    paddingTop: 4,
+    paddingBottom: 8,
     gap: 6,
     flexWrap: "wrap",
   },
@@ -2925,12 +2981,12 @@ const styles = StyleSheet.create({
 
   // FILTERS SECTION
   filtersSection: {
-    paddingBottom: 8,
+    paddingBottom: 10,
   },
   filterChipsRow: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 28,
     paddingTop: 6,
-    paddingBottom: 4,
+    paddingBottom: 6,
     gap: 6,
   },
   filterChip: {
@@ -2958,8 +3014,9 @@ const styles = StyleSheet.create({
   },
 
   categoryChipsRow: {
-    paddingHorizontal: 16,
-    paddingTop: 4,
+    paddingHorizontal: 28,
+    paddingTop: 6,
+    paddingBottom: 6,
     gap: 8,
   },
   categoryChip: {
@@ -2988,9 +3045,9 @@ const styles = StyleSheet.create({
 
   // LIST & EMPTY
   list: {
-    paddingHorizontal: 16,
-    paddingTop: 6,
-    paddingBottom: 80,
+    paddingHorizontal: 28,
+    paddingTop: 12,
+    paddingBottom: 85,
   },
   empty: {
     alignItems: "center",
@@ -3028,10 +3085,9 @@ const styles = StyleSheet.create({
   compactRow: {
     backgroundColor: theme.card,
     borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingTop: 13,
-    paddingBottom: 13,
-    marginBottom: 10,
+    paddingHorizontal: 15,
+    paddingVertical: 14,
+    marginBottom: 12,
     borderWidth: 1,
     borderColor: theme.border,
     shadowColor: "#000",
@@ -3292,7 +3348,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.card,
     borderRadius: 16,
     padding: 16,
-    marginBottom: 10,
+    marginBottom: 12,
     borderWidth: 1,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
@@ -3512,8 +3568,9 @@ const styles = StyleSheet.create({
   batchRequestContainer: {
     position: "absolute",
     bottom: 24,
-    left: 16,
-    right: 16,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 28,
     alignItems: "center",
   },
   batchRequestButton: {
