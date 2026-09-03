@@ -2726,7 +2726,7 @@ export default function StoreStaffPOSTerminal() {
                 <View style={styles.locationModalHeader}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
                     <View style={styles.locationIconCircle}>
-                      <MaterialCommunityIcons name="map-marker-radius-outline" size={22} color={MAROON.primary} />
+                      <MaterialCommunityIcons name="map-marker-radius-outline" size={20} color="#64748b" />
                     </View>
                     <View>
                       <Text style={styles.locationModalTitle}>Confirm Wine Location</Text>
@@ -2744,11 +2744,11 @@ export default function StoreStaffPOSTerminal() {
                     style={styles.locationCloseBtn}
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                   >
-                    <MaterialCommunityIcons name="close" size={20} color="#64748b" />
+                    <MaterialCommunityIcons name="close" size={18} color="#64748b" />
                   </TouchableOpacity>
                 </View>
 
-                {/* Selected Wine Snapshot */}
+                {/* Selected Wine Snapshot (ONLY Colored Tile) */}
                 {locationModalWine && (() => {
                   const typeTheme = getWineTypeTheme(locationModalWine.wineType, locationModalWine.name, locationModalWine.rawType);
                   const unitPrice = getItemUnitPrice(locationModalWine, locationModalPortion);
@@ -2774,40 +2774,25 @@ export default function StoreStaffPOSTerminal() {
                   );
                 })()}
 
-                {/* Open Bottle Status Banner (For Glass Serves) */}
+                {/* Open Bottle Status Banner (Subtle Gray On-Theme) */}
                 {locationModalWine && locationModalPortion === "glass" && (() => {
                   const activeOpen = locationModalWine.openBottle;
                   const hasOpen = Boolean(activeOpen && (activeOpen.glassesRemaining ?? 0) > 0);
 
                   return (
-                    <View
-                      style={[
-                        styles.openBottleBanner,
-                        hasOpen ? styles.openBottleBannerHasOpen : styles.openBottleBannerNoOpen,
-                      ]}
-                    >
+                    <View style={styles.openBottleBanner}>
                       <MaterialCommunityIcons
                         name={hasOpen ? "bottle-wine-outline" : "package-variant-closed"}
-                        size={22}
-                        color={hasOpen ? "#059669" : "#b45309"}
+                        size={18}
+                        color="#64748b"
                       />
                       <View style={{ flex: 1 }}>
-                        <Text
-                          style={[
-                            styles.openBottleBannerTitle,
-                            { color: hasOpen ? "#065f46" : "#92400e" },
-                          ]}
-                        >
+                        <Text style={styles.openBottleBannerTitle}>
                           {hasOpen
                             ? `Active Open Bottle (${activeOpen!.glassesRemaining} glass${activeOpen!.glassesRemaining !== 1 ? "es" : ""} remaining)`
                             : "No Open Bottle in Service"}
                         </Text>
-                        <Text
-                          style={[
-                            styles.openBottleBannerSub,
-                            { color: hasOpen ? "#047857" : "#b45309" },
-                          ]}
-                        >
+                        <Text style={styles.openBottleBannerSub}>
                           {hasOpen
                             ? `Stored at: ${activeOpen!.locationName || "Bar"} · Pouring from open bottle first.`
                             : "A fresh sealed bottle will be opened from inventory (6 glasses total)."}
@@ -2831,19 +2816,19 @@ export default function StoreStaffPOSTerminal() {
                       return (
                         <View style={styles.singleLocationCard}>
                           <View style={styles.singleLocationIconBox}>
-                            <MaterialCommunityIcons name="bottle-wine-outline" size={24} color={MAROON.primary} />
+                            <MaterialCommunityIcons name="bottle-wine-outline" size={22} color="#64748b" />
                           </View>
                           <View style={{ flex: 1 }}>
                             <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                               <Text style={styles.singleLocationBadgeLabel}>POURING FROM OPEN BOTTLE</Text>
                               <View style={styles.lockedBadge}>
-                                <MaterialCommunityIcons name="lock-outline" size={10} color={MAROON.primary} />
+                                <MaterialCommunityIcons name="lock-outline" size={10} color="#64748b" />
                                 <Text style={styles.lockedBadgeText}>Priority</Text>
                               </View>
                             </View>
                             <Text style={styles.singleLocationTitle}>{activeOpen!.locationName || "Bar / Service Area"}</Text>
-                            <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 3 }}>
-                              <MaterialCommunityIcons name="check-circle-outline" size={14} color="#059669" />
+                            <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 }}>
+                              <MaterialCommunityIcons name="check-circle-outline" size={13} color="#64748b" />
                               <Text style={styles.singleLocationStockText}>
                                 {activeOpen!.glassesRemaining} glass{activeOpen!.glassesRemaining !== 1 ? "es" : ""} remaining to pour
                               </Text>
@@ -2857,7 +2842,7 @@ export default function StoreStaffPOSTerminal() {
                       return (
                         <View style={styles.singleLocationCard}>
                           <View style={styles.singleLocationIconBox}>
-                            <MaterialCommunityIcons name="map-marker-outline" size={24} color={MAROON.primary} />
+                            <MaterialCommunityIcons name="map-marker-outline" size={22} color="#64748b" />
                           </View>
                           <View style={{ flex: 1 }}>
                             <Text style={styles.singleLocationBadgeLabel}>STORAGE</Text>
@@ -2875,13 +2860,13 @@ export default function StoreStaffPOSTerminal() {
                       return (
                         <View style={styles.singleLocationCard}>
                           <View style={styles.singleLocationIconBox}>
-                            <MaterialCommunityIcons name="map-marker-radius-outline" size={24} color={MAROON.primary} />
+                            <MaterialCommunityIcons name="map-marker-radius-outline" size={22} color="#64748b" />
                           </View>
                           <View style={{ flex: 1 }}>
                             <Text style={styles.singleLocationBadgeLabel}>PULLOUT LOCATION</Text>
                             <Text style={styles.singleLocationTitle}>{loc.locationName}</Text>
-                            <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 }}>
-                              <MaterialCommunityIcons name="check-circle-outline" size={14} color="#059669" />
+                            <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 }}>
+                              <MaterialCommunityIcons name="check-circle-outline" size={13} color="#64748b" />
                               <Text style={styles.singleLocationStockText}>
                                 {loc.count} bottle{loc.count !== 1 ? "s" : ""} available here
                               </Text>
@@ -2893,7 +2878,7 @@ export default function StoreStaffPOSTerminal() {
 
                     // Multiple Locations - Compact 2-Column Grid
                     return (
-                      <View style={{ gap: 8 }}>
+                      <View style={{ gap: 6 }}>
                         <Text style={styles.locationListHeader}>
                           SELECT PULLOUT BIN ({breakdown.length} LOCATIONS):
                         </Text>
@@ -2913,8 +2898,8 @@ export default function StoreStaffPOSTerminal() {
                                 <View style={styles.locationGridTileTop}>
                                   <MaterialCommunityIcons
                                     name="map-marker-outline"
-                                    size={16}
-                                    color={isSelected ? MAROON.primary : "#64748b"}
+                                    size={15}
+                                    color={isSelected ? "#0f172a" : "#64748b"}
                                   />
                                   <Text
                                     style={[
@@ -2954,13 +2939,15 @@ export default function StoreStaffPOSTerminal() {
                   })()}
                 </ScrollView>
 
-                {/* Customer / VIP Guest Attachment in Modal */}
+                {/* Customer / VIP Guest Attachment in Modal (Subtle Gray, Dashed Button) */}
                 <View style={styles.fineWineCustomerSection}>
                   <View style={styles.fineWineCustomerHeader}>
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-                      <MaterialCommunityIcons name="account-star-outline" size={15} color={MAROON.primary} />
+                      <MaterialCommunityIcons name="account-outline" size={14} color="#64748b" />
                       <Text style={styles.fineWineCustomerTitle}>
-                        {locationModalWine && locationModalWine.wineCategory === "fine" ? "VIP / CUSTOMER (FINE WINE)" : "CUSTOMER (OPTIONAL)"}
+                        {locationModalWine && locationModalWine.wineCategory === "fine"
+                          ? "VIP / CUSTOMER — FINE WINE"
+                          : "CUSTOMER — OPTIONAL"}
                       </Text>
                     </View>
                     {locationModalWine && locationModalWine.wineCategory === "fine" && (
@@ -2973,7 +2960,7 @@ export default function StoreStaffPOSTerminal() {
                   {selectedCustomer ? (
                     <View style={styles.selectedCustomerCard}>
                       <View style={styles.selectedCustomerInfo}>
-                        <MaterialCommunityIcons name="account-check" size={16} color={MAROON.primary} />
+                        <MaterialCommunityIcons name="account-check-outline" size={16} color="#475569" />
                         <View style={{ flex: 1 }}>
                           <Text style={styles.selectedCustomerName} numberOfLines={1}>
                             {selectedCustomer.name}
@@ -2999,13 +2986,13 @@ export default function StoreStaffPOSTerminal() {
                       style={styles.addCustomerBtn}
                       activeOpacity={0.8}
                     >
-                      <MaterialCommunityIcons name="account-plus-outline" size={15} color={MAROON.primary} />
-                      <Text style={styles.addCustomerBtnText}>Attach Customer / VIP Guest...</Text>
+                      <MaterialCommunityIcons name="account-plus-outline" size={15} color="#64748b" />
+                      <Text style={styles.addCustomerBtnText}>— Attach Customer (Optional) —</Text>
                     </TouchableOpacity>
                   )}
                 </View>
 
-                {/* Modal Actions: Cancel, Add More (Queue), or Confirm Sale (Direct Checkout) */}
+                {/* Modal Actions: Cancel, Add to Cart (Queue), or Confirm Sale (Direct Checkout) */}
                 {locationModalWine && (() => {
                   const unitPrice = getItemUnitPrice(locationModalWine, locationModalPortion);
                   const directSaleTotal = (orderSummary.totalAmount || 0) + unitPrice;
@@ -3026,7 +3013,7 @@ export default function StoreStaffPOSTerminal() {
                         activeOpacity={0.85}
                       >
                         <MaterialCommunityIcons name="plus" size={16} color={MAROON.primary} />
-                        <Text style={styles.locationAddMoreBtnText}>Add More</Text>
+                        <Text style={styles.locationAddMoreBtnText}>Add to Cart</Text>
                       </TouchableOpacity>
 
                       <TouchableOpacity
@@ -4698,173 +4685,168 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 14,
+    marginBottom: 10,
   },
   locationIconCircle: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
-    backgroundColor: MAROON.ultraLight,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: "#f8fafc",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: MAROON.border,
+    borderColor: "#e2e8f0",
   },
   locationModalTitle: {
-    fontSize: 18,
-    fontWeight: "900",
+    fontSize: 16,
+    fontWeight: "700",
     color: "#18181b",
   },
   locationModalSub: {
     fontSize: 11,
-    fontWeight: "600",
-    color: "#71717a",
+    fontWeight: "500",
+    color: "#64748b",
     marginTop: 1,
   },
   locationCloseBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: "#f1f5f9",
     alignItems: "center",
     justifyContent: "center",
   },
   locationWineSnapshot: {
-    borderRadius: 16,
-    padding: 14,
+    borderRadius: 14,
+    padding: 12,
     borderWidth: 1.5,
-    marginBottom: 14,
+    marginBottom: 8,
   },
   locationWineTopRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 4,
+    marginBottom: 2,
   },
   locationWineProducer: {
-    fontSize: 12,
-    fontWeight: "900",
+    fontSize: 11,
+    fontWeight: "800",
     color: "#09090b",
     letterSpacing: 0.8,
     flex: 1,
     marginRight: 8,
   },
   locationWineName: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "500",
     color: "#18181b",
-    lineHeight: 22,
+    lineHeight: 20,
   },
   locationPriceText: {
-    fontSize: 16,
-    fontWeight: "900",
+    fontSize: 15,
+    fontWeight: "800",
     color: "#09090b",
   },
   locationScrollList: {
     maxHeight: 220,
-    marginVertical: 4,
+    marginVertical: 2,
   },
   locationListHeader: {
-    fontSize: 10,
-    fontWeight: "900",
-    color: MAROON.medium,
-    letterSpacing: 0.8,
-    marginBottom: 4,
+    fontSize: 9.5,
+    fontWeight: "600",
+    color: "#64748b",
+    letterSpacing: 0.6,
+    marginBottom: 3,
   },
   singleLocationCard: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: MAROON.ultraLight,
-    borderRadius: 16,
-    padding: 16,
-    gap: 12,
-    borderWidth: 1.5,
-    borderColor: MAROON.border,
-    marginVertical: 4,
+    backgroundColor: "#f8fafc",
+    borderRadius: 12,
+    padding: 10,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    marginVertical: 2,
   },
   singleLocationIconBox: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
+    width: 38,
+    height: 38,
+    borderRadius: 8,
     backgroundColor: "#ffffff",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: MAROON.border,
+    borderColor: "#e2e8f0",
   },
   singleLocationBadgeLabel: {
-    fontSize: 9,
-    fontWeight: "900",
-    color: MAROON.medium,
-    letterSpacing: 0.8,
+    fontSize: 8.5,
+    fontWeight: "600",
+    color: "#64748b",
+    letterSpacing: 0.5,
   },
   singleLocationTitle: {
-    fontSize: 17,
-    fontWeight: "900",
-    color: MAROON.primary,
+    fontSize: 13.5,
+    fontWeight: "700",
+    color: "#18181b",
     marginTop: 1,
   },
   singleLocationSub: {
-    fontSize: 12,
-    color: "#71717a",
-    marginTop: 2,
+    fontSize: 11,
+    color: "#64748b",
+    marginTop: 1,
   },
   singleLocationStockText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#059669",
+    fontSize: 11,
+    fontWeight: "500",
+    color: "#475569",
   },
   lockedBadge: {
     flexDirection: "row",
     alignItems: "center",
     gap: 3,
-    backgroundColor: MAROON.ultraLight,
-    paddingHorizontal: 6,
+    backgroundColor: "#f1f5f9",
+    paddingHorizontal: 5,
     paddingVertical: 1,
-    borderRadius: 6,
+    borderRadius: 5,
     borderWidth: 1,
-    borderColor: MAROON.border,
+    borderColor: "#e2e8f0",
   },
   lockedBadgeText: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: MAROON.primary,
+    fontSize: 8.5,
+    fontWeight: "600",
+    color: "#64748b",
   },
   openBottleBadge: {
-    backgroundColor: "#fef3c7",
+    backgroundColor: "#f1f5f9",
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: "#fde68a",
+    borderColor: "#e2e8f0",
   },
   openBottleBadgeText: {
     fontSize: 10,
-    fontWeight: "800",
-    color: "#b45309",
+    fontWeight: "600",
+    color: "#475569",
   },
   locationGridContainer: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
+    gap: 6,
   },
   locationGridTile: {
-    width: "48.5%",
+    width: "48.8%",
     backgroundColor: "#ffffff",
-    borderRadius: 12,
-    padding: 10,
-    borderWidth: 1.5,
+    borderRadius: 10,
+    padding: 8,
+    borderWidth: 1,
     borderColor: "#e2e8f0",
     justifyContent: "space-between",
   },
   locationGridTileSelected: {
-    backgroundColor: MAROON.ultraLight,
-    borderColor: MAROON.primary,
-    elevation: 2,
-    shadowColor: MAROON.primary,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 4,
+    backgroundColor: "#f8fafc",
+    borderColor: "#0f172a",
   },
   locationGridTileTop: {
     flexDirection: "row",
@@ -4874,17 +4856,18 @@ const styles = StyleSheet.create({
   },
   locationGridTileName: {
     flex: 1,
-    fontSize: 13,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "600",
     color: "#18181b",
   },
   locationGridTileNameSelected: {
-    color: MAROON.primary,
+    color: "#0f172a",
+    fontWeight: "700",
   },
   locationGridRadio: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
     borderWidth: 1.5,
     borderColor: "#cbd5e1",
     alignItems: "center",
@@ -4892,65 +4875,65 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
   },
   locationGridRadioSelected: {
-    borderColor: MAROON.primary,
-    backgroundColor: MAROON.primary,
+    borderColor: "#0f172a",
+    backgroundColor: "#0f172a",
   },
   locationGridTileBottom: {
-    marginTop: 6,
+    marginTop: 4,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
   locationGridStockText: {
-    fontSize: 11,
-    fontWeight: "700",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: "#64748b",
   },
   locationGridStockTextSelected: {
-    color: MAROON.medium,
-    fontWeight: "800",
+    color: "#334155",
+    fontWeight: "600",
   },
   locationModalFooter: {
     flexDirection: "row",
     gap: 8,
-    marginTop: 16,
-    paddingTop: 12,
+    marginTop: 10,
+    paddingTop: 10,
     borderTopWidth: 1,
     borderTopColor: "#f1f5f9",
   },
   fineWineCustomerSection: {
-    backgroundColor: "#fdf8f6",
+    backgroundColor: "#f8fafc",
     borderRadius: 12,
-    padding: 10,
-    marginTop: 10,
+    padding: 9,
+    marginTop: 8,
     marginBottom: 2,
     borderWidth: 1,
-    borderColor: "#fed7aa",
+    borderColor: "#e2e8f0",
   },
   fineWineCustomerHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 6,
+    marginBottom: 5,
   },
   fineWineCustomerTitle: {
-    fontSize: 10,
-    fontWeight: "900",
-    color: MAROON.primary,
-    letterSpacing: 0.6,
+    fontSize: 9.5,
+    fontWeight: "600",
+    color: "#64748b",
+    letterSpacing: 0.4,
   },
   fineWinePill: {
-    backgroundColor: "#ffedd5",
-    paddingHorizontal: 6,
+    backgroundColor: "#f1f5f9",
+    paddingHorizontal: 5,
     paddingVertical: 1,
-    borderRadius: 6,
+    borderRadius: 4,
     borderWidth: 1,
-    borderColor: "#fed7aa",
+    borderColor: "#e2e8f0",
   },
   fineWinePillText: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: "#c2410c",
+    fontSize: 8.5,
+    fontWeight: "600",
+    color: "#475569",
   },
   addCustomerBtn: {
     flexDirection: "row",
@@ -4958,38 +4941,38 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 6,
     backgroundColor: "#ffffff",
-    borderRadius: 10,
+    borderRadius: 8,
     paddingVertical: 7,
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: "#cbd5e1",
     borderStyle: "dashed",
   },
   addCustomerBtnText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: MAROON.primary,
+    fontSize: 11.5,
+    fontWeight: "500",
+    color: "#64748b",
   },
   selectedCustomerCard: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     backgroundColor: "#ffffff",
-    borderRadius: 10,
+    borderRadius: 8,
     paddingVertical: 6,
     paddingHorizontal: 10,
     borderWidth: 1,
-    borderColor: MAROON.border,
+    borderColor: "#e2e8f0",
   },
   selectedCustomerInfo: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 7,
     flex: 1,
   },
   selectedCustomerName: {
-    fontSize: 13,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "700",
     color: "#18181b",
   },
   selectedCustomerSub: {
@@ -5001,84 +4984,69 @@ const styles = StyleSheet.create({
     padding: 2,
   },
   locationCancelBtn: {
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
     backgroundColor: "#f1f5f9",
     alignItems: "center",
     justifyContent: "center",
   },
   locationCancelBtnText: {
-    fontSize: 13,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "700",
     color: "#64748b",
   },
   locationAddMoreBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 5,
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-    borderRadius: 14,
+    gap: 4,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
     backgroundColor: MAROON.ultraLight,
     borderWidth: 1.5,
     borderColor: MAROON.border,
   },
   locationAddMoreBtnText: {
-    fontSize: 13,
-    fontWeight: "900",
+    fontSize: 12,
+    fontWeight: "800",
     color: MAROON.primary,
   },
   locationConfirmSaleBtn: {
     flex: 1,
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
     backgroundColor: MAROON.primary,
     alignItems: "center",
     justifyContent: "center",
-    elevation: 3,
-    shadowColor: MAROON.primary,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
   },
   locationConfirmSaleBtnText: {
-    fontSize: 13,
-    fontWeight: "900",
+    fontSize: 12.5,
+    fontWeight: "800",
     color: "#ffffff",
   },
   openBottleBanner: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    borderRadius: 12,
-    padding: 10,
-    marginBottom: 12,
+    gap: 8,
+    borderRadius: 10,
+    padding: 8,
+    marginBottom: 8,
     borderWidth: 1,
-  },
-  openBottleBannerHasOpen: {
-    backgroundColor: "#ecfdf5",
-    borderColor: "#a7f3d0",
-  },
-  openBottleBannerNoOpen: {
-    backgroundColor: "#fffbeb",
-    borderColor: "#fde68a",
-  },
-  openBottleDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    marginHorizontal: 2,
+    backgroundColor: "#f8fafc",
+    borderColor: "#e2e8f0",
   },
   openBottleBannerTitle: {
-    fontSize: 12,
-    fontWeight: "800",
+    fontSize: 11.5,
+    fontWeight: "600",
+    color: "#18181b",
   },
   openBottleBannerSub: {
     fontSize: 10,
-    fontWeight: "600",
+    fontWeight: "400",
+    color: "#64748b",
     marginTop: 1,
   },
   cardReserveGhostBadge: {
