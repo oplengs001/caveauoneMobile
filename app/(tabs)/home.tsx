@@ -108,9 +108,13 @@ export default function HomeScreen() {
   const totalGap = 14 * (cardsPerRow - 1);
   const cardWidth = (width - containerPadding - totalGap) / cardsPerRow;
 
-  const storeCardsPerRow = isLandscape || isTablet ? 5 : 2;
-  const storeTotalGap = 12 * (storeCardsPerRow - 1);
-  const storeTileWidth = (width - containerPadding - storeTotalGap) / storeCardsPerRow;
+  const warehouseCardsPerRow = isLandscape || isTablet ? 4 : 2;
+  const warehouseTotalGap = 12 * (warehouseCardsPerRow - 1);
+  const storeTileWidth = (width - containerPadding - warehouseTotalGap) / warehouseCardsPerRow;
+
+  // Store Operations: 2 tiles per row (2x2 grid)
+  const storeOpGap = 12;
+  const storeOpTileWidth = (width - containerPadding - storeOpGap) / 2;
 
   const metricsCache = useRef<{ data: any; storeId: string; fetchedAt: number } | null>(null);
   const METRICS_TTL_MS = 5 * 60 * 1000;
@@ -1935,27 +1939,19 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* ── STORE QUICK ACTIONS (4-Tile Compact Grid) ──── */}
+        {/* ── STORE QUICK ACTIONS (4-Tile Grid, 2 in a single row) ──── */}
         {isStore ? (
           <View style={styles.storeActionsSection}>
             <Text style={styles.metricsTitle}>Store Operations</Text>
 
-            {/* 5-Tile Core Operations: 5-column row on tablet, horizontal scroll on mobile */}
-            <ScrollView
-              horizontal={!isLandscape && !isTablet}
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={
-                isLandscape || isTablet
-                  ? styles.storeGrid
-                  : { gap: 10, paddingRight: 4 }
-              }
-            >
+            {/* 4-Tile Core Operations: 2 in a single row with icon beside title */}
+            <View style={styles.storeTwoColGrid}>
               {/* Tile 1: Sell Glass or Bottle */}
               <TouchableOpacity
                 style={[
-                  styles.storeGridTile,
+                  styles.storeBigTile,
                   {
-                    width: isLandscape || isTablet ? storeTileWidth : 140,
+                    width: storeOpTileWidth,
                     backgroundColor: theme.card,
                     borderColor: theme.border,
                   },
@@ -1963,26 +1959,25 @@ export default function HomeScreen() {
                 onPress={() => router.push({ pathname: "/sell" })}
                 activeOpacity={0.85}
               >
-                <View style={styles.tileHeaderRow}>
-                  <View style={[styles.tileIconCircle, { backgroundColor: "#10b98115" }]}>
-                    <Banknote size={18} color="#059669" strokeWidth={2} />
+                <View style={styles.bigTileContentRow}>
+                  <View style={[styles.bigTileIconCircle, { backgroundColor: "#10b98118" }]}>
+                    <Banknote size={22} color="#059669" strokeWidth={2.2} />
                   </View>
-                  <ChevronRight size={14} color="#94a3b8" />
-                </View>
-                <View style={styles.tileTextContainer}>
-                  <Text style={[styles.tileTitle, { color: theme.text }]} numberOfLines={1}>Scan & Sell</Text>
-                  <Text style={[styles.tileDesc, { color: theme.textSecondary }]} numberOfLines={1}>
-                    Bottle & pours
-                  </Text>
+                  <View style={styles.bigTileTextContainer}>
+                    <Text style={[styles.bigTileTitle, { color: theme.text }]} numberOfLines={1}>Scan & Sell</Text>
+                    <Text style={[styles.bigTileDesc, { color: theme.textSecondary }]} numberOfLines={1}>
+                      Bottle & glass pours
+                    </Text>
+                  </View>
                 </View>
               </TouchableOpacity>
 
               {/* Tile 2: Wine Requests */}
               <TouchableOpacity
                 style={[
-                  styles.storeGridTile,
+                  styles.storeBigTile,
                   {
-                    width: isLandscape || isTablet ? storeTileWidth : 140,
+                    width: storeOpTileWidth,
                     backgroundColor: theme.card,
                     borderColor: theme.border,
                   },
@@ -1990,26 +1985,25 @@ export default function HomeScreen() {
                 onPress={() => router.push("/wine-requests")}
                 activeOpacity={0.85}
               >
-                <View style={styles.tileHeaderRow}>
-                  <View style={[styles.tileIconCircle, { backgroundColor: Colors.store.primary + "15" }]}>
-                    <ClipboardList size={18} color={Colors.store.primary} strokeWidth={2} />
+                <View style={styles.bigTileContentRow}>
+                  <View style={[styles.bigTileIconCircle, { backgroundColor: Colors.store.primary + "18" }]}>
+                    <ClipboardList size={22} color={Colors.store.primary} strokeWidth={2.2} />
                   </View>
-                  <ChevronRight size={14} color="#94a3b8" />
-                </View>
-                <View style={styles.tileTextContainer}>
-                  <Text style={[styles.tileTitle, { color: theme.text }]} numberOfLines={1}>Wine Requests</Text>
-                  <Text style={[styles.tileDesc, { color: theme.textSecondary }]} numberOfLines={1}>
-                    Order warehouse
-                  </Text>
+                  <View style={styles.bigTileTextContainer}>
+                    <Text style={[styles.bigTileTitle, { color: theme.text }]} numberOfLines={1}>Wine Requests</Text>
+                    <Text style={[styles.bigTileDesc, { color: theme.textSecondary }]} numberOfLines={1}>
+                      Order warehouse
+                    </Text>
+                  </View>
                 </View>
               </TouchableOpacity>
 
               {/* Tile 3: Stock Management */}
               <TouchableOpacity
                 style={[
-                  styles.storeGridTile,
+                  styles.storeBigTile,
                   {
-                    width: isLandscape || isTablet ? storeTileWidth : 140,
+                    width: storeOpTileWidth,
                     backgroundColor: theme.card,
                     borderColor: theme.border,
                   },
@@ -2017,26 +2011,25 @@ export default function HomeScreen() {
                 onPress={() => router.push("/store-master-list")}
                 activeOpacity={0.85}
               >
-                <View style={styles.tileHeaderRow}>
-                  <View style={[styles.tileIconCircle, { backgroundColor: "#0f766e15" }]}>
-                    <LayoutList size={18} color="#0f766e" strokeWidth={2} />
+                <View style={styles.bigTileContentRow}>
+                  <View style={[styles.bigTileIconCircle, { backgroundColor: "#0f766e18" }]}>
+                    <LayoutList size={22} color="#0f766e" strokeWidth={2.2} />
                   </View>
-                  <ChevronRight size={14} color="#94a3b8" />
-                </View>
-                <View style={styles.tileTextContainer}>
-                  <Text style={[styles.tileTitle, { color: theme.text }]} numberOfLines={1}>Stock & PAR</Text>
-                  <Text style={[styles.tileDesc, { color: theme.textSecondary }]} numberOfLines={1}>
-                    PAR & store stock
-                  </Text>
+                  <View style={styles.bigTileTextContainer}>
+                    <Text style={[styles.bigTileTitle, { color: theme.text }]} numberOfLines={1}>Stock & PAR</Text>
+                    <Text style={[styles.bigTileDesc, { color: theme.textSecondary }]} numberOfLines={1}>
+                      PAR & store stock
+                    </Text>
+                  </View>
                 </View>
               </TouchableOpacity>
 
               {/* Tile 4: Bottle Management / Lookup */}
               <TouchableOpacity
                 style={[
-                  styles.storeGridTile,
+                  styles.storeBigTile,
                   {
-                    width: isLandscape || isTablet ? storeTileWidth : 140,
+                    width: storeOpTileWidth,
                     backgroundColor: theme.card,
                     borderColor: theme.border,
                   },
@@ -2044,47 +2037,19 @@ export default function HomeScreen() {
                 onPress={() => router.push("/inventory")}
                 activeOpacity={0.85}
               >
-                <View style={styles.tileHeaderRow}>
-                  <View style={[styles.tileIconCircle, { backgroundColor: "#6366f115" }]}>
-                    <Search size={18} color="#4f46e5" strokeWidth={2} />
+                <View style={styles.bigTileContentRow}>
+                  <View style={[styles.bigTileIconCircle, { backgroundColor: "#6366f118" }]}>
+                    <Search size={22} color="#4f46e5" strokeWidth={2.2} />
                   </View>
-                  <ChevronRight size={14} color="#94a3b8" />
-                </View>
-                <View style={styles.tileTextContainer}>
-                  <Text style={[styles.tileTitle, { color: theme.text }]} numberOfLines={1}>Bottle Lookup</Text>
-                  <Text style={[styles.tileDesc, { color: theme.textSecondary }]} numberOfLines={1}>
-                    SKU & bin lookup
-                  </Text>
+                  <View style={styles.bigTileTextContainer}>
+                    <Text style={[styles.bigTileTitle, { color: theme.text }]} numberOfLines={1}>Bottle Lookup</Text>
+                    <Text style={[styles.bigTileDesc, { color: theme.textSecondary }]} numberOfLines={1}>
+                      SKU & bin lookup
+                    </Text>
+                  </View>
                 </View>
               </TouchableOpacity>
-
-              {/* Tile 5: Delivery Intake Logs */}
-              <TouchableOpacity
-                style={[
-                  styles.storeGridTile,
-                  {
-                    width: isLandscape || isTablet ? storeTileWidth : 140,
-                    backgroundColor: theme.card,
-                    borderColor: theme.border,
-                  },
-                ]}
-                onPress={() => router.push("/delivery-logs")}
-                activeOpacity={0.85}
-              >
-                <View style={styles.tileHeaderRow}>
-                  <View style={[styles.tileIconCircle, { backgroundColor: "#05966915" }]}>
-                    <PackageCheck size={18} color="#059669" strokeWidth={2} />
-                  </View>
-                  <ChevronRight size={14} color="#94a3b8" />
-                </View>
-                <View style={styles.tileTextContainer}>
-                  <Text style={[styles.tileTitle, { color: theme.text }]} numberOfLines={1}>Intake Logs</Text>
-                  <Text style={[styles.tileDesc, { color: theme.textSecondary }]} numberOfLines={1}>
-                    Arrivals & history
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            </ScrollView>
+            </View>
           </View>
         ) : (
           /* ── WAREHOUSE QUICK ACTIONS (Hero Intake Card + Compact Grid) ─── */
@@ -2498,6 +2463,55 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255, 255, 255, 0.2)",
     alignItems: "center",
     justifyContent: "center",
+  },
+  storeTwoColGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+  },
+  storeBigTile: {
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    paddingVertical: 18,
+    paddingHorizontal: 14,
+    borderWidth: 1.2,
+    borderColor: "#e2e8f0",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 2,
+    justifyContent: "center",
+    minHeight: 94,
+  },
+  bigTileContentRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 11,
+  },
+  bigTileIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  bigTileTextContainer: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: "center",
+  },
+  bigTileTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#0f172a",
+    marginBottom: 2,
+    letterSpacing: -0.2,
+  },
+  bigTileDesc: {
+    fontSize: 11.5,
+    fontWeight: "500",
+    color: "#64748b",
   },
   storeGrid: {
     flexDirection: "row",
