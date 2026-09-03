@@ -2391,7 +2391,7 @@ export default function StoreMasterListScreen() {
                 </Text>
               </View>
               <Text style={styles.batchRequestButtonText}>
-                STAGE DEFICITS (
+                REQUEST DEFICITS (
                 {itemsToRequest.reduce((sum, item) => sum + item.requestedQty, 0)}{" "}
                 BOTTLES)
               </Text>
