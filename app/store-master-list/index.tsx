@@ -231,7 +231,6 @@ export default function StoreMasterListScreen() {
   const [requestCart, setRequestCart] = useState<Record<string, RequestCartItem>>({});
   const [isCartModalVisible, setIsCartModalVisible] = useState(false);
   const [submittingCart, setSubmittingCart] = useState(false);
-  const [sheetRequestQty, setSheetRequestQty] = useState(1);
 
   const fetchData = useCallback(async () => {
     if (authLoading) return;
@@ -547,14 +546,6 @@ export default function StoreMasterListScreen() {
 
   const openSheet = (entry: WineEntry) => {
     setSelected(entry);
-    const existingInCart = requestCart[entry.masterWine.id];
-    setSheetRequestQty(
-      existingInCart
-        ? existingInCart.qty
-        : entry.requestedQty > 0
-          ? entry.requestedQty
-          : 1
-    );
     setSheetPar(entry.setting?.parLevel?.toString() ?? "");
     setSheetSafety(entry.setting?.safetyStock?.toString() ?? "");
     setSheetSellingPrice(entry.setting?.sellingPrice?.toString() ?? "");
@@ -836,37 +827,45 @@ export default function StoreMasterListScreen() {
         style={[
           styles.compactRow,
           item.status === "stockout" && styles.rowStockoutHighlight,
+          !!cartItem && styles.rowInCartHighlight,
         ]}
         onPress={() => openSheet(item)}
-        activeOpacity={0.7}
+        activeOpacity={0.75}
       >
-        {/* Left Indicator & Info */}
-        <View style={styles.compactLeft}>
-          <View style={styles.compactTitleRow}>
-            {category === "fun" && (
-              <Text style={styles.compactCatEmoji}>😁</Text>
-            )}
-            {category === "fine" && (
-              <Text style={styles.compactCatEmoji}>💎</Text>
-            )}
-            {category === "reserve" && (
-              <Text style={styles.compactCatEmoji}>👻</Text>
-            )}
-            <Text style={styles.compactProducerText} numberOfLines={1}>
-              {getProducerAllCaps(item.masterWine.producer)}
-            </Text>
-          </View>
-
-          <View style={styles.compactMetaRow}>
-            <Text style={styles.compactWineDetailsText} numberOfLines={1}>
+        {/* Top Tier: Producer & Wine Details on Left, Status Badge & Price on Right */}
+        <View style={styles.tileHeaderRow}>
+          <View style={styles.tileHeaderLeft}>
+            <View style={styles.tileProducerRow}>
+              {category === "fun" && (
+                <Text style={styles.tileCatEmoji}>😁</Text>
+              )}
+              {category === "fine" && (
+                <Text style={styles.tileCatEmoji}>💎</Text>
+              )}
+              {category === "reserve" && (
+                <Text style={styles.tileCatEmoji}>👻</Text>
+              )}
+              <Text style={styles.compactProducerText} numberOfLines={1}>
+                {getProducerAllCaps(item.masterWine.producer)}
+              </Text>
+            </View>
+            <Text style={styles.compactWineDetailsText} numberOfLines={2}>
               {getWineDetailsLine(item.masterWine)}
             </Text>
-            {isPortion && (
-              <View style={styles.portionTagGlass}>
-                <MaterialCommunityIcons name="glass-wine" size={12} color="#be185d" />
-                <Text style={styles.portionTagTextGlass}>Glass & Carafe</Text>
-              </View>
-            )}
+            {item.masterWine.sku ? (
+              <Text style={styles.tileSkuText} numberOfLines={1}>
+                SKU: {item.masterWine.sku}
+              </Text>
+            ) : null}
+          </View>
+
+          <View style={styles.tileHeaderRight}>
+            <View style={[styles.compactStatusBadge, { backgroundColor: cfg.bg }]}>
+              <View style={[styles.compactStatusDot, { backgroundColor: cfg.accent }]} />
+              <Text style={[styles.compactStatusText, { color: cfg.color }]}>
+                {cfg.label}
+              </Text>
+            </View>
             {item.setting?.sellingPrice != null && (
               <Text style={styles.compactPriceText}>
                 ₱
@@ -879,126 +878,213 @@ export default function StoreMasterListScreen() {
           </View>
         </View>
 
-        {/* Right Stock & Status */}
-        <View style={styles.compactRight}>
-          <View style={styles.compactStockPill}>
-            <Text style={styles.compactStockVal}>
-              {item.stockCount % 1 === 0 ? item.stockCount : item.stockCount.toFixed(2)}
-            </Text>
-            {isConfigured ? (
-              <Text style={styles.compactStockTarget}>/{safetyStock}</Text>
-            ) : (
-              <Text style={styles.compactStockUnset}>· unset</Text>
+        {/* Secondary Context Badges Row (Left: Serving Modes | Right: Delivery Status) */}
+        {(isPortion || item.openGlassesCount > 0 || item.activeRequest) && (
+          <View style={styles.tileBadgesRow}>
+            {/* Left Zone: Serving Modes (Glass & Carafe, Open Glasses) */}
+            <View style={styles.tileBadgesLeft}>
+              {isPortion && (
+                <View style={styles.portionTagGlass}>
+                  <MaterialCommunityIcons name="glass-wine" size={11} color="#be185d" />
+                  <Text style={styles.portionTagTextGlass}>Glass & Carafe</Text>
+                </View>
+              )}
+
+              {item.openGlassesCount > 0 && (
+                <View style={styles.compactGlassBadge}>
+                  <MaterialCommunityIcons name="glass-wine" size={10} color="#2563eb" />
+                  <Text style={styles.compactGlassText}>{item.openGlassesCount}/6 open</Text>
+                </View>
+              )}
+            </View>
+
+            {/* Right Zone: Inbound Delivery Status (Always anchored on the right) */}
+            {item.activeRequest ? (
+              <TouchableOpacity
+                style={[
+                  styles.tileInboundBadge,
+                  item.activeRequest.status === "outbound" || item.activeRequest.status === "converted"
+                    ? styles.tileInboundOutbound
+                    : item.activeRequest.status === "receiving"
+                      ? styles.tileInboundReceiving
+                      : styles.tileInboundPending,
+                ]}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  router.push(`/wine-requests/${item.activeRequest!.id}`);
+                }}
+                activeOpacity={0.75}
+              >
+                {item.activeRequest.status === "outbound" ||
+                item.activeRequest.status === "converted" ? (
+                  <Truck size={11} color="#1d4ed8" />
+                ) : item.activeRequest.status === "receiving" ? (
+                  <CheckCircle2 size={11} color="#15803d" />
+                ) : (
+                  <Clock size={11} color="#c2410c" />
+                )}
+                <Text
+                  style={[
+                    styles.tileInboundText,
+                    item.activeRequest.status === "outbound" || item.activeRequest.status === "converted"
+                      ? { color: "#1d4ed8" }
+                      : item.activeRequest.status === "receiving"
+                        ? { color: "#15803d" }
+                        : { color: "#c2410c" },
+                  ]}
+                >
+                  {item.activeRequest.status === "pending"
+                    ? "Pending Request"
+                    : item.activeRequest.status === "converted"
+                      ? "Pulling"
+                      : item.activeRequest.status === "outbound"
+                        ? "Outbound"
+                        : item.activeRequest.status === "receiving"
+                          ? "Receiving"
+                          : "Active Request"}
+                </Text>
+                <ChevronRight
+                  size={11}
+                  color={
+                    item.activeRequest.status === "outbound" || item.activeRequest.status === "converted"
+                      ? "#1d4ed8"
+                      : item.activeRequest.status === "receiving"
+                        ? "#15803d"
+                        : "#c2410c"
+                  }
+                />
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        )}
+
+        {/* Subtle Hairline Divider */}
+        <View style={styles.tileDivider} />
+
+        {/* Bottom Tier: Stock Stats on Left, Spacious Buttons on Right */}
+        <View style={styles.tileActionRow}>
+          {/* Stock Stat & Deficit Pill */}
+          <View style={styles.tileStockStat}>
+            <View style={styles.tileStockCountGroup}>
+              <Package size={13} color={theme.textSecondary} />
+              <Text style={styles.compactStockVal}>
+                {item.stockCount % 1 === 0 ? item.stockCount : item.stockCount.toFixed(1)}
+              </Text>
+              {isConfigured ? (
+                <Text style={styles.compactStockTarget}>/{safetyStock} target</Text>
+              ) : (
+                <Text style={styles.compactStockUnset}>· unset</Text>
+              )}
+            </View>
+
+            {item.requestedQty > 0 && (
+              <View style={styles.compactDeficitBadge}>
+                <TrendingDown size={10} color="#ea580c" strokeWidth={2.5} />
+                <Text style={styles.compactDeficitText}>{item.requestedQty} deficit</Text>
+              </View>
             )}
           </View>
 
-          <View style={[styles.compactStatusBadge, { backgroundColor: cfg.bg }]}>
-            <View style={[styles.compactStatusDot, { backgroundColor: cfg.accent }]} />
-            <Text style={[styles.compactStatusText, { color: cfg.color }]}>
-              {cfg.label}
-            </Text>
-          </View>
-
-          {item.requestedQty > 0 && (
-            <View style={styles.compactDeficitBadge}>
-              <TrendingDown size={9} color="#ea580c" />
-              <Text style={styles.compactDeficitText}>-{item.requestedQty}</Text>
-            </View>
-          )}
-
-          {item.openGlassesCount > 0 && (
-            <View style={styles.compactGlassBadge}>
-              <MaterialCommunityIcons name="glass-wine" size={10} color="#2563eb" />
-              <Text style={styles.compactGlassText}>{item.openGlassesCount}/6</Text>
-            </View>
-          )}
-
-          {/* Individual Cart Button or Mini Stepper */}
-          {cartItem ? (
-            <View style={styles.compactCartStepper}>
-              <TouchableOpacity
-                style={styles.compactCartStepperBtn}
-                onPress={(e) => {
-                  e.stopPropagation();
-                  if (cartItem.qty <= 1) {
-                    removeCartItem(item.masterWine.id);
-                  } else {
-                    updateCartItemQty(item.masterWine.id, -1);
-                  }
-                }}
-                hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
-              >
-                {cartItem.qty <= 1 ? (
-                  <Trash2 size={13} color="#dc2626" />
-                ) : (
-                  <Minus size={14} color="#ea580c" strokeWidth={2.5} />
-                )}
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.compactCartStepperValBtn}
-                onPress={(e) => {
-                  e.stopPropagation();
-                  setIsCartModalVisible(true);
-                }}
-              >
-                <Text style={styles.compactCartStepperVal}>{cartItem.qty}</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.compactCartStepperBtn}
-                onPress={(e) => {
-                  e.stopPropagation();
-                  updateCartItemQty(item.masterWine.id, 1);
-                }}
-                hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
-              >
-                <Plus size={14} color="#ea580c" strokeWidth={2.5} />
-              </TouchableOpacity>
-            </View>
-          ) : (
+          {/* Dedicated Action Buttons Cluster */}
+          <View style={styles.tileButtonsCluster}>
+            {/* Target Settings Button */}
             <TouchableOpacity
-              style={[
-                styles.compactAddToCartBtn,
-                item.requestedQty > 0 && styles.compactAddToCartBtnDeficit,
-                !!item.activeRequest && styles.compactAddToCartBtnDisabled,
-              ]}
+              style={styles.tileTuneBtn}
               onPress={(e) => {
                 e.stopPropagation();
-                addToCart(item);
+                openSheet(item);
               }}
-              disabled={!!item.activeRequest}
               activeOpacity={0.7}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
             >
-              <ShoppingCart
-                size={15}
-                color={
-                  item.activeRequest
-                    ? "#9ca3af"
-                    : item.requestedQty > 0
-                      ? "#fff"
-                      : theme.primary
-                }
-              />
-              <Plus
-                size={12}
-                color={
-                  item.activeRequest
-                    ? "#9ca3af"
-                    : item.requestedQty > 0
-                      ? "#fff"
-                      : theme.primary
-                }
-                style={{ marginLeft: 1 }}
-              />
+              <SlidersHorizontal size={13} color={theme.primary} strokeWidth={2.2} />
+              <Text style={styles.tileTuneBtnText}>Edit</Text>
             </TouchableOpacity>
-          )}
-        </View>
 
-        {/* Tactile Tuning Dial */}
-        <View style={styles.compactTuneDial}>
-          <SlidersHorizontal size={16} color={theme.primary} strokeWidth={2.2} />
+            {/* Individual Cart Button or Mini Stepper */}
+            {cartItem ? (
+              <View style={styles.compactCartStepper}>
+                <TouchableOpacity
+                  style={styles.compactCartStepperBtn}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    if (cartItem.qty <= 1) {
+                      removeCartItem(item.masterWine.id);
+                    } else {
+                      updateCartItemQty(item.masterWine.id, -1);
+                    }
+                  }}
+                  hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                >
+                  {cartItem.qty <= 1 ? (
+                    <Trash2 size={13} color="#dc2626" />
+                  ) : (
+                    <Minus size={13} color="#ea580c" strokeWidth={2.5} />
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.compactCartStepperValBtn}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    setIsCartModalVisible(true);
+                  }}
+                >
+                  <Text style={styles.compactCartStepperVal}>{cartItem.qty}</Text>
+                  <Text style={styles.compactCartStepperUnit}>
+                    {cartItem.qty === 1 ? "btl" : "btls"}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.compactCartStepperBtn}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    updateCartItemQty(item.masterWine.id, 1);
+                  }}
+                  hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                >
+                  <Plus size={13} color="#ea580c" strokeWidth={2.5} />
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={[
+                  styles.compactAddToCartBtn,
+                  item.requestedQty > 0 && styles.compactAddToCartBtnDeficit,
+                  !!item.activeRequest && styles.compactAddToCartBtnDisabled,
+                ]}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  if (item.activeRequest) {
+                    router.push(`/wine-requests/${item.activeRequest.id}`);
+                  } else {
+                    addToCart(item);
+                  }
+                }}
+                activeOpacity={0.8}
+              >
+                {item.activeRequest ? (
+                  <>
+                    <Clock size={12} color="#9ca3af" />
+                    <Text style={styles.compactAddToCartBtnDisabledText}>In Transit</Text>
+                  </>
+                ) : item.requestedQty > 0 ? (
+                  <>
+                    <ShoppingCart size={12} color="#fff" />
+                    <Text style={styles.compactAddToCartBtnDeficitText}>
+                      + {item.requestedQty} Deficit
+                    </Text>
+                  </>
+                ) : (
+                  <>
+                    <ShoppingCart size={12} color={theme.primary} />
+                    <Text style={styles.compactAddToCartBtnText}>+ Request</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       </TouchableOpacity>
     );
@@ -1287,7 +1373,11 @@ export default function StoreMasterListScreen() {
                 ]}
                 onPress={(e) => {
                   e.stopPropagation();
-                  addToCart(item);
+                  if (item.activeRequest) {
+                    router.push(`/wine-requests/${item.activeRequest.id}`);
+                  } else {
+                    addToCart(item);
+                  }
                 }}
                 disabled={!!item.activeRequest}
                 activeOpacity={0.8}
@@ -1331,7 +1421,7 @@ export default function StoreMasterListScreen() {
                 !isConfigured && { color: "#b45309" },
               ]}
             >
-              {isConfigured ? "Adjust Targets" : "Set Target"}
+              Edit
             </Text>
             <ChevronRight
               size={12}
@@ -1400,7 +1490,9 @@ export default function StoreMasterListScreen() {
             PAR ALERT
           </Text>
         </View>
-        <Text style={styles.targetTileHint}>Reorder trigger level</Text>
+        <Text style={styles.targetTileHint} numberOfLines={1}>
+          Reorder trigger level
+        </Text>
         <View style={[styles.stepperContainer, { marginTop: isLandscape ? 6 : 10 }]}>
           <TouchableOpacity style={styles.stepperBtn} onPress={() => stepPar(-1)}>
             <Minus size={15} color="#ea580c" />
@@ -1427,7 +1519,9 @@ export default function StoreMasterListScreen() {
             SAFETY TARGET
           </Text>
         </View>
-        <Text style={styles.targetTileHint}>Ideal replenishment level</Text>
+        <Text style={styles.targetTileHint} numberOfLines={1}>
+          Ideal replenishment level
+        </Text>
         <View style={[styles.stepperContainer, { marginTop: isLandscape ? 6 : 10 }]}>
           <TouchableOpacity style={styles.stepperBtn} onPress={() => stepSafety(-1)}>
             <Minus size={15} color={theme.primary} />
@@ -2460,7 +2554,7 @@ export default function StoreMasterListScreen() {
                 <View style={{ flex: 1, paddingRight: 8 }}>
                   <View style={styles.modalHeaderEyebrow}>
                     <SlidersHorizontal size={11} color={theme.primary} strokeWidth={2.2} />
-                    <Text style={styles.modalHeaderEyebrowText}>CELLAR INVENTORY SETTINGS</Text>
+                    <Text style={styles.modalHeaderEyebrowText}>EDIT WINE SETTINGS</Text>
                   </View>
                   <Text style={styles.sheetProducerText} numberOfLines={1}>
                     {getProducerAllCaps(selected?.masterWine.producer)}
@@ -2529,7 +2623,7 @@ export default function StoreMasterListScreen() {
 
               {/* ── PINNED BOTTOM ACTIONS ── */}
               <View style={[styles.sheetActionRow, isLandscape && styles.sheetActionRowLandscape]}>
-                {selected?.activeRequest ? (
+                {selected?.activeRequest && (
                   <TouchableOpacity
                     style={[
                       styles.requestBtn,
@@ -2551,59 +2645,6 @@ export default function StoreMasterListScreen() {
                     )}
                     <Text style={[styles.requestBtnText, isLandscape && { fontSize: 12 }]}>VIEW ACTIVE REQUEST</Text>
                   </TouchableOpacity>
-                ) : (
-                  selected &&
-                  !sheetDiscontinued && (
-                    <View style={[styles.sheetCartRow, isLandscape && styles.sheetCartRowLandscape]}>
-                      {/* Mini Stepper for cart */}
-                      <View style={[styles.sheetCartStepper, isLandscape && { height: 42 }]}>
-                        <TouchableOpacity
-                          style={[styles.sheetCartStepperBtn, isLandscape && { width: 36, height: 42 }]}
-                          onPress={() => setSheetRequestQty((q) => Math.max(1, q - 1))}
-                          hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
-                        >
-                          <Minus size={16} color={theme.text} strokeWidth={2.5} />
-                        </TouchableOpacity>
-                        <Text style={styles.sheetCartStepperVal}>{sheetRequestQty}</Text>
-                        <TouchableOpacity
-                          style={[styles.sheetCartStepperBtn, isLandscape && { width: 36, height: 42 }]}
-                          onPress={() => setSheetRequestQty((q) => q + 1)}
-                          hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
-                        >
-                          <Plus size={16} color={theme.text} strokeWidth={2.5} />
-                        </TouchableOpacity>
-                      </View>
-
-                      <TouchableOpacity
-                        style={[
-                          styles.requestBtn,
-                          { flex: 1, marginTop: 0, height: isLandscape ? 42 : 48 },
-                          isLandscape && styles.btnLandscape,
-                          requestCart[selected.masterWine.id] && styles.requestBtnInCart,
-                        ]}
-                        onPress={() => {
-                          addToCart(selected, sheetRequestQty);
-                          Alert.alert("Added to Cart", `${sheetRequestQty} bottles staged in Request Cart.`);
-                        }}
-                      >
-                        <ShoppingCart
-                          size={17}
-                          color={requestCart[selected.masterWine.id] ? "#ffffff" : theme.primary}
-                          strokeWidth={2.5}
-                        />
-                        <Text
-                          style={[
-                            styles.requestBtnText,
-                            isLandscape && { fontSize: 11 },
-                            requestCart[selected.masterWine.id] && { color: "#ffffff" },
-                          ]}
-                          numberOfLines={1}
-                        >
-                          {requestCart[selected.masterWine.id] ? "UPDATE CART" : "ADD TO CART"}
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  )
                 )}
 
                 <TouchableOpacity
@@ -3047,114 +3088,72 @@ const styles = StyleSheet.create({
     color: theme.primary,
   },
 
-  // COMPACT ROW STYLES (~70px height)
+  // COMPACT WINE TILE STYLES (Clean & Spacious)
   compactRow: {
-    flexDirection: "row",
-    alignItems: "center",
     backgroundColor: theme.card,
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    marginBottom: 6,
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingTop: 13,
+    paddingBottom: 13,
+    marginBottom: 10,
     borderWidth: 1,
     borderColor: theme.border,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.02,
-    shadowRadius: 3,
-    elevation: 1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 5,
+    elevation: 2,
   },
   rowStockoutHighlight: {
     borderColor: "#fecaca",
     backgroundColor: "#fffafa",
   },
-  compactLeft: {
+  rowInCartHighlight: {
+    borderColor: "#fed7aa",
+    backgroundColor: "#fffdfa",
+  },
+  tileHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+  },
+  tileHeaderLeft: {
     flex: 1,
     paddingRight: 10,
   },
-  compactTitleRow: {
+  tileProducerRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 5,
+    marginBottom: 2,
   },
-  miniCatBadge: {
-    paddingHorizontal: 4,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  compactWineName: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: theme.text,
-    letterSpacing: -0.1,
+  tileCatEmoji: {
+    fontSize: 12,
+    opacity: 0.9,
   },
   compactProducerText: {
     fontSize: 11,
     fontWeight: "900",
     color: theme.primary,
-    letterSpacing: 0.5,
+    letterSpacing: 0.6,
     textTransform: "uppercase",
   },
-  compactCatEmoji: {
-    fontSize: 13,
-    opacity: 0.85,
-    marginRight: 2,
-  },
   compactWineDetailsText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: theme.textSecondary,
-    flexShrink: 1,
-  },
-  compactMetaRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginTop: 3,
-  },
-  compactMetaText: {
-    fontSize: 11,
-    color: theme.textSecondary,
-    fontWeight: "500",
-    flexShrink: 1,
-  },
-  compactPriceText: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: theme.primary,
-  },
-  compactRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginRight: 6,
-  },
-  compactStockPill: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    backgroundColor: theme.background,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: theme.border,
-  },
-  compactStockVal: {
-    fontSize: 14,
-    fontWeight: "900",
-    color: theme.text,
-  },
-  compactStockTarget: {
-    fontSize: 10,
+    fontSize: 13,
     fontWeight: "700",
-    color: theme.textSecondary,
+    color: theme.text,
+    lineHeight: 18,
+    marginTop: 1,
+  },
+  tileHeaderRight: {
+    alignItems: "flex-end",
   },
   compactStatusBadge: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
     paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingVertical: 3.5,
     borderRadius: 8,
   },
   compactStatusDot: {
@@ -3166,36 +3165,26 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "800",
     textTransform: "uppercase",
-    letterSpacing: 0.3,
+    letterSpacing: 0.4,
   },
-  compactDeficitBadge: {
+  compactPriceText: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: theme.primary,
+    marginTop: 3,
+    textAlign: "right",
+  },
+  tileBadgesRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 2,
-    backgroundColor: "#fff7ed",
-    borderColor: "#ffedd5",
-    borderWidth: 1,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 6,
+    justifyContent: "space-between",
+    marginTop: 8,
   },
-  compactDeficitText: {
-    fontSize: 9.5,
-    fontWeight: "900",
-    color: "#ea580c",
-  },
-  compactGlassBadge: {
-    backgroundColor: "#3b82f612",
-    borderColor: "#3b82f630",
-    borderWidth: 1,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  compactGlassText: {
-    fontSize: 9.5,
-    fontWeight: "800",
-    color: "#2563eb",
+  tileBadgesLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flexShrink: 1,
   },
   portionTagGlass: {
     flexDirection: "row",
@@ -3204,13 +3193,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#fce7f3",
     borderColor: "#fbcfe8",
     borderWidth: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 3.5,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
     borderRadius: 6,
-    marginLeft: 4,
   },
   portionTagTextGlass: {
-    fontSize: 10.5,
+    fontSize: 10,
     fontWeight: "800",
     color: "#be185d",
   },
@@ -3221,15 +3209,146 @@ const styles = StyleSheet.create({
     backgroundColor: "#e0f2fe",
     borderColor: "#bae6fd",
     borderWidth: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 3.5,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
     borderRadius: 6,
-    marginLeft: 4,
   },
   portionTagTextCarafe: {
-    fontSize: 10.5,
+    fontSize: 10,
     fontWeight: "800",
     color: "#0284c7",
+  },
+  compactGlassBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: "#3b82f612",
+    borderColor: "#3b82f630",
+    borderWidth: 1,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  compactGlassText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#2563eb",
+  },
+  tileInboundBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  tileInboundOutbound: {
+    backgroundColor: "#eff6ff",
+    borderColor: "#bfdbfe",
+  },
+  tileInboundReceiving: {
+    backgroundColor: "#f0fdf4",
+    borderColor: "#bbf7d0",
+  },
+  tileInboundPending: {
+    backgroundColor: "#fff7ed",
+    borderColor: "#fed7aa",
+  },
+  tileInboundText: {
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+  },
+  tileSkuText: {
+    fontSize: 10.5,
+    fontWeight: "700",
+    color: theme.textSecondary,
+    letterSpacing: 0.3,
+    marginTop: 2.5,
+  },
+  tileDivider: {
+    height: 1,
+    backgroundColor: theme.border + "70",
+    marginTop: 10,
+    marginBottom: 10,
+  },
+  tileActionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  tileStockStat: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flex: 1,
+    paddingRight: 8,
+  },
+  tileStockCountGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: theme.background,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  compactStockVal: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: theme.text,
+  },
+  compactStockTarget: {
+    fontSize: 10.5,
+    fontWeight: "700",
+    color: theme.textSecondary,
+  },
+  compactStockUnset: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#b45309",
+    fontStyle: "italic",
+  },
+  compactDeficitBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: "#fff7ed",
+    borderColor: "#fed7aa",
+    borderWidth: 1,
+    paddingHorizontal: 7,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  compactDeficitText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#ea580c",
+  },
+  tileButtonsCluster: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+  },
+  tileTuneBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    height: 38,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    backgroundColor: theme.primary + "0A",
+    borderWidth: 1,
+    borderColor: theme.primary + "25",
+  },
+  tileTuneBtnText: {
+    fontSize: 11.5,
+    fontWeight: "800",
+    color: theme.primary,
   },
 
   // DETAILED CARD STYLES
@@ -3268,10 +3387,11 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   wineSkuText: {
-    fontSize: 10,
+    fontSize: 10.5,
+    fontWeight: "700",
     color: theme.textSecondary,
-    fontWeight: "600",
-    marginTop: 2,
+    letterSpacing: 0.3,
+    marginTop: 2.5,
   },
   wineMeta: {
     fontSize: 12,
@@ -3697,10 +3817,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.border,
     overflow: "hidden",
+    width: "100%",
   },
   stepperBtn: {
-    width: 34,
-    height: 38,
+    width: 38,
+    height: 42,
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: theme.background,
@@ -3709,17 +3830,20 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.border,
     borderRadius: 10,
-    height: 40,
+    height: 42,
     fontSize: 14,
     fontWeight: "800",
     color: theme.text,
     backgroundColor: theme.card,
   },
   inputStepper: {
-    width: 50,
+    flex: 1,
     textAlign: "center",
     borderWidth: 0,
     borderRadius: 0,
+    fontSize: 16,
+    fontWeight: "900",
+    paddingHorizontal: 0,
   },
   vatToggleContainer: {
     flexDirection: "row",
@@ -4032,6 +4156,7 @@ const styles = StyleSheet.create({
   // ─── 2-COLUMN TARGET GRID ───────────────────────────────────────────
   targetGrid: {
     flexDirection: "row",
+    width: "100%",
     gap: 10,
     marginBottom: 10,
   },
@@ -4044,27 +4169,27 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   targetTileLeft: {
-    borderLeftWidth: 3,
+    borderLeftWidth: 3.5,
     borderLeftColor: "#ea580c",
   },
   targetTileRight: {
-    borderLeftWidth: 3,
+    borderLeftWidth: 3.5,
     borderLeftColor: theme.primary,
   },
   targetTileHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
+    gap: 6,
     marginBottom: 2,
   },
   targetTileLabel: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "900",
     letterSpacing: 0.8,
     textTransform: "uppercase",
   },
   targetTileHint: {
-    fontSize: 10,
+    fontSize: 10.5,
     color: theme.textSecondary,
     fontWeight: "500",
   },
@@ -4198,12 +4323,6 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 1,
   },
-  compactStockUnset: {
-    fontSize: 9.5,
-    fontWeight: "700",
-    color: "#b45309",
-    fontStyle: "italic",
-  },
   cellarGaugeFooter: {
     flexDirection: "row",
     alignItems: "center",
@@ -4302,10 +4421,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 3,
+    gap: 5,
     backgroundColor: theme.primary + "12",
-    borderWidth: 1.5,
-    borderColor: theme.primary + "35",
+    borderWidth: 1,
+    borderColor: theme.primary + "30",
   },
   compactAddToCartBtnDeficit: {
     backgroundColor: "#ea580c",
@@ -4314,7 +4433,22 @@ const styles = StyleSheet.create({
   compactAddToCartBtnDisabled: {
     backgroundColor: "#f1f5f9",
     borderColor: "#e2e8f0",
-    opacity: 0.6,
+    opacity: 0.8,
+  },
+  compactAddToCartBtnText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: theme.primary,
+  },
+  compactAddToCartBtnDeficitText: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#ffffff",
+  },
+  compactAddToCartBtnDisabledText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#9ca3af",
   },
   compactCartStepper: {
     flexDirection: "row",
@@ -4327,24 +4461,29 @@ const styles = StyleSheet.create({
     height: 38,
   },
   compactCartStepperBtn: {
-    width: 36,
+    width: 34,
     height: 38,
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: "#ffedd5",
   },
   compactCartStepperValBtn: {
-    paddingHorizontal: 4,
+    paddingHorizontal: 8,
     height: 38,
+    flexDirection: "row",
+    alignItems: "baseline",
     justifyContent: "center",
-    alignItems: "center",
+    gap: 2,
   },
   compactCartStepperVal: {
     fontSize: 14,
     fontWeight: "900",
     color: "#ea580c",
-    minWidth: 22,
-    textAlign: "center",
+  },
+  compactCartStepperUnit: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#c2410c",
   },
 
   // DETAILED CARD CART BAR STYLES
@@ -4359,7 +4498,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     backgroundColor: "#fff7ed",
-    paddingVertical: 9,
+    paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 14,
     borderWidth: 1.5,
@@ -4368,44 +4507,45 @@ const styles = StyleSheet.create({
   cardCartInfo: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 7,
+    gap: 6,
+    flexShrink: 1,
   },
   cardCartInfoText: {
-    fontSize: 13,
+    fontSize: 12.5,
     fontWeight: "700",
     color: theme.textSecondary,
   },
   cardCartStepper: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 5,
   },
   cardCartStepperBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
+    width: 36,
+    height: 36,
+    borderRadius: 9,
     backgroundColor: "#ffedd5",
     alignItems: "center",
     justifyContent: "center",
   },
   cardCartStepperVal: {
-    minWidth: 26,
+    minWidth: 24,
     textAlign: "center",
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "900",
     color: "#ea580c",
   },
   cardCartViewBtn: {
-    marginLeft: 6,
-    paddingHorizontal: 14,
-    height: 38,
-    borderRadius: 10,
+    marginLeft: 4,
+    paddingHorizontal: 12,
+    height: 36,
+    borderRadius: 9,
     backgroundColor: "#ea580c",
     justifyContent: "center",
     alignItems: "center",
   },
   cardCartViewBtnText: {
-    fontSize: 12.5,
+    fontSize: 12,
     fontWeight: "900",
     color: "#ffffff",
     letterSpacing: 0.3,
@@ -4428,9 +4568,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 7,
-    paddingHorizontal: 18,
-    height: 46,
+    gap: 6,
+    paddingHorizontal: 16,
+    height: 42,
     borderRadius: 12,
     backgroundColor: theme.primary,
     shadowColor: theme.primary,
@@ -4449,9 +4589,9 @@ const styles = StyleSheet.create({
     elevation: 0,
   },
   cardAddToCartBtnText: {
-    fontSize: 13,
+    fontSize: 12.5,
     fontWeight: "900",
     color: "#ffffff",
-    letterSpacing: 0.4,
+    letterSpacing: 0.3,
   },
 });
