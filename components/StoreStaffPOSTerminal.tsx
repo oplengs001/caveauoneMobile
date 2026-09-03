@@ -22,7 +22,6 @@ import {
   Minus,
   Plus,
   RotateCcw,
-  Scan,
   Search,
   ShoppingBag,
   UserCheck,
@@ -1970,14 +1969,6 @@ export default function StoreStaffPOSTerminal() {
               </TouchableOpacity>
             )}
 
-            <TouchableOpacity
-              onPress={() => router.push({ pathname: "/sell" })}
-              style={styles.portraitScanBtn}
-            >
-              <Scan size={16} color={MAROON.primary} strokeWidth={2.5} />
-              <Text style={styles.portraitScanBtnText}>Scan</Text>
-            </TouchableOpacity>
-
             <TouchableOpacity onPress={() => onRefresh()} style={styles.portraitIconBtn}>
               <RotateCcw size={16} color="#64748b" />
             </TouchableOpacity>
@@ -2011,20 +2002,6 @@ export default function StoreStaffPOSTerminal() {
 
               <TouchableOpacity style={[styles.dockIconBtn, styles.dockIconBtnActive]}>
                 <Zap size={22} color={MAROON.primary} strokeWidth={2.5} />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => router.push({ pathname: "/sell" })}
-                style={styles.dockIconBtn}
-              >
-                <Scan size={22} color="#64748b" strokeWidth={2} />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => router.push("/sales")}
-                style={styles.dockIconBtn}
-              >
-                <ShoppingBag size={22} color="#64748b" strokeWidth={2} />
               </TouchableOpacity>
             </View>
 
@@ -3169,22 +3146,6 @@ const styles = StyleSheet.create({
     borderColor: MAROON.border,
   },
   portraitBackBtnText: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: MAROON.primary,
-  },
-  portraitScanBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: MAROON.ultraLight,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 10,
-    gap: 4,
-    borderWidth: 1,
-    borderColor: MAROON.border,
-  },
-  portraitScanBtnText: {
     fontSize: 12,
     fontWeight: "800",
     color: MAROON.primary,
