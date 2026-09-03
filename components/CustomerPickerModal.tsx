@@ -119,7 +119,8 @@ export default function CustomerPickerModal({
   const [producerInput, setProducerInput] = useState("");
   const [favoriteRegions, setFavoriteRegions] = useState<string[]>([]);
   const [regionInput, setRegionInput] = useState("");
-  const [favoriteWineStyle, setFavoriteWineStyle] = useState("");
+  const [favoriteWineStyles, setFavoriteWineStyles] = useState<string[]>([]);
+  const [wineStyleInput, setWineStyleInput] = useState("");
 
   const [savingNew, setSavingNew] = useState(false);
 
@@ -233,7 +234,8 @@ export default function CustomerPickerModal({
       setProducerInput("");
       setFavoriteRegions([]);
       setRegionInput("");
-      setFavoriteWineStyle("");
+      setFavoriteWineStyles([]);
+      setWineStyleInput("");
       setSearchQuery("");
     }
   }, [isOpen, storeId, fetchCustomers, fetchMasterProducers]);
@@ -287,7 +289,7 @@ export default function CustomerPickerModal({
           contactNo: newContact.trim() || null,
           favoriteProducers: favoriteProducers.slice(0, 10),
           favoriteRegions: favoriteRegions.slice(0, 10),
-          favoriteWineStyle: favoriteWineStyle.trim() || null,
+          favoriteWineStyle: favoriteWineStyles.length > 0 ? favoriteWineStyles.join(", ") : null,
           notes: newNotes.trim() || null,
           storeId: storeId || null,
           totalSpend: 0,
@@ -313,9 +315,9 @@ export default function CustomerPickerModal({
 
   if (!isOpen) return null;
 
-  // Large POS dimensions
-  const cardMaxWidth = isLandscape ? Math.min(width * 0.94, 980) : Math.min(width * 0.94, 580);
-  const cardHeight = isLandscape ? Math.min(height * 0.92, 680) : Math.min(height * 0.90, 760);
+  // Compact POS dimensions
+  const cardMaxWidth = Math.min(width - 32, 460);
+  const cardHeight = Math.min(height - 48, isLandscape ? 540 : 620);
 
   const cardContent = (
     <View
@@ -327,24 +329,24 @@ export default function CustomerPickerModal({
         },
       ]}
     >
-      {/* ── Modal Header (Large POS Touch Targets) ─────────────────────────── */}
+      {/* ── Modal Header (Compact) ─────────────────────────── */}
       <View style={styles.modalHeader}>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 12, flex: 1 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1 }}>
           <View style={styles.iconCircle}>
             <MaterialCommunityIcons
               name={activeTab === "add" ? "account-plus-outline" : "account-search-outline"}
-              size={26}
+              size={20}
               color={MAROON.primary}
             />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.modalTitle}>
-              {activeTab === "add" ? "Add VIP Customer" : "Select Customer / VIP"}
+            <Text style={styles.modalTitle} numberOfLines={1}>
+              {activeTab === "add" ? "New VIP Customer" : "Select Customer"}
             </Text>
             <Text style={styles.modalSub} numberOfLines={1}>
               {activeTab === "add"
-                ? "Enter guest credentials and taste preferences"
-                : "Attach customer or VIP guest profile to this transaction"}
+                ? "Fill in guest details & wine tastes"
+                : "Attach customer profile to this order"}
             </Text>
           </View>
         </View>
@@ -352,13 +354,13 @@ export default function CustomerPickerModal({
         <TouchableOpacity
           onPress={onClose}
           style={styles.closeBtn}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
-          <MaterialCommunityIcons name="close" size={22} color="#64748b" />
+          <MaterialCommunityIcons name="close" size={18} color="#64748b" />
         </TouchableOpacity>
       </View>
 
-      {/* ── Segmented Control (Large Tabs for Fast Switching) ───────────────── */}
+      {/* ── Segmented Control (Compact Tabs) ───────────────── */}
       <View style={styles.tabSwitcher}>
         <TouchableOpacity
           onPress={() => setActiveTab("search")}
@@ -367,20 +369,20 @@ export default function CustomerPickerModal({
         >
           <MaterialCommunityIcons
             name="account-group-outline"
-            size={18}
+            size={16}
             color={activeTab === "search" ? MAROON.primary : "#64748b"}
           />
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
             <Text
               style={[
                 styles.tabBtnText,
-                activeTab === "search" && { color: MAROON.primary, fontWeight: "900" },
+                activeTab === "search" && styles.tabBtnTextActive,
               ]}
             >
-              Client Directory ({customers.length})
+              Directory ({customers.length})
             </Text>
             {isRefreshing && (
-              <ActivityIndicator size={12} color={MAROON.primary} />
+              <ActivityIndicator size={11} color={MAROON.primary} />
             )}
           </View>
         </TouchableOpacity>
@@ -392,16 +394,16 @@ export default function CustomerPickerModal({
         >
           <MaterialCommunityIcons
             name="account-plus-outline"
-            size={18}
+            size={16}
             color={activeTab === "add" ? MAROON.primary : "#64748b"}
           />
           <Text
             style={[
               styles.tabBtnText,
-              activeTab === "add" && { color: MAROON.primary, fontWeight: "900" },
+              activeTab === "add" && styles.tabBtnTextActive,
             ]}
           >
-            + New VIP Profile
+            + New VIP
           </Text>
         </TouchableOpacity>
       </View>
@@ -409,12 +411,12 @@ export default function CustomerPickerModal({
       {/* ── Tab 1: Client Directory View ─────────────────────────────────────── */}
       {activeTab === "search" ? (
         <View style={{ flex: 1 }}>
-          {/* Large POS Search Box */}
+          {/* Compact Search Box */}
           <View style={styles.searchBarWrapper}>
-            <MaterialCommunityIcons name="magnify" size={22} color="#94a3b8" />
+            <MaterialCommunityIcons name="magnify" size={18} color="#94a3b8" />
             <TextInput
               style={styles.searchInput}
-              placeholder="Search by name, phone, email, or favorite wine style..."
+              placeholder="Search name, phone, email, style..."
               placeholderTextColor="#94a3b8"
               value={searchQuery}
               onChangeText={setSearchQuery}
@@ -423,9 +425,9 @@ export default function CustomerPickerModal({
             {searchQuery.length > 0 && (
               <TouchableOpacity
                 onPress={() => setSearchQuery("")}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
-                <MaterialCommunityIcons name="close-circle" size={20} color="#94a3b8" />
+                <MaterialCommunityIcons name="close-circle" size={16} color="#94a3b8" />
               </TouchableOpacity>
             )}
           </View>
@@ -438,14 +440,11 @@ export default function CustomerPickerModal({
             </View>
           ) : (
             <FlatList
-              key={isLandscape ? "grid-2" : "list-1"}
               data={filteredCustomers}
-              numColumns={isLandscape ? 2 : 1}
-              columnWrapperStyle={isLandscape ? styles.columnWrapper : undefined}
               keyExtractor={(item) => item.id}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
-              contentContainerStyle={{ gap: 8, paddingBottom: 8 }}
+              contentContainerStyle={{ paddingBottom: 6 }}
               style={{ flex: 1 }}
               refreshing={isRefreshing}
               onRefresh={() => fetchCustomers(true)}
@@ -463,7 +462,7 @@ export default function CustomerPickerModal({
                       styles.customerCard,
                       isSelected && styles.customerCardSelected,
                     ]}
-                    activeOpacity={0.85}
+                    activeOpacity={0.75}
                   >
                     <View style={styles.customerCardLeft}>
                       <View
@@ -483,14 +482,14 @@ export default function CustomerPickerModal({
                       </View>
 
                       <View style={{ flex: 1, minWidth: 0 }}>
-                        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
                           <Text style={styles.customerCardName} numberOfLines={1}>
                             {item.name}
                           </Text>
                           {item.totalOrders && item.totalOrders > 0 ? (
                             <View style={styles.ordersBadge}>
                               <Text style={styles.ordersBadgeText}>
-                                {item.totalOrders} order{item.totalOrders !== 1 ? "s" : ""}
+                                {item.totalOrders} {item.totalOrders === 1 ? "order" : "orders"}
                               </Text>
                             </View>
                           ) : null}
@@ -501,13 +500,13 @@ export default function CustomerPickerModal({
                           <View style={styles.customerMetaRow}>
                             {item.contactNo ? (
                               <View style={styles.metaItem}>
-                                <MaterialCommunityIcons name="phone-outline" size={12} color="#64748b" />
+                                <MaterialCommunityIcons name="phone-outline" size={11} color="#64748b" />
                                 <Text style={styles.metaText} numberOfLines={1}>{item.contactNo}</Text>
                               </View>
                             ) : null}
                             {item.email ? (
                               <View style={styles.metaItem}>
-                                <MaterialCommunityIcons name="email-outline" size={12} color="#64748b" />
+                                <MaterialCommunityIcons name="email-outline" size={11} color="#64748b" />
                                 <Text style={styles.metaText} numberOfLines={1}>
                                   {item.email}
                                 </Text>
@@ -520,11 +519,18 @@ export default function CustomerPickerModal({
                         {(item.favoriteWineStyle || (item.favoriteRegions && item.favoriteRegions.length > 0)) && (
                           <View style={styles.preferencesRow}>
                             {item.favoriteWineStyle ? (
-                              <View style={styles.stylePill}>
-                                <Text style={styles.stylePillText} numberOfLines={1}>
-                                  🍷 {item.favoriteWineStyle}
-                                </Text>
-                              </View>
+                              item.favoriteWineStyle
+                                .split(",")
+                                .map((s) => s.trim())
+                                .filter(Boolean)
+                                .slice(0, 2)
+                                .map((style, sIdx) => (
+                                  <View key={`style-${sIdx}`} style={styles.stylePill}>
+                                    <Text style={styles.stylePillText} numberOfLines={1}>
+                                      🍷 {style}
+                                    </Text>
+                                  </View>
+                                ))
                             ) : null}
                             {item.favoriteRegions && item.favoriteRegions.slice(0, 2).map((reg, rIdx) => (
                               <View key={rIdx} style={styles.regionPill}>
@@ -545,7 +551,7 @@ export default function CustomerPickerModal({
                       ]}
                     >
                       {isSelected && (
-                        <MaterialCommunityIcons name="check" size={12} color="#ffffff" />
+                        <MaterialCommunityIcons name="check" size={11} color="#ffffff" />
                       )}
                     </View>
                   </TouchableOpacity>
@@ -553,7 +559,7 @@ export default function CustomerPickerModal({
               }}
               ListEmptyComponent={
                 <View style={styles.emptyContainer}>
-                  <MaterialCommunityIcons name="account-question-outline" size={48} color="#94a3b8" />
+                  <MaterialCommunityIcons name="account-question-outline" size={38} color="#94a3b8" />
                   <Text style={styles.emptyTitle}>
                     {searchQuery ? "No matching guests found" : "No customers in store directory"}
                   </Text>
@@ -570,7 +576,7 @@ export default function CustomerPickerModal({
                     style={styles.emptyAddBtn}
                     activeOpacity={0.85}
                   >
-                    <MaterialCommunityIcons name="account-plus" size={18} color="#ffffff" />
+                    <MaterialCommunityIcons name="account-plus" size={16} color="#ffffff" />
                     <Text style={styles.emptyAddBtnText}>
                       {`Add "${searchQuery || "New VIP Customer"}"`}
                     </Text>
@@ -580,7 +586,7 @@ export default function CustomerPickerModal({
             />
           )}
 
-          {/* Large POS Footer Actions */}
+          {/* Compact Footer Actions */}
           <View style={styles.modalFooter}>
             <TouchableOpacity onPress={onClose} style={styles.cancelBtn} activeOpacity={0.8}>
               <Text style={styles.cancelBtnText}>Close</Text>
@@ -591,300 +597,362 @@ export default function CustomerPickerModal({
               style={styles.primaryActionBtn}
               activeOpacity={0.85}
             >
-              <MaterialCommunityIcons name="account-plus-outline" size={18} color="#ffffff" />
+              <MaterialCommunityIcons name="account-plus-outline" size={16} color="#ffffff" />
               <Text style={styles.primaryActionBtnText}>+ Add New VIP</Text>
             </TouchableOpacity>
           </View>
         </View>
       ) : (
-        /* ── Tab 2: Add New Customer Form (Spacious 2-Column POS Layout) ───── */
+        /* ── Tab 2: Add New Customer Form (Compact Vertical Layout) ───── */
         <View style={{ flex: 1 }}>
           <ScrollView
             style={{ flex: 1 }}
-            contentContainerStyle={{ paddingBottom: 60 }}
+            contentContainerStyle={{ paddingBottom: 20 }}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
-            <View style={[isLandscape ? styles.formLandscapeRow : styles.formPortraitCol]}>
-              {/* Column 1: Guest Information */}
-              <View style={[isLandscape ? styles.formLandscapeCol : styles.formColFull]}>
-                <Text style={styles.sectionHeader}>1. GUEST INFORMATION</Text>
+            <View style={styles.formContainer}>
+              {/* Section 1: Guest Information */}
+              <Text style={styles.sectionHeader}>1. Guest Information</Text>
 
-                {/* Name */}
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>FULL NAME *</Text>
+              {/* Name */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>FULL NAME *</Text>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="e.g. Atty. Alexander Cruz"
+                  placeholderTextColor="#94a3b8"
+                  value={newName}
+                  onChangeText={setNewName}
+                  autoCapitalize="words"
+                />
+              </View>
+
+              {/* Contact & Email */}
+              <View style={{ flexDirection: "row", gap: 8 }}>
+                <View style={[styles.inputGroup, { flex: 1 }]}>
+                  <Text style={styles.inputLabel}>CONTACT NO.</Text>
                   <TextInput
                     style={styles.textInput}
-                    placeholder="e.g. Atty. Alexander Cruz"
+                    placeholder="+63 917 123 4567"
                     placeholderTextColor="#94a3b8"
-                    value={newName}
-                    onChangeText={setNewName}
-                    autoCapitalize="words"
+                    value={newContact}
+                    onChangeText={setNewContact}
+                    keyboardType="phone-pad"
                   />
                 </View>
-
-                {/* Contact & Email */}
-                <View style={{ flexDirection: "row", gap: 10 }}>
-                  <View style={[styles.inputGroup, { flex: 1 }]}>
-                    <Text style={styles.inputLabel}>CONTACT NO.</Text>
-                    <TextInput
-                      style={styles.textInput}
-                      placeholder="+63 917 123 4567"
-                      placeholderTextColor="#94a3b8"
-                      value={newContact}
-                      onChangeText={setNewContact}
-                      keyboardType="phone-pad"
-                    />
-                  </View>
-                  <View style={[styles.inputGroup, { flex: 1 }]}>
-                    <Text style={styles.inputLabel}>EMAIL (OPTIONAL)</Text>
-                    <TextInput
-                      style={styles.textInput}
-                      placeholder="client@mail.com"
-                      placeholderTextColor="#94a3b8"
-                      value={newEmail}
-                      onChangeText={setNewEmail}
-                      keyboardType="email-address"
-                      autoCapitalize="none"
-                    />
-                  </View>
-                </View>
-
-                {/* Notes */}
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>VIP NOTES / SOMMELIER MEMO</Text>
+                <View style={[styles.inputGroup, { flex: 1 }]}>
+                  <Text style={styles.inputLabel}>EMAIL (OPTIONAL)</Text>
                   <TextInput
-                    style={[styles.textInput, styles.textAreaInput]}
-                    placeholder="Cellar preferences, special requests, vintage preferences..."
+                    style={styles.textInput}
+                    placeholder="client@mail.com"
                     placeholderTextColor="#94a3b8"
-                    value={newNotes}
-                    onChangeText={setNewNotes}
-                    multiline
+                    value={newEmail}
+                    onChangeText={setNewEmail}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
                   />
                 </View>
               </View>
 
-              {/* Column 2: Wine Preferences */}
-              <View style={[isLandscape ? styles.formLandscapeCol : styles.formColFull]}>
-                <Text style={styles.sectionHeader}>2. WINE PREFERENCES</Text>
+              {/* Notes */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>VIP NOTES / SOMMELIER MEMO</Text>
+                <TextInput
+                  style={[styles.textInput, styles.textAreaInput]}
+                  placeholder="Cellar preferences, special requests, vintage tastes..."
+                  placeholderTextColor="#94a3b8"
+                  value={newNotes}
+                  onChangeText={setNewNotes}
+                  multiline
+                />
+              </View>
 
-                {/* Wine Style Selector */}
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>FAVORITE WINE STYLE</Text>
-                  <TextInput
-                    style={styles.textInput}
-                    placeholder="Select or enter wine style..."
-                    placeholderTextColor="#94a3b8"
-                    value={favoriteWineStyle}
-                    onChangeText={setFavoriteWineStyle}
-                  />
-                  <View style={styles.quickChipsWrapper}>
-                    {PREDEFINED_WINE_STYLES.map((style, idx) => {
-                      const isSelected = favoriteWineStyle === style;
-                      return (
-                        <TouchableOpacity
-                          key={idx}
-                          onPress={() => {
-                            setFavoriteWineStyle(isSelected ? "" : style);
-                          }}
-                          style={[
-                            styles.quickChip,
-                            isSelected && styles.quickChipSelected,
-                          ]}
-                          activeOpacity={0.8}
-                        >
-                          <Text
-                            style={[
-                              styles.quickChipText,
-                              isSelected && styles.quickChipTextSelected,
-                            ]}
-                          >
-                            {style}
+              {/* Section 2: Wine Preferences */}
+              <Text style={[styles.sectionHeader, { marginTop: 6 }]}>2. Wine Preferences</Text>
+
+              {/* Wine Style Selector (Multi-select) */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>
+                  FAVORITE WINE STYLES {favoriteWineStyles.length > 0 ? `(${favoriteWineStyles.length})` : ""}
+                </Text>
+
+                {/* Active Custom Wine Styles Tags */}
+                {favoriteWineStyles.filter((s) => !PREDEFINED_WINE_STYLES.includes(s)).length > 0 && (
+                  <View style={styles.activeTagsRow}>
+                    {favoriteWineStyles
+                      .filter((s) => !PREDEFINED_WINE_STYLES.includes(s))
+                      .map((customStyle, cIdx) => (
+                        <View key={cIdx} style={[styles.activeTagBadge, styles.wineStyleTagBadge]}>
+                          <Text style={[styles.activeTagBadgeText, styles.wineStyleTagText]}>
+                            {customStyle}
                           </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                </View>
-
-                {/* Favorite Regions */}
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>
-                    FAVORITE REGIONS ({favoriteRegions.length}/10)
-                  </Text>
-                  {favoriteRegions.length > 0 && (
-                    <View style={styles.activeTagsRow}>
-                      {favoriteRegions.map((reg, idx) => (
-                        <View key={idx} style={styles.activeTagBadge}>
-                          <Text style={styles.activeTagBadgeText}>{reg}</Text>
                           <TouchableOpacity
                             onPress={() =>
-                              setFavoriteRegions(favoriteRegions.filter((_, i) => i !== idx))
+                              setFavoriteWineStyles(
+                                favoriteWineStyles.filter((s) => s !== customStyle)
+                              )
                             }
-                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                           >
-                            <MaterialCommunityIcons name="close" size={13} color="#b45309" />
+                            <MaterialCommunityIcons name="close" size={12} color={MAROON.primary} />
                           </TouchableOpacity>
                         </View>
                       ))}
-                    </View>
-                  )}
+                  </View>
+                )}
 
-                  {favoriteRegions.length < 10 && (
-                    <View>
-                      {regionInput.trim().length > 0 && (
-                        <ScrollView
-                          horizontal
-                          showsHorizontalScrollIndicator={false}
-                          keyboardShouldPersistTaps="handled"
-                          style={styles.suggestionStrip}
-                          contentContainerStyle={styles.suggestionStripContent}
+                {/* Predefined Wine Styles quick chips (toggle multiple) */}
+                <View style={styles.quickChipsWrapper}>
+                  {PREDEFINED_WINE_STYLES.map((style, idx) => {
+                    const isSelected = favoriteWineStyles.includes(style);
+                    return (
+                      <TouchableOpacity
+                        key={idx}
+                        onPress={() => {
+                          if (isSelected) {
+                            setFavoriteWineStyles(
+                              favoriteWineStyles.filter((s) => s !== style)
+                            );
+                          } else {
+                            setFavoriteWineStyles([...favoriteWineStyles, style]);
+                          }
+                        }}
+                        style={[
+                          styles.quickChip,
+                          isSelected && styles.quickChipSelected,
+                        ]}
+                        activeOpacity={0.8}
+                      >
+                        {isSelected && (
+                          <MaterialCommunityIcons
+                            name="check"
+                            size={11}
+                            color={MAROON.primary}
+                            style={{ marginRight: 2 }}
+                          />
+                        )}
+                        <Text
+                          style={[
+                            styles.quickChipText,
+                            isSelected && styles.quickChipTextSelected,
+                          ]}
                         >
-                          {!favoriteRegions.includes(regionInput.trim()) && (
+                          {style}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                {/* Optional Custom Wine Style Input */}
+                <View style={{ marginTop: 5 }}>
+                  {wineStyleInput.trim().length > 0 &&
+                    !favoriteWineStyles.includes(wineStyleInput.trim()) && (
+                      <TouchableOpacity
+                        style={styles.suggestionAddChip}
+                        onPress={() => {
+                          setFavoriteWineStyles([
+                            ...favoriteWineStyles,
+                            wineStyleInput.trim(),
+                          ]);
+                          setWineStyleInput("");
+                        }}
+                        activeOpacity={0.8}
+                      >
+                        <MaterialCommunityIcons name="plus" size={12} color="#ffffff" />
+                        <Text style={styles.suggestionAddChipText} numberOfLines={1}>
+                          {`Add "${wineStyleInput.trim()}"`}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="Type custom style (optional)..."
+                    placeholderTextColor="#94a3b8"
+                    value={wineStyleInput}
+                    onChangeText={setWineStyleInput}
+                  />
+                </View>
+              </View>
+
+              {/* Favorite Regions */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>
+                  FAVORITE REGIONS ({favoriteRegions.length}/10)
+                </Text>
+                {favoriteRegions.length > 0 && (
+                  <View style={styles.activeTagsRow}>
+                    {favoriteRegions.map((reg, idx) => (
+                      <View key={idx} style={styles.activeTagBadge}>
+                        <Text style={styles.activeTagBadgeText}>{reg}</Text>
+                        <TouchableOpacity
+                          onPress={() =>
+                            setFavoriteRegions(favoriteRegions.filter((_, i) => i !== idx))
+                          }
+                          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                        >
+                          <MaterialCommunityIcons name="close" size={12} color="#b45309" />
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
+                )}
+
+                {favoriteRegions.length < 10 && (
+                  <View>
+                    {regionInput.trim().length > 0 && (
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        keyboardShouldPersistTaps="handled"
+                        style={styles.suggestionStrip}
+                        contentContainerStyle={styles.suggestionStripContent}
+                      >
+                        {!favoriteRegions.includes(regionInput.trim()) && (
+                          <TouchableOpacity
+                            style={styles.suggestionRegionAddChip}
+                            onPress={() => {
+                              setFavoriteRegions([...favoriteRegions, regionInput.trim()]);
+                              setRegionInput("");
+                            }}
+                            activeOpacity={0.8}
+                          >
+                            <MaterialCommunityIcons name="plus" size={12} color="#ffffff" />
+                            <Text style={styles.suggestionAddChipText} numberOfLines={1}>
+                              {`Add "${regionInput.trim()}"`}
+                            </Text>
+                          </TouchableOpacity>
+                        )}
+                        {PREDEFINED_COUNTRIES_REGIONS.filter(
+                          (r) =>
+                            r.toLowerCase().includes(regionInput.toLowerCase()) &&
+                            !favoriteRegions.includes(r)
+                        )
+                          .slice(0, 8)
+                          .map((r, idx) => (
                             <TouchableOpacity
-                              style={styles.suggestionRegionAddChip}
+                              key={idx}
+                              style={styles.suggestionRegionChip}
                               onPress={() => {
-                                setFavoriteRegions([...favoriteRegions, regionInput.trim()]);
+                                setFavoriteRegions([...favoriteRegions, r]);
                                 setRegionInput("");
                               }}
                               activeOpacity={0.8}
                             >
-                              <MaterialCommunityIcons name="plus" size={13} color="#ffffff" />
-                              <Text style={styles.suggestionAddChipText} numberOfLines={1}>
-                                Add "{regionInput.trim()}"
+                              <Text style={styles.suggestionRegionChipText} numberOfLines={1}>
+                                {r}
                               </Text>
                             </TouchableOpacity>
-                          )}
-                          {PREDEFINED_COUNTRIES_REGIONS.filter(
-                            (r) =>
-                              r.toLowerCase().includes(regionInput.toLowerCase()) &&
-                              !favoriteRegions.includes(r)
-                          )
-                            .slice(0, 8)
-                            .map((r, idx) => (
-                              <TouchableOpacity
-                                key={idx}
-                                style={styles.suggestionRegionChip}
-                                onPress={() => {
-                                  setFavoriteRegions([...favoriteRegions, r]);
-                                  setRegionInput("");
-                                }}
-                                activeOpacity={0.8}
-                              >
-                                <Text style={styles.suggestionRegionChipText} numberOfLines={1}>
-                                  {r}
-                                </Text>
-                              </TouchableOpacity>
-                            ))}
-                        </ScrollView>
-                      )}
-                      <TextInput
-                        style={styles.textInput}
-                        placeholder="Type region e.g. Bordeaux, Napa..."
-                        placeholderTextColor="#94a3b8"
-                        value={regionInput}
-                        onChangeText={setRegionInput}
-                      />
-                    </View>
-                  )}
-                </View>
+                          ))}
+                      </ScrollView>
+                    )}
+                    <TextInput
+                      style={styles.textInput}
+                      placeholder="Type region e.g. Bordeaux, Napa..."
+                      placeholderTextColor="#94a3b8"
+                      value={regionInput}
+                      onChangeText={setRegionInput}
+                    />
+                  </View>
+                )}
+              </View>
 
-                {/* Favorite Producers */}
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>
-                    FAVORITE PRODUCERS ({favoriteProducers.length}/10)
-                  </Text>
-                  {favoriteProducers.length > 0 && (
-                    <View style={styles.activeTagsRow}>
-                      {favoriteProducers.map((prod, idx) => (
-                        <View key={idx} style={[styles.activeTagBadge, styles.producerTagBadge]}>
-                          <Text style={[styles.activeTagBadgeText, styles.producerTagText]}>
-                            {prod}
-                          </Text>
-                          <TouchableOpacity
-                            onPress={() =>
-                              setFavoriteProducers(favoriteProducers.filter((_, i) => i !== idx))
-                            }
-                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                          >
-                            <MaterialCommunityIcons name="close" size={13} color={MAROON.primary} />
-                          </TouchableOpacity>
-                        </View>
-                      ))}
-                    </View>
-                  )}
-
-                  {favoriteProducers.length < 10 && (
-                    <View>
-                      {producerInput.trim().length > 0 && (
-                        <ScrollView
-                          horizontal
-                          showsHorizontalScrollIndicator={false}
-                          keyboardShouldPersistTaps="handled"
-                          style={styles.suggestionStrip}
-                          contentContainerStyle={styles.suggestionStripContent}
+              {/* Favorite Producers */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>
+                  FAVORITE PRODUCERS ({favoriteProducers.length}/10)
+                </Text>
+                {favoriteProducers.length > 0 && (
+                  <View style={styles.activeTagsRow}>
+                    {favoriteProducers.map((prod, idx) => (
+                      <View key={idx} style={[styles.activeTagBadge, styles.producerTagBadge]}>
+                        <Text style={[styles.activeTagBadgeText, styles.producerTagText]}>
+                          {prod}
+                        </Text>
+                        <TouchableOpacity
+                          onPress={() =>
+                            setFavoriteProducers(favoriteProducers.filter((_, i) => i !== idx))
+                          }
+                          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                         >
-                          {!favoriteProducers.includes(producerInput.trim()) && (
+                          <MaterialCommunityIcons name="close" size={12} color={MAROON.primary} />
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
+                )}
+
+                {favoriteProducers.length < 10 && (
+                  <View>
+                    {producerInput.trim().length > 0 && (
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        keyboardShouldPersistTaps="handled"
+                        style={styles.suggestionStrip}
+                        contentContainerStyle={styles.suggestionStripContent}
+                      >
+                        {!favoriteProducers.includes(producerInput.trim()) && (
+                          <TouchableOpacity
+                            style={styles.suggestionAddChip}
+                            onPress={() => {
+                              setFavoriteProducers([...favoriteProducers, producerInput.trim()]);
+                              setProducerInput("");
+                            }}
+                            activeOpacity={0.8}
+                          >
+                            <MaterialCommunityIcons name="plus" size={12} color="#ffffff" />
+                            <Text style={styles.suggestionAddChipText} numberOfLines={1}>
+                              {`Add "${producerInput.trim()}"`}
+                            </Text>
+                          </TouchableOpacity>
+                        )}
+                        {availableProducers
+                          .filter(
+                            (p) =>
+                              p.toLowerCase().includes(producerInput.toLowerCase()) &&
+                              !favoriteProducers.includes(p)
+                          )
+                          .slice(0, 10)
+                          .map((p, idx) => (
                             <TouchableOpacity
-                              style={styles.suggestionAddChip}
+                              key={idx}
+                              style={styles.suggestionChip}
                               onPress={() => {
-                                setFavoriteProducers([...favoriteProducers, producerInput.trim()]);
+                                setFavoriteProducers([...favoriteProducers, p]);
                                 setProducerInput("");
                               }}
                               activeOpacity={0.8}
                             >
-                              <MaterialCommunityIcons name="plus" size={13} color="#ffffff" />
-                              <Text style={styles.suggestionAddChipText} numberOfLines={1}>
-                                Add "{producerInput.trim()}"
+                              <Text style={styles.suggestionChipText} numberOfLines={1}>
+                                {p}
                               </Text>
                             </TouchableOpacity>
-                          )}
-                          {availableProducers
-                            .filter(
-                              (p) =>
-                                p.toLowerCase().includes(producerInput.toLowerCase()) &&
-                                !favoriteProducers.includes(p)
-                            )
-                            .slice(0, 10)
-                            .map((p, idx) => (
-                              <TouchableOpacity
-                                key={idx}
-                                style={styles.suggestionChip}
-                                onPress={() => {
-                                  setFavoriteProducers([...favoriteProducers, p]);
-                                  setProducerInput("");
-                                }}
-                                activeOpacity={0.8}
-                              >
-                                <Text style={styles.suggestionChipText} numberOfLines={1}>
-                                  {p}
-                                </Text>
-                              </TouchableOpacity>
-                            ))}
-                        </ScrollView>
-                      )}
-                      <TextInput
-                        style={styles.textInput}
-                        placeholder="Type producer name..."
-                        placeholderTextColor="#94a3b8"
-                        value={producerInput}
-                        onChangeText={setProducerInput}
-                      />
-                    </View>
-                  )}
-                </View>
+                          ))}
+                      </ScrollView>
+                    )}
+                    <TextInput
+                      style={styles.textInput}
+                      placeholder="Type producer name..."
+                      placeholderTextColor="#94a3b8"
+                      value={producerInput}
+                      onChangeText={setProducerInput}
+                    />
+                  </View>
+                )}
               </View>
             </View>
           </ScrollView>
 
-          {/* Large POS Form Footer Actions */}
+          {/* Compact Form Footer Actions */}
           <View style={styles.modalFooter}>
             <TouchableOpacity
               onPress={() => setActiveTab("search")}
               style={styles.cancelBtn}
               activeOpacity={0.8}
             >
-              <Text style={styles.cancelBtnText}>Back to List</Text>
+              <Text style={styles.cancelBtnText}>Back</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -899,8 +967,8 @@ export default function CustomerPickerModal({
               {savingNew ? (
                 <ActivityIndicator size="small" color="#ffffff" />
               ) : (
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                  <MaterialCommunityIcons name="check" size={18} color="#ffffff" />
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                  <MaterialCommunityIcons name="check" size={16} color="#ffffff" />
                   <Text style={styles.primaryActionBtnText}>Save & Attach VIP</Text>
                 </View>
               )}
@@ -944,7 +1012,7 @@ export default function CustomerPickerModal({
 const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(30, 41, 59, 0.55)",
+    backgroundColor: "rgba(15, 23, 42, 0.65)",
     alignItems: "center",
     justifyContent: "center",
     padding: 16,
@@ -953,23 +1021,26 @@ const styles = StyleSheet.create({
     width: "100%",
     backgroundColor: "#ffffff",
     borderRadius: 20,
-    padding: 16,
+    padding: 14,
     elevation: 16,
     shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.25,
-    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.22,
+    shadowRadius: 18,
+    borderWidth: 1,
+    borderColor: "#f1f5f9",
   },
   modalHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: 10,
+    paddingBottom: 2,
   },
   iconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: 34,
+    height: 34,
+    borderRadius: 10,
     backgroundColor: MAROON.ultraLight,
     alignItems: "center",
     justifyContent: "center",
@@ -977,20 +1048,21 @@ const styles = StyleSheet.create({
     borderColor: MAROON.border,
   },
   modalTitle: {
-    fontSize: 17,
+    fontSize: 15,
     fontWeight: "900",
-    color: "#18181b",
+    color: "#0f172a",
+    letterSpacing: -0.2,
   },
   modalSub: {
     fontSize: 11,
     fontWeight: "600",
-    color: "#71717a",
+    color: "#64748b",
     marginTop: 1,
   },
   closeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: "#f1f5f9",
     alignItems: "center",
     justifyContent: "center",
@@ -1000,32 +1072,36 @@ const styles = StyleSheet.create({
   tabSwitcher: {
     flexDirection: "row",
     backgroundColor: "#f1f5f9",
-    borderRadius: 12,
-    padding: 3,
-    marginBottom: 10,
-    gap: 4,
+    borderRadius: 10,
+    padding: 2.5,
+    marginBottom: 8,
+    gap: 3,
   },
   tabBtn: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 7,
-    borderRadius: 9,
-    gap: 6,
+    paddingVertical: 6,
+    borderRadius: 8,
+    gap: 5,
   },
   tabBtnActive: {
     backgroundColor: "#ffffff",
     elevation: 2,
     shadowColor: "#000000",
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
   },
   tabBtnText: {
-    fontSize: 12,
+    fontSize: 11.5,
     fontWeight: "700",
     color: "#64748b",
+  },
+  tabBtnTextActive: {
+    color: MAROON.primary,
+    fontWeight: "900",
   },
 
   // Search Bar
@@ -1033,36 +1109,34 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#f8fafc",
-    borderWidth: 1.2,
+    borderWidth: 1,
     borderColor: "#e2e8f0",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    height: 40,
-    gap: 8,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    height: 38,
+    gap: 6,
     marginBottom: 8,
   },
   searchInput: {
     flex: 1,
-    fontSize: 13,
+    fontSize: 12.5,
     fontWeight: "600",
     color: "#0f172a",
+    paddingVertical: 0,
   },
 
-  // Customer Card & Grid
-  columnWrapper: {
-    gap: 8,
-  },
+  // Customer Card
   customerCard: {
-    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     backgroundColor: "#ffffff",
-    borderWidth: 1.2,
+    borderWidth: 1,
     borderColor: "#e2e8f0",
     borderRadius: 12,
-    paddingHorizontal: 11,
-    paddingVertical: 9,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginBottom: 6,
   },
   customerCardSelected: {
     borderColor: MAROON.primary,
@@ -1072,13 +1146,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     flex: 1,
-    gap: 10,
+    gap: 8,
     marginRight: 8,
   },
   customerAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+    width: 32,
+    height: 32,
+    borderRadius: 8,
     backgroundColor: "#f1f5f9",
     alignItems: "center",
     justifyContent: "center",
@@ -1090,7 +1164,7 @@ const styles = StyleSheet.create({
     borderColor: MAROON.primary,
   },
   customerAvatarText: {
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: "900",
     color: "#475569",
   },
@@ -1098,36 +1172,36 @@ const styles = StyleSheet.create({
     color: "#ffffff",
   },
   customerCardName: {
-    fontSize: 13,
+    fontSize: 12.5,
     fontWeight: "900",
     color: "#0f172a",
   },
   ordersBadge: {
     backgroundColor: "#f1f5f9",
-    paddingHorizontal: 5,
-    paddingVertical: 1.5,
-    borderRadius: 5,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 4,
   },
   ordersBadgeText: {
-    fontSize: 9,
+    fontSize: 8.5,
     fontWeight: "800",
     color: "#64748b",
   },
   customerMetaRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
     marginTop: 2,
     flexWrap: "wrap",
   },
   metaItem: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 3,
-    maxWidth: 160,
+    gap: 2.5,
+    maxWidth: 150,
   },
   metaText: {
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: "600",
     color: "#64748b",
   },
@@ -1142,12 +1216,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffedd5",
     borderColor: "#fed7aa",
     borderWidth: 1,
-    paddingHorizontal: 6,
-    paddingVertical: 1.5,
-    borderRadius: 5,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
   },
   stylePillText: {
-    fontSize: 10,
+    fontSize: 9.5,
     fontWeight: "800",
     color: "#c2410c",
   },
@@ -1155,19 +1229,19 @@ const styles = StyleSheet.create({
     backgroundColor: "#fef3c7",
     borderColor: "#fde68a",
     borderWidth: 1,
-    paddingHorizontal: 6,
-    paddingVertical: 1.5,
-    borderRadius: 5,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
   },
   regionPillText: {
-    fontSize: 10,
+    fontSize: 9.5,
     fontWeight: "700",
     color: "#b45309",
   },
   customerRadio: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
     borderWidth: 1.5,
     borderColor: "#cbd5e1",
     alignItems: "center",
@@ -1184,145 +1258,146 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    padding: 30,
+    padding: 24,
   },
   centerText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "600",
     color: "#64748b",
-    marginTop: 8,
+    marginTop: 6,
   },
   emptyContainer: {
     alignItems: "center",
     justifyContent: "center",
-    padding: 32,
+    padding: 24,
   },
   emptyTitle: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "800",
     color: "#18181b",
-    marginTop: 10,
+    marginTop: 8,
   },
   emptySub: {
-    fontSize: 12,
+    fontSize: 11,
     color: "#64748b",
     textAlign: "center",
-    marginTop: 4,
-    marginBottom: 16,
-    maxWidth: 320,
+    marginTop: 3,
+    marginBottom: 12,
+    maxWidth: 280,
   },
   emptyAddBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
     backgroundColor: MAROON.primary,
-    paddingHorizontal: 18,
-    paddingVertical: 11,
-    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 10,
   },
   emptyAddBtnText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "800",
     color: "#ffffff",
   },
 
-  // Form Styles (Landscape & Portrait Responsive)
-  formLandscapeRow: {
-    flexDirection: "row",
-    gap: 20,
-  },
-  formPortraitCol: {
-    flexDirection: "column",
-    gap: 8,
-  },
-  formLandscapeCol: {
+  // Form Styles (Compact Single-Column)
+  formContainer: {
     flex: 1,
   },
-  formColFull: {
-    width: "100%",
-  },
   sectionHeader: {
-    fontSize: 11,
-    fontWeight: "900",
+    fontSize: 10.5,
+    fontWeight: "700",
     color: MAROON.primary,
-    letterSpacing: 0.8,
-    marginBottom: 10,
+    letterSpacing: 0.4,
+    marginBottom: 6,
     marginTop: 4,
+    textTransform: "uppercase",
   },
   inputGroup: {
-    marginBottom: 12,
+    marginBottom: 8,
   },
   inputLabel: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: "#475569",
-    letterSpacing: 0.6,
-    marginBottom: 5,
+    fontSize: 9.5,
+    fontWeight: "600",
+    color: "#64748b",
+    letterSpacing: 0.3,
+    marginBottom: 3,
   },
   textInput: {
     backgroundColor: "#f8fafc",
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: "#e2e8f0",
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    height: 44,
-    fontSize: 13,
-    fontWeight: "600",
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    height: 38,
+    fontSize: 12.5,
+    fontWeight: "400",
     color: "#0f172a",
   },
   textAreaInput: {
-    height: 64,
-    paddingTop: 10,
+    height: 52,
+    paddingTop: 6,
+    paddingBottom: 6,
     textAlignVertical: "top",
   },
   quickChipsWrapper: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 6,
-    marginTop: 6,
+    gap: 4,
+    marginTop: 4,
   },
   quickChip: {
-    backgroundColor: "#f1f5f9",
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f8fafc",
     borderColor: "#e2e8f0",
     borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4.5,
+    borderRadius: 7,
   },
   quickChipSelected: {
     backgroundColor: "#fdf8f6",
-    borderColor: MAROON.border,
+    borderColor: MAROON.primary,
   },
   quickChipText: {
-    fontSize: 11,
-    fontWeight: "700",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: "#64748b",
   },
   quickChipTextSelected: {
     color: MAROON.primary,
-    fontWeight: "800",
+    fontWeight: "600",
   },
   activeTagsRow: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 6,
-    marginBottom: 6,
+    gap: 4,
+    marginBottom: 4,
   },
   activeTagBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: 3,
     backgroundColor: "#fef3c7",
     borderColor: "#fde68a",
     borderWidth: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2.5,
+    borderRadius: 6,
   },
   activeTagBadgeText: {
-    fontSize: 11,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "500",
     color: "#b45309",
+  },
+  wineStyleTagBadge: {
+    backgroundColor: "#fdf8f6",
+    borderColor: MAROON.border,
+  },
+  wineStyleTagText: {
+    color: MAROON.primary,
+    fontWeight: "500",
   },
   producerTagBadge: {
     backgroundColor: "#fdf8f6",
@@ -1330,91 +1405,93 @@ const styles = StyleSheet.create({
   },
   producerTagText: {
     color: MAROON.primary,
+    fontWeight: "500",
   },
   // Suggestion Strips & Chips
   suggestionStrip: {
-    marginBottom: 6,
-    maxHeight: 38,
+    marginBottom: 5,
+    maxHeight: 34,
   },
   suggestionStripContent: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 4,
     paddingVertical: 2,
     paddingHorizontal: 2,
   },
   suggestionAddChip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: 3,
     backgroundColor: MAROON.primary,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
   },
   suggestionAddChipText: {
-    fontSize: 11,
-    fontWeight: "800",
+    fontSize: 10,
+    fontWeight: "600",
     color: "#ffffff",
-    maxWidth: 160,
+    maxWidth: 140,
   },
   suggestionChip: {
     backgroundColor: "#f1f5f9",
     borderWidth: 1,
     borderColor: "#cbd5e1",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
   },
   suggestionChipText: {
-    fontSize: 11,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "500",
     color: "#334155",
-    maxWidth: 160,
+    maxWidth: 140,
   },
   suggestionRegionAddChip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: 3,
     backgroundColor: "#b45309",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
   },
   suggestionRegionChip: {
     backgroundColor: "#fef3c7",
     borderWidth: 1,
     borderColor: "#fde68a",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
   },
   suggestionRegionChipText: {
-    fontSize: 11,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "500",
     color: "#92400e",
-    maxWidth: 160,
+    maxWidth: 140,
   },
 
   // Modal Footer
   modalFooter: {
     flexDirection: "row",
-    gap: 10,
-    marginTop: 10,
-    paddingTop: 10,
+    gap: 8,
+    marginTop: 8,
+    paddingTop: 8,
     borderTopWidth: 1,
     borderTopColor: "#f1f5f9",
   },
   cancelBtn: {
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 10,
     backgroundColor: "#f1f5f9",
     alignItems: "center",
     justifyContent: "center",
+    height: 38,
   },
   cancelBtnText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "800",
     color: "#64748b",
   },
@@ -1424,16 +1501,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 10,
     backgroundColor: MAROON.primary,
+    height: 38,
   },
   primaryActionBtnDisabled: {
     backgroundColor: "#94a3b8",
   },
   primaryActionBtnText: {
-    fontSize: 13,
+    fontSize: 12.5,
     fontWeight: "900",
     color: "#ffffff",
   },

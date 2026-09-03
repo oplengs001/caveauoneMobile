@@ -3615,7 +3615,7 @@ const styles = StyleSheet.create({
   },
   cardTitle: {
     fontSize: 18,
-    fontWeight: "600",
+    fontWeight: "400",
     color: "#27272a",
     lineHeight: 22,
   },
