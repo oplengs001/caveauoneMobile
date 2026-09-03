@@ -140,44 +140,44 @@ const STATUS_CONFIG: Record<
 > = {
   in_stock: {
     label: "Optimal",
-    color: "#065f46",
-    bg: "#d1fae5",
-    accent: "#10b981",
+    color: "#166534",
+    bg: "#f0fdf4",
+    accent: "#16a34a",
   },
   stockout: {
     label: "Stockout",
-    color: "#991b1b",
-    bg: "#fee2e2",
-    accent: "#ef4444",
+    color: theme.danger,
+    bg: "#fef2f2",
+    accent: theme.danger,
   },
   overstock: {
     label: "Overstock",
-    color: "#1e3a8a",
-    bg: "#dbeafe",
-    accent: "#3b82f6",
+    color: theme.textSecondary,
+    bg: "#f8fafc",
+    accent: theme.textSecondary,
   },
   par_alert: {
     label: "PAR Alert",
-    color: "#9a3412",
-    bg: "#fff7ed",
-    accent: "#f97316",
+    color: theme.accent,
+    bg: "#fefce8",
+    accent: theme.accent,
   },
   under_safety: {
     label: "Under Safety",
-    color: "#854d0e",
+    color: theme.accent,
     bg: "#fefce8",
-    accent: "#eab308",
+    accent: theme.accent,
   },
   unset: {
     label: "Unset",
-    color: "#475569",
-    bg: "#e2e8f0",
+    color: theme.textSecondary,
+    bg: "#f8fafc",
     accent: "#94a3b8",
   },
   discontinued: {
     label: "Discontinued",
-    color: "#475569",
-    bg: "#f1f5f9",
+    color: theme.textSecondary,
+    bg: "#f8fafc",
     accent: "#94a3b8",
   },
 };
@@ -836,15 +836,11 @@ export default function StoreMasterListScreen() {
         <View style={styles.tileHeaderRow}>
           <View style={styles.tileHeaderLeft}>
             <View style={styles.tileProducerRow}>
-              {category === "fun" && (
-                <Text style={styles.tileCatEmoji}>😁</Text>
-              )}
-              {category === "fine" && (
-                <Text style={styles.tileCatEmoji}>💎</Text>
-              )}
-              {category === "reserve" && (
-                <Text style={styles.tileCatEmoji}>👻</Text>
-              )}
+              {category ? (
+                <View style={styles.tileCatPill}>
+                  <Text style={styles.tileCatPillText}>{category.toUpperCase()}</Text>
+                </View>
+              ) : null}
               <Text style={styles.compactProducerText} numberOfLines={1}>
                 {getProducerAllCaps(item.masterWine.producer)}
               </Text>
@@ -860,7 +856,7 @@ export default function StoreMasterListScreen() {
           </View>
 
           <View style={styles.tileHeaderRight}>
-            <View style={[styles.compactStatusBadge, { backgroundColor: cfg.bg }]}>
+            <View style={[styles.compactStatusBadge, { backgroundColor: cfg.bg, borderColor: cfg.accent + "30", borderWidth: 1 }]}>
               <View style={[styles.compactStatusDot, { backgroundColor: cfg.accent }]} />
               <Text style={[styles.compactStatusText, { color: cfg.color }]}>
                 {cfg.label}
@@ -881,34 +877,27 @@ export default function StoreMasterListScreen() {
         {/* Secondary Context Badges Row (Left: Serving Modes | Right: Delivery Status) */}
         {(isPortion || item.openGlassesCount > 0 || item.activeRequest) && (
           <View style={styles.tileBadgesRow}>
-            {/* Left Zone: Serving Modes (Glass & Carafe, Open Glasses) */}
+            {/* Left Zone: Serving Modes */}
             <View style={styles.tileBadgesLeft}>
               {isPortion && (
                 <View style={styles.portionTagGlass}>
-                  <MaterialCommunityIcons name="glass-wine" size={11} color="#be185d" />
+                  <MaterialCommunityIcons name="glass-wine" size={11} color={theme.primary} />
                   <Text style={styles.portionTagTextGlass}>Glass & Carafe</Text>
                 </View>
               )}
 
               {item.openGlassesCount > 0 && (
                 <View style={styles.compactGlassBadge}>
-                  <MaterialCommunityIcons name="glass-wine" size={10} color="#2563eb" />
+                  <MaterialCommunityIcons name="glass-wine" size={10} color={theme.textSecondary} />
                   <Text style={styles.compactGlassText}>{item.openGlassesCount}/6 open</Text>
                 </View>
               )}
             </View>
 
-            {/* Right Zone: Inbound Delivery Status (Always anchored on the right) */}
+            {/* Right Zone: Inbound Delivery Status (Clean neutral badge) */}
             {item.activeRequest ? (
               <TouchableOpacity
-                style={[
-                  styles.tileInboundBadge,
-                  item.activeRequest.status === "outbound" || item.activeRequest.status === "converted"
-                    ? styles.tileInboundOutbound
-                    : item.activeRequest.status === "receiving"
-                      ? styles.tileInboundReceiving
-                      : styles.tileInboundPending,
-                ]}
+                style={styles.tileInboundBadge}
                 onPress={(e) => {
                   e.stopPropagation();
                   router.push(`/wine-requests/${item.activeRequest!.id}`);
@@ -916,23 +905,14 @@ export default function StoreMasterListScreen() {
                 activeOpacity={0.75}
               >
                 {item.activeRequest.status === "outbound" ||
-                item.activeRequest.status === "converted" ? (
-                  <Truck size={11} color="#1d4ed8" />
+                  item.activeRequest.status === "converted" ? (
+                  <Truck size={11} color={theme.accent} />
                 ) : item.activeRequest.status === "receiving" ? (
                   <CheckCircle2 size={11} color="#15803d" />
                 ) : (
-                  <Clock size={11} color="#c2410c" />
+                  <Clock size={11} color={theme.textSecondary} />
                 )}
-                <Text
-                  style={[
-                    styles.tileInboundText,
-                    item.activeRequest.status === "outbound" || item.activeRequest.status === "converted"
-                      ? { color: "#1d4ed8" }
-                      : item.activeRequest.status === "receiving"
-                        ? { color: "#15803d" }
-                        : { color: "#c2410c" },
-                  ]}
-                >
+                <Text style={styles.tileInboundText}>
                   {item.activeRequest.status === "pending"
                     ? "Pending Request"
                     : item.activeRequest.status === "converted"
@@ -943,16 +923,7 @@ export default function StoreMasterListScreen() {
                           ? "Receiving"
                           : "Active Request"}
                 </Text>
-                <ChevronRight
-                  size={11}
-                  color={
-                    item.activeRequest.status === "outbound" || item.activeRequest.status === "converted"
-                      ? "#1d4ed8"
-                      : item.activeRequest.status === "receiving"
-                        ? "#15803d"
-                        : "#c2410c"
-                  }
-                />
+                <ChevronRight size={11} color={theme.textSecondary} />
               </TouchableOpacity>
             ) : null}
           </View>
@@ -977,12 +948,6 @@ export default function StoreMasterListScreen() {
               )}
             </View>
 
-            {item.requestedQty > 0 && (
-              <View style={styles.compactDeficitBadge}>
-                <TrendingDown size={10} color="#ea580c" strokeWidth={2.5} />
-                <Text style={styles.compactDeficitText}>{item.requestedQty} deficit</Text>
-              </View>
-            )}
           </View>
 
           {/* Dedicated Action Buttons Cluster */}
@@ -1017,9 +982,9 @@ export default function StoreMasterListScreen() {
                   hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
                 >
                   {cartItem.qty <= 1 ? (
-                    <Trash2 size={13} color="#dc2626" />
+                    <Trash2 size={13} color={theme.danger} />
                   ) : (
-                    <Minus size={13} color="#ea580c" strokeWidth={2.5} />
+                    <Minus size={13} color={theme.primary} strokeWidth={2.5} />
                   )}
                 </TouchableOpacity>
 
@@ -1044,7 +1009,7 @@ export default function StoreMasterListScreen() {
                   }}
                   hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
                 >
-                  <Plus size={13} color="#ea580c" strokeWidth={2.5} />
+                  <Plus size={13} color={theme.primary} strokeWidth={2.5} />
                 </TouchableOpacity>
               </View>
             ) : (
@@ -1066,7 +1031,7 @@ export default function StoreMasterListScreen() {
               >
                 {item.activeRequest ? (
                   <>
-                    <Clock size={12} color="#9ca3af" />
+                    <Clock size={12} color={theme.textSecondary} />
                     <Text style={styles.compactAddToCartBtnDisabledText}>In Transit</Text>
                   </>
                 ) : item.requestedQty > 0 ? (
@@ -1156,40 +1121,29 @@ export default function StoreMasterListScreen() {
         </View>
 
         <View style={styles.tagsRow}>
-          {category === "fun" && (
-            <View style={[styles.indicatorBadge, styles.indicatorBadgeTransparent, { borderColor: "#d9770640" }]}>
-              <Text style={styles.catEmojiText}>😁</Text>
-              <Text style={[styles.indicatorText, { color: "#d97706" }]}>Fun Wine</Text>
+          {category ? (
+            <View style={[styles.indicatorBadge, { backgroundColor: theme.accent + "14", borderColor: theme.accent + "30", borderWidth: 1 }]}>
+              <Text style={[styles.indicatorText, { color: theme.accent }]}>
+                {category === "fun" ? "Fun Wine" : category === "fine" ? "Fine Wine" : "Reserve Wine"}
+              </Text>
             </View>
-          )}
-          {category === "fine" && (
-            <View style={[styles.indicatorBadge, styles.indicatorBadgeTransparent, { borderColor: "#be185d40" }]}>
-              <Text style={styles.catEmojiText}>💎</Text>
-              <Text style={[styles.indicatorText, { color: "#be185d" }]}>Fine Wine</Text>
-            </View>
-          )}
-          {category === "reserve" && (
-            <View style={[styles.indicatorBadge, styles.indicatorBadgeTransparent, { borderColor: "#4338ca40" }]}>
-              <Text style={styles.catEmojiText}>👻</Text>
-              <Text style={[styles.indicatorText, { color: "#4338ca" }]}>Reserve Wine</Text>
-            </View>
-          )}
+          ) : null}
           {isPortion ? (
-            <View style={[styles.indicatorBadge, { backgroundColor: "#fce7f3", borderColor: "#fbcfe8", borderWidth: 1 }]}>
-              <MaterialCommunityIcons name="glass-wine" size={13} color="#be185d" />
-              <Text style={[styles.indicatorText, { color: "#be185d" }]}>By Glass & Carafe</Text>
+            <View style={[styles.indicatorBadge, { backgroundColor: theme.primary + "0A", borderColor: theme.primary + "25", borderWidth: 1 }]}>
+              <MaterialCommunityIcons name="glass-wine" size={13} color={theme.primary} />
+              <Text style={[styles.indicatorText, { color: theme.primary }]}>By Glass & Carafe</Text>
             </View>
           ) : (
-            <View style={[styles.indicatorBadge, { backgroundColor: "#f1f5f9", borderColor: "#e2e8f0", borderWidth: 1 }]}>
-              <MaterialCommunityIcons name="bottle-wine-outline" size={13} color="#64748b" />
-              <Text style={[styles.indicatorText, { color: "#64748b" }]}>Bottle Only</Text>
+            <View style={[styles.indicatorBadge, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }]}>
+              <MaterialCommunityIcons name="bottle-wine-outline" size={13} color={theme.textSecondary} />
+              <Text style={[styles.indicatorText, { color: theme.textSecondary }]}>Bottle Only</Text>
             </View>
           )}
 
           {requestCart[item.masterWine.id] && (
-            <View style={[styles.indicatorBadge, { backgroundColor: "#ffedd5", borderColor: "#fed7aa", borderWidth: 1 }]}>
-              <ShoppingCart size={11} color="#ea580c" />
-              <Text style={[styles.indicatorText, { color: "#ea580c", fontWeight: "800" }]}>
+            <View style={[styles.indicatorBadge, { backgroundColor: theme.primary + "12", borderColor: theme.primary + "30", borderWidth: 1 }]}>
+              <ShoppingCart size={11} color={theme.primary} />
+              <Text style={[styles.indicatorText, { color: theme.primary, fontWeight: "800" }]}>
                 {requestCart[item.masterWine.id].qty} in Cart
               </Text>
             </View>
@@ -1207,7 +1161,7 @@ export default function StoreMasterListScreen() {
                 <Text style={styles.stockPrimaryLabel}>IN STORE</Text>
                 {item.openGlassesCount > 0 && (
                   <View style={styles.openGlassesBadge}>
-                    <MaterialCommunityIcons name="glass-wine" size={11} color="#2563eb" />
+                    <MaterialCommunityIcons name="glass-wine" size={11} color={theme.textSecondary} />
                     <Text style={styles.openGlassesText}>
                       {item.openGlassesCount}/6 glasses
                     </Text>
@@ -1217,7 +1171,7 @@ export default function StoreMasterListScreen() {
 
               {item.requestedQty > 0 && (
                 <View style={styles.deficitBadge}>
-                  <TrendingDown size={12} color="#ea580c" strokeWidth={2.5} />
+                  <TrendingDown size={12} color={theme.danger} strokeWidth={2.5} />
                   <Text style={styles.deficitText}>{item.requestedQty} DEFICIT</Text>
                 </View>
               )}
@@ -1303,10 +1257,10 @@ export default function StoreMasterListScreen() {
           {cartItem ? (
             <View style={styles.cardCartActiveRow}>
               <View style={styles.cardCartInfo}>
-                <ShoppingCart size={16} color="#ea580c" />
+                <ShoppingCart size={16} color={theme.primary} />
                 <Text style={styles.cardCartInfoText}>
                   In Cart:{" "}
-                  <Text style={{ fontWeight: "900", color: "#ea580c" }}>
+                  <Text style={{ fontWeight: "900", color: theme.primary }}>
                     {cartItem.qty} {cartItem.qty === 1 ? "bottle" : "bottles"}
                   </Text>
                 </Text>
@@ -1485,8 +1439,8 @@ export default function StoreMasterListScreen() {
       {/* PAR Alert Tile */}
       <View style={[styles.targetTile, styles.targetTileLeft, isLandscape && { padding: 10 }]}>
         <View style={styles.targetTileHeader}>
-          <AlertTriangle size={13} color="#ea580c" />
-          <Text style={[styles.targetTileLabel, { color: "#ea580c" }]}>
+          <AlertTriangle size={13} color={theme.accent} />
+          <Text style={[styles.targetTileLabel, { color: theme.accent }]}>
             PAR ALERT
           </Text>
         </View>
@@ -1495,7 +1449,7 @@ export default function StoreMasterListScreen() {
         </Text>
         <View style={[styles.stepperContainer, { marginTop: isLandscape ? 6 : 10 }]}>
           <TouchableOpacity style={styles.stepperBtn} onPress={() => stepPar(-1)}>
-            <Minus size={15} color="#ea580c" />
+            <Minus size={15} color={theme.accent} />
           </TouchableOpacity>
           <TextInput
             style={[styles.input, styles.inputStepper]}
@@ -1506,7 +1460,7 @@ export default function StoreMasterListScreen() {
             placeholderTextColor="#94a3b8"
           />
           <TouchableOpacity style={styles.stepperBtn} onPress={() => stepPar(1)}>
-            <Plus size={15} color="#ea580c" />
+            <Plus size={15} color={theme.accent} />
           </TouchableOpacity>
         </View>
       </View>
@@ -1625,13 +1579,13 @@ export default function StoreMasterListScreen() {
           <MaterialCommunityIcons
             name="glass-wine"
             size={14}
-            color={sheetAllowGlass ? "#be185d" : theme.textSecondary}
+            color={sheetAllowGlass ? theme.primary : theme.textSecondary}
           />
           <Text
             style={[
               styles.servingToggleBtnText,
               sheetAllowGlass && {
-                color: "#be185d",
+                color: theme.primary,
                 fontWeight: "800",
               },
             ]}
@@ -1641,7 +1595,7 @@ export default function StoreMasterListScreen() {
         </TouchableOpacity>
       </View>
       {sheetAllowGlass && (
-        <Text style={[styles.fieldHint, { marginTop: 4, color: "#be185d" + "99" }]}>
+        <Text style={[styles.fieldHint, { marginTop: 4, color: theme.primary + "99" }]}>
           Glass & carafe prices visible in pricing below
         </Text>
       )}
@@ -1656,15 +1610,10 @@ export default function StoreMasterListScreen() {
       </Text>
       <View style={styles.categorySelectorGrid}>
         {[
-          { id: "none", label: "Standard", emoji: null, color: theme.textSecondary },
-          { id: "fun", label: "Fun Wine", emoji: "😁", color: "#d97706" },
-          { id: "fine", label: "Fine Wine", emoji: "💎", color: "#be185d" },
-          {
-            id: "reserve",
-            label: "Reserve Wine",
-            emoji: "👻",
-            color: "#4338ca",
-          },
+          { id: "none", label: "Standard" },
+          { id: "fun", label: "Fun Wine" },
+          { id: "fine", label: "Fine Wine" },
+          { id: "reserve", label: "Reserve Wine" },
         ].map((cat) => {
           const isSelected = sheetWineCategory === cat.id;
           return (
@@ -1673,23 +1622,14 @@ export default function StoreMasterListScreen() {
               onPress={() => setSheetWineCategory(cat.id as any)}
               style={[
                 styles.catSelectBtn,
-                {
-                  borderColor: isSelected ? cat.color : theme.border,
-                  backgroundColor: isSelected ? `${cat.color}15` : "transparent",
-                },
+                isSelected && styles.catSelectBtnActive,
               ]}
             >
-              {cat.emoji && (
-                <Text style={{ fontSize: 13, opacity: isSelected ? 1 : 0.75 }}>
-                  {cat.emoji}
-                </Text>
-              )}
               <Text
-                style={{
-                  fontSize: 12,
-                  fontWeight: isSelected ? "800" : "500",
-                  color: isSelected ? cat.color : theme.textSecondary,
-                }}
+                style={[
+                  styles.catSelectBtnText,
+                  isSelected && styles.catSelectBtnTextActive,
+                ]}
               >
                 {cat.label}
               </Text>
@@ -1807,9 +1747,9 @@ export default function StoreMasterListScreen() {
                 <MaterialCommunityIcons
                   name="glass-wine"
                   size={14}
-                  color="#be185d"
+                  color={theme.primary}
                 />
-                <Text style={[styles.pricingHalfLabel, { color: "#be185d" }]}>
+                <Text style={[styles.pricingHalfLabel, { color: theme.primary }]}>
                   Glass Price (1/6)
                 </Text>
               </View>
@@ -1831,10 +1771,10 @@ export default function StoreMasterListScreen() {
               <View style={styles.pricingHalfHeader}>
                 <Image
                   source={require("@/assets/images/carafe.png")}
-                  style={{ width: 14, height: 14, tintColor: "#0284c7" }}
+                  style={{ width: 14, height: 14, tintColor: theme.accent }}
                   resizeMode="contain"
                 />
-                <Text style={[styles.pricingHalfLabel, { color: "#0284c7" }]}>
+                <Text style={[styles.pricingHalfLabel, { color: theme.accent }]}>
                   Carafe Price (2/6)
                 </Text>
               </View>
@@ -1929,12 +1869,12 @@ export default function StoreMasterListScreen() {
             <View style={styles.kpiCardHeader}>
               <AlertTriangle
                 size={16}
-                color={metrics.needsReorderCount > 0 ? "#ea580c" : theme.textSecondary}
+                color={metrics.needsReorderCount > 0 ? theme.danger : theme.textSecondary}
               />
               <Text
                 style={[
                   styles.kpiCardLabel,
-                  metrics.needsReorderCount > 0 && { color: "#c2410c" },
+                  metrics.needsReorderCount > 0 && { color: theme.danger },
                 ]}
               >
                 REORDER NEEDED
@@ -1943,7 +1883,7 @@ export default function StoreMasterListScreen() {
             <Text
               style={[
                 styles.kpiCardValue,
-                metrics.needsReorderCount > 0 && { color: "#c2410c" },
+                metrics.needsReorderCount > 0 && { color: theme.danger },
               ]}
             >
               {metrics.needsReorderCount}
@@ -1962,10 +1902,10 @@ export default function StoreMasterListScreen() {
             activeOpacity={0.8}
           >
             <View style={styles.kpiCardHeader}>
-              <CheckCircle2 size={16} color="#10b981" />
-              <Text style={[styles.kpiCardLabel, { color: "#047857" }]}>OPTIMAL</Text>
+              <CheckCircle2 size={16} color="#166534" />
+              <Text style={[styles.kpiCardLabel, { color: "#166534" }]}>OPTIMAL</Text>
             </View>
-            <Text style={[styles.kpiCardValue, { color: "#047857" }]}>
+            <Text style={[styles.kpiCardValue, { color: "#166534" }]}>
               {metrics.optimalCount}
             </Text>
             <Text style={styles.kpiCardSub}>Healthy stock balance</Text>
@@ -1978,10 +1918,10 @@ export default function StoreMasterListScreen() {
             activeOpacity={0.8}
           >
             <View style={styles.kpiCardHeader}>
-              <TrendingUp size={16} color="#3b82f6" />
-              <Text style={[styles.kpiCardLabel, { color: "#1d4ed8" }]}>OVERSTOCK</Text>
+              <TrendingUp size={16} color={theme.textSecondary} />
+              <Text style={[styles.kpiCardLabel, { color: theme.textSecondary }]}>OVERSTOCK</Text>
             </View>
-            <Text style={[styles.kpiCardValue, { color: "#1d4ed8" }]}>
+            <Text style={[styles.kpiCardValue, { color: theme.text }]}>
               {metrics.overstockCount}
             </Text>
             <Text style={styles.kpiCardSub}>Above safety levels</Text>
@@ -2125,23 +2065,23 @@ export default function StoreMasterListScreen() {
               style={styles.activeFilterPill}
               onPress={() => setCategoryFilter("all")}
             >
-              {categoryFilter === "fun" ? (
-                <Text style={{ fontSize: 12, marginRight: 2 }}>😁</Text>
-              ) : categoryFilter === "fine" ? (
-                <Text style={{ fontSize: 12, marginRight: 2 }}>💎</Text>
-              ) : categoryFilter === "reserve" ? (
-                <Text style={{ fontSize: 12, marginRight: 2 }}>👻</Text>
-              ) : (
-                <MaterialCommunityIcons
-                  name={
-                    categoryFilter === "portions"
-                      ? "glass-wine"
-                      : "bottle-wine-outline"
-                  }
-                  size={13}
-                  color={theme.primary}
-                />
-              )}
+              <MaterialCommunityIcons
+                name={
+                  (categoryFilter === "portions"
+                    ? "glass-wine"
+                    : categoryFilter === "bottle_only"
+                      ? "bottle-wine-outline"
+                      : categoryFilter === "fun"
+                        ? "glass-cocktail"
+                        : categoryFilter === "fine"
+                          ? "shield-check"
+                          : categoryFilter === "reserve"
+                            ? "shield-star-outline"
+                            : "bottle-wine-outline") as any
+                }
+                size={13}
+                color={theme.primary}
+              />
               <Text style={styles.activeFilterPillText}>
                 {categoryFilter === "portions"
                   ? "Glass & Carafe"
@@ -2205,31 +2145,31 @@ export default function StoreMasterListScreen() {
                   key: "par_alert",
                   label: `PAR Alert (${metrics.parAlertCount})`,
                   icon: "lightning-bolt-outline",
-                  color: "#d97706",
+                  color: theme.accent,
                 },
                 {
                   key: "under_safety",
                   label: `Under Safety (${metrics.underSafetyCount})`,
                   icon: "shield-alert-outline",
-                  color: "#ca8a04",
+                  color: theme.accent,
                 },
                 {
                   key: "optimal",
                   label: `Optimal (${metrics.optimalCount})`,
                   icon: "check-circle-outline",
-                  color: "#059669",
+                  color: "#166534",
                 },
                 {
                   key: "overstock",
                   label: `Overstock (${metrics.overstockCount})`,
                   icon: "trending-up",
-                  color: "#2563eb",
+                  color: theme.textSecondary,
                 },
                 {
                   key: "discontinued",
                   label: `Discontinued (${metrics.discontinuedCount})`,
                   icon: "cancel",
-                  color: "#64748b",
+                  color: theme.textSecondary,
                 },
               ] as { key: FilterType; label: string; icon?: string; color?: string }[]
             ).map((chip) => {
@@ -2269,36 +2209,36 @@ export default function StoreMasterListScreen() {
           >
             {(
               [
-                { id: "all", label: "All Servings", icon: "layers-outline" },
+                { id: "all", label: "All Servings", icon: "layers-outline", color: theme.textSecondary },
                 {
                   id: "portions",
                   label: "By Glass & Carafe",
                   icon: "glass-wine",
-                  color: "#be185d",
+                  color: theme.primary,
                 },
                 {
                   id: "bottle_only",
                   label: "Bottle Only",
                   icon: "bottle-wine-outline",
-                  color: "#64748b",
+                  color: theme.textSecondary,
                 },
                 {
                   id: "fun",
                   label: "Fun Wine",
-                  emoji: "😁",
-                  color: "#d97706",
+                  icon: "glass-cocktail",
+                  color: theme.accent,
                 },
                 {
                   id: "fine",
                   label: "Fine Wine",
-                  emoji: "💎",
-                  color: "#be185d",
+                  icon: "shield-check",
+                  color: theme.accent,
                 },
                 {
                   id: "reserve",
                   label: "Reserve Wine",
-                  emoji: "👻",
-                  color: "#4338ca",
+                  icon: "shield-star-outline",
+                  color: theme.accent,
                 },
                 {
                   id: "standard",
@@ -2318,15 +2258,11 @@ export default function StoreMasterListScreen() {
                     isCatActive && styles.categoryChipActive,
                   ]}
                 >
-                  {"emoji" in cat && (cat as any).emoji ? (
-                    <Text style={{ fontSize: 13, marginRight: 4 }}>{(cat as any).emoji}</Text>
-                  ) : "icon" in cat && (cat as any).icon ? (
-                    <MaterialCommunityIcons
-                      name={(cat as any).icon}
-                      size={14}
-                      color={isCatActive ? "#ffffff" : (cat as any).color || theme.textSecondary}
-                    />
-                  ) : null}
+                  <MaterialCommunityIcons
+                    name={cat.icon as any}
+                    size={14}
+                    color={isCatActive ? "#ffffff" : cat.color || theme.textSecondary}
+                  />
                   <Text
                     style={[
                       styles.categoryChipText,
@@ -2416,12 +2352,12 @@ export default function StoreMasterListScreen() {
             </TouchableOpacity>
           ) : (
             <TouchableOpacity
-              style={[styles.batchRequestButton, { backgroundColor: "#ea580c" }]}
+              style={[styles.batchRequestButton, { backgroundColor: theme.primary }]}
               onPress={addAllDeficitsToCart}
               activeOpacity={0.85}
             >
               <View style={[styles.batchCountBadge, { backgroundColor: "#fff" }]}>
-                <Text style={[styles.batchCountBadgeText, { color: "#ea580c" }]}>
+                <Text style={[styles.batchCountBadgeText, { color: theme.primary }]}>
                   {itemsToRequest.length}
                 </Text>
               </View>
@@ -2793,7 +2729,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   kpiCard: {
-    backgroundColor: theme.background,
+    backgroundColor: theme.card,
     borderRadius: 14,
     padding: 12,
     minWidth: 130,
@@ -2805,20 +2741,20 @@ const styles = StyleSheet.create({
     backgroundColor: theme.primary + "0A",
   },
   kpiCardAlert: {
-    backgroundColor: "#fff7ed",
-    borderColor: "#fed7aa",
+    backgroundColor: theme.card,
+    borderColor: theme.border,
   },
   kpiCardAlertActive: {
-    borderColor: "#ea580c",
-    backgroundColor: "#ffedd5",
+    borderColor: theme.danger,
+    backgroundColor: theme.danger + "0A",
   },
   kpiCardOptimalActive: {
-    borderColor: "#10b981",
-    backgroundColor: "#ecfdf5",
+    borderColor: "#166534",
+    backgroundColor: "#1665340A",
   },
   kpiCardOverstockActive: {
-    borderColor: "#3b82f6",
-    backgroundColor: "#eff6ff",
+    borderColor: theme.textSecondary,
+    backgroundColor: theme.background,
   },
   kpiCardHeader: {
     flexDirection: "row",
@@ -3109,8 +3045,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#fffafa",
   },
   rowInCartHighlight: {
-    borderColor: "#fed7aa",
-    backgroundColor: "#fffdfa",
+    borderColor: theme.primary + "30",
+    backgroundColor: theme.card,
   },
   tileHeaderRow: {
     flexDirection: "row",
@@ -3127,9 +3063,19 @@ const styles = StyleSheet.create({
     gap: 5,
     marginBottom: 2,
   },
-  tileCatEmoji: {
-    fontSize: 12,
-    opacity: 0.9,
+  tileCatPill: {
+    paddingHorizontal: 5,
+    paddingVertical: 1.5,
+    borderRadius: 4,
+    backgroundColor: theme.accent + "18",
+    borderWidth: 1,
+    borderColor: theme.accent + "35",
+  },
+  tileCatPillText: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: theme.accent,
+    letterSpacing: 0.5,
   },
   compactProducerText: {
     fontSize: 11,
@@ -3190,8 +3136,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: "#fce7f3",
-    borderColor: "#fbcfe8",
+    backgroundColor: theme.primary + "0A",
+    borderColor: theme.primary + "20",
     borderWidth: 1,
     paddingHorizontal: 7,
     paddingVertical: 3,
@@ -3200,14 +3146,14 @@ const styles = StyleSheet.create({
   portionTagTextGlass: {
     fontSize: 10,
     fontWeight: "800",
-    color: "#be185d",
+    color: theme.primary,
   },
   portionTagCarafe: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: "#e0f2fe",
-    borderColor: "#bae6fd",
+    backgroundColor: theme.accent + "0A",
+    borderColor: theme.accent + "20",
     borderWidth: 1,
     paddingHorizontal: 7,
     paddingVertical: 3,
@@ -3216,14 +3162,14 @@ const styles = StyleSheet.create({
   portionTagTextCarafe: {
     fontSize: 10,
     fontWeight: "800",
-    color: "#0284c7",
+    color: theme.accent,
   },
   compactGlassBadge: {
     flexDirection: "row",
     alignItems: "center",
     gap: 3,
-    backgroundColor: "#3b82f612",
-    borderColor: "#3b82f630",
+    backgroundColor: theme.background,
+    borderColor: theme.border,
     borderWidth: 1,
     paddingHorizontal: 7,
     paddingVertical: 3,
@@ -3231,8 +3177,8 @@ const styles = StyleSheet.create({
   },
   compactGlassText: {
     fontSize: 10,
-    fontWeight: "800",
-    color: "#2563eb",
+    fontWeight: "700",
+    color: theme.textSecondary,
   },
   tileInboundBadge: {
     flexDirection: "row",
@@ -3242,23 +3188,13 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: 6,
     borderWidth: 1,
-  },
-  tileInboundOutbound: {
-    backgroundColor: "#eff6ff",
-    borderColor: "#bfdbfe",
-  },
-  tileInboundReceiving: {
-    backgroundColor: "#f0fdf4",
-    borderColor: "#bbf7d0",
-  },
-  tileInboundPending: {
-    backgroundColor: "#fff7ed",
-    borderColor: "#fed7aa",
+    backgroundColor: theme.background,
+    borderColor: theme.border,
   },
   tileInboundText: {
     fontSize: 10,
-    fontWeight: "800",
-    textTransform: "uppercase",
+    fontWeight: "700",
+    color: theme.textSecondary,
     letterSpacing: 0.3,
   },
   tileSkuText: {
@@ -3310,15 +3246,15 @@ const styles = StyleSheet.create({
   compactStockUnset: {
     fontSize: 10,
     fontWeight: "700",
-    color: "#b45309",
+    color: theme.accent,
     fontStyle: "italic",
   },
   compactDeficitBadge: {
     flexDirection: "row",
     alignItems: "center",
     gap: 3,
-    backgroundColor: "#fff7ed",
-    borderColor: "#fed7aa",
+    backgroundColor: theme.danger + "0E",
+    borderColor: theme.danger + "25",
     borderWidth: 1,
     paddingHorizontal: 7,
     paddingVertical: 5,
@@ -3327,7 +3263,7 @@ const styles = StyleSheet.create({
   compactDeficitText: {
     fontSize: 10,
     fontWeight: "900",
-    color: "#ea580c",
+    color: theme.danger,
   },
   tileButtonsCluster: {
     flexDirection: "row",
@@ -3472,8 +3408,8 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   openGlassesBadge: {
-    backgroundColor: "#3b82f612",
-    borderColor: "#3b82f630",
+    backgroundColor: theme.background,
+    borderColor: theme.border,
     borderWidth: 1,
     paddingHorizontal: 6,
     paddingVertical: 2,
@@ -3483,23 +3419,23 @@ const styles = StyleSheet.create({
   openGlassesText: {
     fontSize: 10,
     fontWeight: "700",
-    color: "#2563eb",
+    color: theme.textSecondary,
   },
   deficitBadge: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: "#fff7ed",
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: "#ffedd5",
+    backgroundColor: theme.danger + "0E",
+    borderColor: theme.danger + "25",
   },
   deficitText: {
     fontSize: 10,
     fontWeight: "900",
-    color: "#ea580c",
+    color: theme.danger,
     letterSpacing: 0.5,
   },
   barTrack: {
@@ -3522,14 +3458,14 @@ const styles = StyleSheet.create({
   },
   parMarkerArrow: {
     fontSize: 9,
-    color: "#ea580c",
+    color: theme.accent,
     lineHeight: 9,
     marginBottom: 1,
   },
   parMarkerLine: {
     width: 3,
     height: 10,
-    backgroundColor: "#ea580c",
+    backgroundColor: theme.accent,
     borderRadius: 2,
     borderWidth: 1,
     borderColor: "#fff",
@@ -3543,7 +3479,7 @@ const styles = StyleSheet.create({
   barLabelSecondary: {
     fontSize: 10,
     fontWeight: "900",
-    color: "#ea580c",
+    color: theme.accent,
   },
   barLabel: {
     fontSize: 10,
@@ -3937,6 +3873,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     borderRadius: 12,
     borderWidth: 1,
+    borderColor: theme.border,
+    backgroundColor: theme.card,
+  },
+  catSelectBtnActive: {
+    backgroundColor: theme.primary,
+    borderColor: theme.primary,
+  },
+  catSelectBtnText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: theme.textSecondary,
+  },
+  catSelectBtnTextActive: {
+    color: "#fff",
+    fontWeight: "800",
   },
 
   formulaBox: {
@@ -4170,7 +4121,7 @@ const styles = StyleSheet.create({
   },
   targetTileLeft: {
     borderLeftWidth: 3.5,
-    borderLeftColor: "#ea580c",
+    borderLeftColor: theme.accent,
   },
   targetTileRight: {
     borderLeftWidth: 3.5,
@@ -4376,14 +4327,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 5,
     paddingVertical: 1.5,
     borderRadius: 6,
-    backgroundColor: "#ffedd5",
+    backgroundColor: theme.primary + "12",
     borderWidth: 1,
-    borderColor: "#fed7aa",
+    borderColor: theme.primary + "30",
   },
   compactInCartText: {
     fontSize: 9,
     fontWeight: "800",
-    color: "#ea580c",
+    color: theme.primary,
   },
   sheetCartStepper: {
     flexDirection: "row",
@@ -4427,12 +4378,12 @@ const styles = StyleSheet.create({
     borderColor: theme.primary + "30",
   },
   compactAddToCartBtnDeficit: {
-    backgroundColor: "#ea580c",
-    borderColor: "#c2410c",
+    backgroundColor: theme.primary,
+    borderColor: theme.primary,
   },
   compactAddToCartBtnDisabled: {
-    backgroundColor: "#f1f5f9",
-    borderColor: "#e2e8f0",
+    backgroundColor: theme.background,
+    borderColor: theme.border,
     opacity: 0.8,
   },
   compactAddToCartBtnText: {
@@ -4448,15 +4399,15 @@ const styles = StyleSheet.create({
   compactAddToCartBtnDisabledText: {
     fontSize: 11,
     fontWeight: "700",
-    color: "#9ca3af",
+    color: theme.textSecondary,
   },
   compactCartStepper: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#fff7ed",
+    backgroundColor: theme.primary + "0A",
     borderRadius: 10,
     borderWidth: 1.5,
-    borderColor: "#fed7aa",
+    borderColor: theme.primary + "30",
     overflow: "hidden",
     height: 38,
   },
@@ -4465,25 +4416,27 @@ const styles = StyleSheet.create({
     height: 38,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#ffedd5",
+    backgroundColor: theme.primary + "14",
   },
   compactCartStepperValBtn: {
-    paddingHorizontal: 8,
+    minWidth: 42,
+    paddingHorizontal: 6,
     height: 38,
     flexDirection: "row",
-    alignItems: "baseline",
+    alignItems: "center",
     justifyContent: "center",
     gap: 2,
   },
   compactCartStepperVal: {
     fontSize: 14,
     fontWeight: "900",
-    color: "#ea580c",
+    color: theme.primary,
+    textAlign: "center",
   },
   compactCartStepperUnit: {
     fontSize: 10,
     fontWeight: "700",
-    color: "#c2410c",
+    color: theme.primary + "90",
   },
 
   // DETAILED CARD CART BAR STYLES
@@ -4497,12 +4450,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "#fff7ed",
+    backgroundColor: theme.primary + "0A",
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 14,
     borderWidth: 1.5,
-    borderColor: "#fed7aa",
+    borderColor: theme.primary + "25",
   },
   cardCartInfo: {
     flexDirection: "row",
@@ -4524,7 +4477,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 9,
-    backgroundColor: "#ffedd5",
+    backgroundColor: theme.primary + "14",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -4533,14 +4486,14 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontSize: 15,
     fontWeight: "900",
-    color: "#ea580c",
+    color: theme.primary,
   },
   cardCartViewBtn: {
     marginLeft: 4,
     paddingHorizontal: 12,
     height: 36,
     borderRadius: 9,
-    backgroundColor: "#ea580c",
+    backgroundColor: theme.primary,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -4580,11 +4533,13 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   cardAddToCartBtnDeficit: {
-    backgroundColor: "#ea580c",
-    shadowColor: "#ea580c",
+    backgroundColor: theme.primary,
+    shadowColor: theme.primary,
   },
   cardAddToCartBtnDisabled: {
-    backgroundColor: "#f1f5f9",
+    backgroundColor: theme.background,
+    borderColor: theme.border,
+    borderWidth: 1,
     shadowOpacity: 0,
     elevation: 0,
   },
