@@ -5,6 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 import { apiFetch } from "@/lib/api";
 import { clearToken } from "@/lib/auth";
 import { countBottlesForStoreDashboard, getStores } from "@/lib/queries";
+import { setWineRequestInCache } from "@/lib/queries/wineRequests";
 import { Delivery, PulloutRequest, Store, WineRequest } from "@/types";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
@@ -1291,12 +1292,13 @@ export default function HomeScreen() {
                             borderColor: theme.border,
                           },
                         ]}
-                        onPress={() =>
+                        onPress={() => {
+                          setWineRequestInCache(req);
                           router.push({
                             pathname: "/wine-requests/[id]",
                             params: { id: req.id },
-                          })
-                        }
+                          });
+                        }}
                         activeOpacity={0.85}
                       >
                         <View style={styles.alertBannerLeft}>
@@ -1405,12 +1407,13 @@ export default function HomeScreen() {
                               borderColor: theme.border,
                             },
                           ]}
-                          onPress={() =>
+                          onPress={() => {
+                            setWineRequestInCache(req);
                             router.push({
                               pathname: "/wine-requests/[id]",
                               params: { id: req.id },
-                            })
-                          }
+                            });
+                          }}
                           activeOpacity={0.85}
                         >
                           <View style={styles.topCardBody}>
@@ -1507,11 +1510,11 @@ export default function HomeScreen() {
                 flexDirection: "row",
                 justifyContent: "space-between",
                 alignItems: "center",
-                marginBottom: 16,
+                marginBottom: 10,
               }}
             >
-              <Text style={styles.metricsTitle}>Sales Dashboard</Text>
-              <View style={{ flexDirection: "row", gap: 8 }}>
+              <Text style={[styles.metricsTitle, { marginBottom: 0 }]}>Sales Dashboard</Text>
+              <View style={{ flexDirection: "row", gap: 6, alignItems: "center" }}>
                 <TouchableOpacity
                   onPress={() => setSalesPeriod("today")}
                   style={[
@@ -1584,7 +1587,7 @@ export default function HomeScreen() {
                     All
                   </Text>
                 </TouchableOpacity>
-                <View style={{ width: 1, height: 16, backgroundColor: theme.border, marginHorizontal: 4 }} />
+                <View style={{ width: 1, height: 16, backgroundColor: theme.border, marginHorizontal: 2 }} />
                 <TouchableOpacity
                   onPress={() => router.push("/sales")}
                   style={[
@@ -1607,14 +1610,14 @@ export default function HomeScreen() {
               </View>
             </View>
 
-            {/* Replaced ScrollView with Responsive Grid for Non-Staff */}
+            {/* Symmetrical 3-Card Single Row Metrics Bar */}
             {!isStoreStaff && (
-              <View style={styles.responsiveGrid}>
-                {/* Card 1: Total Revenue (Clickable) */}
+              <View style={styles.symmetricalSalesRow}>
+                {/* Card 1: Total Revenue */}
                 <TouchableOpacity
                   style={[
-                    styles.metricCard,
-                    { width: cardWidth, backgroundColor: theme.primary },
+                    styles.symmetricalCard,
+                    { backgroundColor: theme.card, borderColor: theme.border },
                   ]}
                   onPress={() =>
                     router.push({
@@ -1624,23 +1627,38 @@ export default function HomeScreen() {
                   }
                   activeOpacity={0.8}
                 >
-                  <Banknote size={24} color="#ffffff" strokeWidth={2.5} />
+                  <View
+                    style={[
+                      styles.symmetricalIconCircle,
+                      { backgroundColor: theme.primary + "14" },
+                    ]}
+                  >
+                    <Banknote size={15} color={theme.primary} strokeWidth={2.4} />
+                  </View>
+
                   <Text
-                    style={[styles.metricCount, { color: "#ffffff" }]}
+                    style={[styles.symmetricalCardValue, { color: theme.text }]}
                     numberOfLines={1}
                     adjustsFontSizeToFit
                   >
                     ₱
-                    {salesDashboardMetrics.totalRevenue?.toLocaleString(
-                      undefined,
-                      {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      },
-                    )}
+                    {salesDashboardMetrics.totalRevenue?.toLocaleString(undefined, {
+                      minimumFractionDigits: 0,
+                      maximumFractionDigits: 0,
+                    })}
                   </Text>
-                  <Text style={styles.metricLabel}>Total Revenue</Text>
-                  <Text style={styles.metricSubLabel}>
+
+                  <Text
+                    style={[styles.symmetricalCardLabel, { color: theme.textSecondary }]}
+                    numberOfLines={1}
+                  >
+                    Revenue
+                  </Text>
+
+                  <Text
+                    style={[styles.symmetricalCardPeriod, { color: theme.primary }]}
+                    numberOfLines={1}
+                  >
                     {salesPeriod === "today"
                       ? "Today"
                       : salesPeriod === "week"
@@ -1649,11 +1667,11 @@ export default function HomeScreen() {
                   </Text>
                 </TouchableOpacity>
 
-                {/* Card 2: Bottles Sold (Clickable) */}
+                {/* Card 2: Bottles Sold */}
                 <TouchableOpacity
                   style={[
-                    styles.metricCard,
-                    { width: cardWidth, backgroundColor: theme.secondary },
+                    styles.symmetricalCard,
+                    { backgroundColor: theme.card, borderColor: theme.border },
                   ]}
                   onPress={() =>
                     router.push({
@@ -1663,12 +1681,37 @@ export default function HomeScreen() {
                   }
                   activeOpacity={0.8}
                 >
-                  <Wine size={24} color="#ffffff" strokeWidth={2.5} />
-                  <Text style={[styles.metricCount, { color: "#ffffff" }]}>
-                    {salesDashboardMetrics.soldCount % 1 === 0 ? salesDashboardMetrics.soldCount : salesDashboardMetrics.soldCount.toFixed(2)}
+                  <View
+                    style={[
+                      styles.symmetricalIconCircle,
+                      { backgroundColor: "#10b98118" },
+                    ]}
+                  >
+                    <Wine size={15} color="#059669" strokeWidth={2.4} />
+                  </View>
+
+                  <Text
+                    style={[styles.symmetricalCardValue, { color: theme.text }]}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                  >
+                    {salesDashboardMetrics.soldCount % 1 === 0
+                      ? salesDashboardMetrics.soldCount
+                      : salesDashboardMetrics.soldCount.toFixed(1)}
+                    <Text style={styles.symmetricalCardUnit}> btl</Text>
                   </Text>
-                  <Text style={styles.metricLabel}>Bottles Sold</Text>
-                  <Text style={styles.metricSubLabel}>
+
+                  <Text
+                    style={[styles.symmetricalCardLabel, { color: theme.textSecondary }]}
+                    numberOfLines={1}
+                  >
+                    Bottles Sold
+                  </Text>
+
+                  <Text
+                    style={[styles.symmetricalCardPeriod, { color: "#059669" }]}
+                    numberOfLines={1}
+                  >
                     {salesPeriod === "today"
                       ? "Today"
                       : salesPeriod === "week"
@@ -1677,44 +1720,47 @@ export default function HomeScreen() {
                   </Text>
                 </TouchableOpacity>
 
-                {/* Card 3: Active Inventory (Horizontal Stat Banner on mobile, metricCard on tablet) */}
-                <View
+                {/* Card 3: Active Inventory */}
+                <TouchableOpacity
                   style={[
-                    isTablet ? styles.metricCard : styles.inventoryStatBanner,
-                    isTablet
-                      ? { width: cardWidth, backgroundColor: "#64748b" }
-                      : { backgroundColor: theme.card, borderColor: theme.border },
+                    styles.symmetricalCard,
+                    { backgroundColor: theme.card, borderColor: theme.border },
                   ]}
+                  onPress={() => router.push("/store-master-list")}
+                  activeOpacity={0.8}
                 >
-                  {isTablet ? (
-                    <>
-                      <LayoutList size={24} color="#ffffff" strokeWidth={2.5} />
-                      <Text style={[styles.metricCount, { color: "#ffffff" }]}>
-                        {salesDashboardMetrics.activeBottles}
-                      </Text>
-                      <Text style={styles.metricLabel}>Active Inventory</Text>
-                      <Text style={styles.metricSubLabel}>Current Stock</Text>
-                    </>
-                  ) : (
-                    <>
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-                        <View style={[styles.deliveryCardIconCircle, { backgroundColor: "#64748b15" }]}>
-                          <LayoutList size={18} color="#64748b" strokeWidth={2.2} />
-                        </View>
-                        <View>
-                          <Text style={[styles.inventoryStatTitle, { color: theme.text }]}>Active Inventory</Text>
-                          <Text style={[styles.inventoryStatSub, { color: theme.textSecondary }]}>Current stock in boutique</Text>
-                        </View>
-                      </View>
-                      <View style={{ alignItems: "flex-end" }}>
-                        <Text style={[styles.inventoryStatCount, { color: theme.text }]}>
-                          {salesDashboardMetrics.activeBottles}
-                        </Text>
-                        <Text style={[styles.inventoryStatUnit, { color: theme.textSecondary }]}>bottles available</Text>
-                      </View>
-                    </>
-                  )}
-                </View>
+                  <View
+                    style={[
+                      styles.symmetricalIconCircle,
+                      { backgroundColor: "#6366f118" },
+                    ]}
+                  >
+                    <LayoutList size={15} color="#4f46e5" strokeWidth={2.4} />
+                  </View>
+
+                  <Text
+                    style={[styles.symmetricalCardValue, { color: theme.text }]}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                  >
+                    {salesDashboardMetrics.activeBottles}
+                    <Text style={styles.symmetricalCardUnit}> btl</Text>
+                  </Text>
+
+                  <Text
+                    style={[styles.symmetricalCardLabel, { color: theme.textSecondary }]}
+                    numberOfLines={1}
+                  >
+                    In Stock
+                  </Text>
+
+                  <Text
+                    style={[styles.symmetricalCardPeriod, { color: "#4f46e5" }]}
+                    numberOfLines={1}
+                  >
+                    Boutique
+                  </Text>
+                </TouchableOpacity>
               </View>
             )}
 
@@ -2328,7 +2374,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   metricsDashboard: {
-    marginBottom: 24,
+    marginBottom: 16,
     backgroundColor: "transparent",
   },
   metricsTitle: {
@@ -2339,6 +2385,58 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
     marginBottom: 12,
     paddingHorizontal: 2,
+  },
+  symmetricalSalesRow: {
+    flexDirection: "row",
+    gap: 8,
+    width: "100%",
+  },
+  symmetricalCard: {
+    flex: 1,
+    borderRadius: 14,
+    borderWidth: 1.2,
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 88,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  symmetricalIconCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 4,
+  },
+  symmetricalCardValue: {
+    fontSize: 16,
+    fontWeight: "900",
+    letterSpacing: -0.3,
+    textAlign: "center",
+    marginBottom: 2,
+  },
+  symmetricalCardUnit: {
+    fontSize: 10.5,
+    fontWeight: "700",
+  },
+  symmetricalCardLabel: {
+    fontSize: 9.5,
+    fontWeight: "800",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+    textAlign: "center",
+  },
+  symmetricalCardPeriod: {
+    fontSize: 9,
+    fontWeight: "700",
+    textAlign: "center",
+    marginTop: 2,
   },
   responsiveGrid: {
     flexDirection: "row",

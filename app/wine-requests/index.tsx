@@ -3,6 +3,7 @@ import { useAuth } from "@/context/AuthContext";
 import { apiFetch } from "@/lib/api";
 import { formatDate } from "@/lib/utils/format";
 import { WineRequest } from "@/types";
+import { setWineRequestInCache } from "@/lib/queries/wineRequests";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
 import {
   Ban,
@@ -280,12 +281,13 @@ export default function WineRequestsIndex() {
       >
         {/* Card Header & Status */}
         <TouchableOpacity
-          onPress={() =>
+          onPress={() => {
+            setWineRequestInCache(item);
             router.push({
               pathname: "/wine-requests/[id]",
               params: { id: item.id },
-            })
-          }
+            });
+          }}
           activeOpacity={0.8}
         >
           <View style={styles.cardHeader}>

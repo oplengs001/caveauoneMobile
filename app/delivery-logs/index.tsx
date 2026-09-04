@@ -2,12 +2,13 @@ import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { apiFetch } from "@/lib/api";
 import { getStores } from "@/lib/queries";
+import { setWineRequestInCache } from "@/lib/queries/wineRequests";
 import { Delivery, Store, WineRequest } from "@/types";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
 import {
-  ArrowLeft,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
   ChevronUp,
   Clock,
   ExternalLink,
@@ -34,6 +35,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 
@@ -66,11 +68,21 @@ export interface IntakeLogRecord {
   confirmedBy?: string;
   notes?: string;
   wines: IntakeWineItem[];
+  rawRequest?: WineRequest;
 }
 
 export default function DeliveryLogsScreen() {
   const router = useRouter();
   const { profile } = useAuth();
+  const { width } = useWindowDimensions();
+
+  // Responsive horizontal padding to squeeze content on wider screens & tablets
+  const horizontalPadding = useMemo(() => {
+    if (width >= 1024) return 60;
+    if (width >= 768) return 48;
+    if (width >= 600) return 36;
+    return 28;
+  }, [width]);
 
   const [records, setRecords] = useState<IntakeLogRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -256,6 +268,7 @@ export default function DeliveryLogsScreen() {
           confirmedBy: req.confirmedBy || req.createdBy || "Warehouse Transfer",
           notes: req.rejectionReason || undefined,
           wines: parsedWines,
+          rawRequest: req,
         });
       });
 
@@ -693,6 +706,9 @@ export default function DeliveryLogsScreen() {
                   params: { id: item.rawId },
                 });
               } else {
+                if (item.rawRequest) {
+                  setWineRequestInCache(item.rawRequest);
+                }
                 router.push({
                   pathname: "/wine-requests/[id]",
                   params: { id: item.rawId },
@@ -716,81 +732,88 @@ export default function DeliveryLogsScreen() {
       <Stack.Screen options={{ headerShown: false }} />
 
       {/* Screen Header */}
-      <View style={[styles.header, { backgroundColor: theme.card, borderBottomColor: theme.border }]}>
-        <View style={styles.headerTop}>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-            <ArrowLeft size={22} color={theme.text} strokeWidth={2.4} />
-          </TouchableOpacity>
-          <View style={{ flex: 1, marginLeft: 4 }}>
-            <Text style={[styles.headerTitle, { color: theme.text }]}>
-              Delivery Intake Logs
-            </Text>
-            <Text style={[styles.headerSubtitle, { color: theme.textSecondary }]}>
-              Store arrivals, confirmed wines & timestamps
-            </Text>
-          </View>
-          <TouchableOpacity style={styles.refreshIconBtn} onPress={onRefresh}>
-            <RefreshCw size={18} color={theme.textSecondary} />
-          </TouchableOpacity>
-        </View>
-
-        {/* Search Input */}
-        <View style={[styles.searchBox, { backgroundColor: theme.background, borderColor: theme.border }]}>
-          <Search size={18} color={theme.textSecondary} />
-          <TextInput
-            style={[styles.searchInput, { color: theme.text }]}
-            placeholder="Search wine, vintage, SKU, DEL/REQ ID, or bottle..."
-            placeholderTextColor={theme.textSecondary}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery("")}>
-              <X size={16} color={theme.textSecondary} />
+      <View style={[styles.header, { backgroundColor: theme.card, borderBottomColor: theme.border, paddingHorizontal: horizontalPadding }]}>
+        <View style={styles.headerInner}>
+          <View style={styles.headerTop}>
+            <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+              <ChevronLeft size={28} color={theme.primary} strokeWidth={2.5} />
             </TouchableOpacity>
-          )}
-        </View>
+            <View style={{ flex: 1, marginLeft: 4 }}>
+              <Text style={[styles.headerTitle, { color: theme.text }]}>
+                Delivery Intake Logs
+              </Text>
+              <Text style={[styles.headerSubtitle, { color: theme.textSecondary }]}>
+                Store arrivals, confirmed wines & timestamps
+              </Text>
+            </View>
+            <TouchableOpacity style={styles.refreshIconBtn} onPress={onRefresh}>
+              <RefreshCw size={18} color={theme.textSecondary} />
+            </TouchableOpacity>
+          </View>
 
-        {/* Period Filter Tabs */}
-        <View style={styles.periodFilterRow}>
-          {(
-            [
-              { key: "all", label: "All Time" },
-              { key: "today", label: "Today" },
-              { key: "week", label: "This Week" },
-              { key: "month", label: "This Month" },
-            ] as const
-          ).map((tab) => {
-            const active = periodFilter === tab.key;
-            return (
-              <TouchableOpacity
-                key={tab.key}
-                style={[
-                  styles.periodTab,
-                  active && { backgroundColor: theme.primary, borderColor: theme.primary },
-                ]}
-                onPress={() => setPeriodFilter(tab.key)}
-              >
-                <Text
-                  style={[
-                    styles.periodTabText,
-                    { color: active ? "#ffffff" : theme.textSecondary },
-                  ]}
-                >
-                  {tab.label}
-                </Text>
+          {/* Search Input */}
+          <View style={[styles.searchBox, { backgroundColor: theme.background, borderColor: theme.border }]}>
+            <Search size={18} color={theme.textSecondary} />
+            <TextInput
+              style={[styles.searchInput, { color: theme.text }]}
+              placeholder="Search wine, vintage, SKU, DEL/REQ ID, or bottle..."
+              placeholderTextColor={theme.textSecondary}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery("")}>
+                <X size={16} color={theme.textSecondary} />
               </TouchableOpacity>
-            );
-          })}
+            )}
+          </View>
+
+          {/* Period Filter Tabs */}
+          <View style={styles.periodFilterRow}>
+            {(
+              [
+                { key: "all", label: "All Time" },
+                { key: "today", label: "Today" },
+                { key: "week", label: "This Week" },
+                { key: "month", label: "This Month" },
+              ] as const
+            ).map((tab) => {
+              const active = periodFilter === tab.key;
+              return (
+                <TouchableOpacity
+                  key={tab.key}
+                  style={[
+                    styles.periodTab,
+                    active && { backgroundColor: theme.primary, borderColor: theme.primary },
+                  ]}
+                  onPress={() => setPeriodFilter(tab.key)}
+                >
+                  <Text
+                    style={[
+                      styles.periodTabText,
+                      { color: active ? "#ffffff" : theme.textSecondary },
+                    ]}
+                  >
+                    {tab.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
         </View>
       </View>
 
-      {/* Main List */}
-      <FlatList
-        data={filteredRecords}
-        keyExtractor={(item) => item.id}
-        renderItem={renderIntakeCard}
-        contentContainerStyle={styles.listContent}
+      {/* MAIN SQUEEZED CONTENT WRAPPER */}
+      <View style={styles.mainContent}>
+        {/* Main List */}
+        <FlatList
+          data={filteredRecords}
+          keyExtractor={(item) => item.id}
+          renderItem={renderIntakeCard}
+          contentContainerStyle={[
+            styles.listContent,
+            { paddingHorizontal: horizontalPadding },
+          ]}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -925,6 +948,7 @@ export default function DeliveryLogsScreen() {
           )
         }
       />
+      </View>
     </SafeAreaView>
   );
 }
@@ -934,10 +958,21 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 28,
     paddingTop: 12,
     paddingBottom: 14,
     borderBottomWidth: 1,
+  },
+  headerInner: {
+    width: "100%",
+    maxWidth: 760,
+    alignSelf: "center",
+  },
+  mainContent: {
+    flex: 1,
+    width: "100%",
+    maxWidth: 760,
+    alignSelf: "center",
   },
   headerTop: {
     flexDirection: "row",
@@ -946,9 +981,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   backButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
+    marginRight: 8,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1000,7 +1033,8 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   listContent: {
-    padding: 16,
+    paddingHorizontal: 28,
+    paddingTop: 16,
     paddingBottom: 40,
   },
   kpiRow: {

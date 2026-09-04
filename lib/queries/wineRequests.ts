@@ -3,6 +3,18 @@ import { WineRequest } from "@/types";
 import { logActivity } from "@/lib/utils/activityLogger";
 import { invalidatePrefix } from "./cache";
 
+const wineRequestDetailCache = new Map<string, WineRequest>();
+
+export function setWineRequestInCache(req: WineRequest) {
+  if (req && req.id) {
+    wineRequestDetailCache.set(req.id, req);
+  }
+}
+
+export function getWineRequestFromCache(id: string): WineRequest | undefined {
+  return wineRequestDetailCache.get(id);
+}
+
 export async function getWineRequests(
   filters: { storeId?: string; status?: string | string[] },
   pagination?: { limit: number }
@@ -14,7 +26,11 @@ export async function getWineRequests(
   }
   if (pagination?.limit) params.set("limit", String(pagination.limit));
   const data = await apiFetch(`/wine-requests?${params}`);
-  return (data.wineRequests || data) as WineRequest[];
+  const list = (data.wineRequests || data) as WineRequest[];
+  if (Array.isArray(list)) {
+    list.forEach(setWineRequestInCache);
+  }
+  return list;
 }
 
 export async function updateWineRequest(id: string, data: any, logData?: any) {
