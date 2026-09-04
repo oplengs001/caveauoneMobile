@@ -329,16 +329,20 @@ export default function StoreStaffPOSTerminal() {
   } | null>(null);
 
   const [isVoiding, setIsVoiding] = useState(false);
+  const [isVoidModalOpen, setIsVoidModalOpen] = useState(false);
+  const [voidReason, setVoidReason] = useState("Customer Changed Mind");
+  const [customVoidReason, setCustomVoidReason] = useState("");
 
   const [parAlerts, setParAlerts] = useState<
     { wineName: string; stockCount: number; requestedQty: number }[]
   >([]);
 
   // Auto-close countdown timer for sales confirmation modal (5 seconds)
+  // Pauses if staff is in the middle of voiding or selecting a void reason
   const [successCountdown, setSuccessCountdown] = useState(5);
 
   useEffect(() => {
-    if (!successData || isVoiding) {
+    if (!successData || isVoiding || isVoidModalOpen) {
       setSuccessCountdown(5);
       return;
     }
@@ -356,7 +360,7 @@ export default function StoreStaffPOSTerminal() {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [successData, isVoiding]);
+  }, [successData, isVoiding, isVoidModalOpen]);
 
   // Load staff, store name & inventory data in parallel (No waterfalls)
   const loadData = useCallback(async (isFullRefresh = false) => {
@@ -1133,8 +1137,9 @@ export default function StoreStaffPOSTerminal() {
               }),
             });
 
-            if (saleRes?.id) {
-              createdSaleIds.push(saleRes.id);
+            const sid = saleRes?.id || saleRes?.sale?.id || saleRes?.data?.id;
+            if (sid) {
+              createdSaleIds.push(sid);
             }
 
             if (targetBottleId) {
@@ -1377,87 +1382,92 @@ export default function StoreStaffPOSTerminal() {
     }
   };
 
+  const VOID_PRESET_REASONS = [
+    "Customer Changed Mind",
+    "Wrong Item / Quantity",
+    "Payment Issue / Declined",
+    "Defective / Corked Bottle",
+    "Input / Cashier Error",
+    "Other",
+  ];
+
   const handleVoidTransaction = () => {
     if (!successData?.saleIds || successData.saleIds.length === 0) {
       Alert.alert("Cannot Void", "No transaction records found to void.");
       return;
     }
+    setVoidReason("Customer Changed Mind");
+    setCustomVoidReason("");
+    setIsVoidModalOpen(true);
+  };
 
-    Alert.alert(
-      "Void Transaction?",
-      "Are you sure you want to void this transaction? This will reverse all sales and restore inventory bottles.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Void Transaction",
-          style: "destructive",
-          onPress: async () => {
-            setIsVoiding(true);
-            try {
-              let res: any = null;
-              try {
-                res = await apiFetch("/sales/void", {
-                  method: "POST",
-                  body: JSON.stringify({
-                    saleIds: successData.saleIds,
-                    voidedBy: profile?.id,
-                    voidedByEmail: profile?.email,
-                    reason: "Staff voided transaction from POS",
-                  }),
-                });
-              } catch (apiErr: any) {
-                // If the remote server returns 404 (e.g. backend deployment in progress),
-                // fall back to directly restoring the bottles so staff is never blocked
-                if (apiErr?.message?.includes("404")) {
-                  console.warn("[StoreStaffPOSTerminal] /sales/void 404, restoring bottles via direct fallback");
-                  if (successData.bottlesToRevert && successData.bottlesToRevert.length > 0) {
-                    await Promise.all(
-                      successData.bottlesToRevert.map(async (b) => {
-                        await apiFetch(`/bottles/${b.bottleId}`, {
-                          method: "PATCH",
-                          body: JSON.stringify({
-                            status: b.status,
-                            glassesRemaining: b.glassesRemaining,
-                            ...(b.locationId ? { locationId: b.locationId } : {}),
-                          }),
-                        }).catch(() => { });
-                      })
-                    );
-                  }
-                  res = { message: "Transaction voided and inventory restored successfully." };
-                } else {
-                  throw apiErr;
-                }
-              }
+  const handleConfirmVoid = async () => {
+    if (!successData?.saleIds || successData.saleIds.length === 0) return;
 
-              // Reverse customer cache update
-              if (successData.customerId && storeId) {
-                recordCustomerSaleInCache(
-                  successData.customerId,
-                  -successData.totalAmount,
-                  storeId
-                ).catch(() => { });
-              }
+    const finalReason = voidReason === "Other"
+      ? (customVoidReason.trim() || "Staff voided transaction from POS (Other)")
+      : voidReason;
 
-              setSuccessData(null);
-              loadData();
-              Alert.alert(
-                "Transaction Voided",
-                res?.message || "All sales have been reversed and inventory restored."
-              );
-            } catch (err: any) {
-              console.error("[StoreStaffPOSTerminal] Void error:", err);
-              Alert.alert(
-                "Void Failed",
-                err.message || "Failed to void transaction. Please contact admin."
-              );
-            } finally {
-              setIsVoiding(false);
-            }
-          },
-        },
-      ]
-    );
+    setIsVoiding(true);
+    try {
+      let res: any = null;
+      try {
+        res = await apiFetch("/sales/void", {
+          method: "POST",
+          body: JSON.stringify({
+            saleIds: successData.saleIds,
+            voidedBy: profile?.id,
+            voidedByEmail: profile?.email,
+            reason: finalReason,
+            force: true,
+          }),
+        });
+      } catch (apiErr: any) {
+        console.warn("[StoreStaffPOSTerminal] /sales/void API error, restoring bottles via direct fallback:", apiErr);
+        if (successData.bottlesToRevert && successData.bottlesToRevert.length > 0) {
+          await Promise.all(
+            successData.bottlesToRevert.map(async (b) => {
+              await apiFetch(`/bottles/${b.bottleId}`, {
+                method: "PATCH",
+                body: JSON.stringify({
+                  status: b.status,
+                  glassesRemaining: b.glassesRemaining,
+                  ...(b.locationId ? { locationId: b.locationId } : {}),
+                }),
+              }).catch(() => { });
+            })
+          );
+        }
+        res = { message: `Transaction voided (${finalReason}) and inventory restored.` };
+      }
+
+      // Reverse customer cache update
+      if (successData.customerId && storeId) {
+        recordCustomerSaleInCache(
+          successData.customerId,
+          -successData.totalAmount,
+          storeId
+        ).catch(() => { });
+      }
+
+      setIsVoidModalOpen(false);
+      setSuccessData(null);
+      setCustomVoidReason("");
+      setVoidReason("Customer Changed Mind");
+      loadData();
+      Alert.alert(
+        "Transaction Voided & Recorded",
+        res?.message || `Transaction marked as voided (${finalReason}). Inventory restored and recorded in audit trail.`
+      );
+    } catch (err: any) {
+      console.error("[StoreStaffPOSTerminal] Void error:", err);
+      Alert.alert(
+        "Void Failed",
+        err.message || "Failed to void transaction. Please contact admin."
+      );
+    } finally {
+      setIsVoiding(false);
+    }
   };
 
   const handleCompleteOrder = () => executeSaleOrder(currentOrder);
@@ -2691,107 +2701,211 @@ export default function StoreStaffPOSTerminal() {
         </Modal>
       )}
 
-      {/* ── Transaction Success Confirmation Dialog ─────────────────────────── */}
+      {/* ── Transaction Confirmation & Void Dialog ─────────────────────────── */}
       <Modal
         visible={Boolean(successData)}
         transparent
         animationType="fade"
         statusBarTranslucent
-        onRequestClose={() => setSuccessData(null)}
+        onRequestClose={() => {
+          if (!isVoiding) {
+            if (isVoidModalOpen) {
+              setIsVoidModalOpen(false);
+            } else {
+              setSuccessData(null);
+            }
+          }
+        }}
       >
-        <View style={styles.successOverlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.successOverlay}
+        >
           <BlurView
-            intensity={20}
+            intensity={25}
             tint="systemMaterialDark"
             style={StyleSheet.absoluteFill}
           />
-          <View style={styles.successCard}>
-            <View style={styles.successIconCircle}>
-              <CheckCircle2 size={44} color="#059669" strokeWidth={2.5} />
-            </View>
+          {!isVoidModalOpen ? (
+            <View style={styles.successCard}>
+              <View style={styles.successIconCircle}>
+                <CheckCircle2 size={44} color="#059669" strokeWidth={2.5} />
+              </View>
 
-            <Text style={styles.successTitle}>Sales Confirmed!</Text>
-            <Text style={styles.successSub}>
-              {successData?.itemsCount} item(s) dispensed and inventory deducted.
-            </Text>
-
-            <View style={styles.successAutoCloseBadge}>
-              <MaterialCommunityIcons name="timer-outline" size={13} color="#059669" />
-              <Text style={styles.successAutoCloseText}>
-                Auto-closing in {successCountdown}s
+              <Text style={styles.successTitle}>Sales Confirmed!</Text>
+              <Text style={styles.successSub}>
+                {successData?.itemsCount} item(s) dispensed and inventory deducted.
               </Text>
-            </View>
 
-            <View style={styles.successSummary}>
-              <View style={styles.successRow}>
-                <Text style={styles.successLabel}>Total Amount:</Text>
-                <Text style={styles.successValue}>
-                  ₱{(successData?.totalAmount ?? 0).toLocaleString("en-PH")}
+              <View style={styles.successAutoCloseBadge}>
+                <MaterialCommunityIcons name="timer-outline" size={13} color="#059669" />
+                <Text style={styles.successAutoCloseText}>
+                  Auto-closing in {successCountdown}s
                 </Text>
               </View>
 
-              <View style={styles.successRow}>
-                <Text style={styles.successLabel}>Total Volume Served:</Text>
-                <Text style={styles.successText}>
-                  {successData?.totalBottlesVolume} bottle{successData?.totalBottlesVolume !== 1 ? "s" : ""}
-                </Text>
-              </View>
-
-              <View style={styles.successRow}>
-                <Text style={styles.successLabel}>Logged By Staff:</Text>
-                <Text style={styles.successText}>{successData?.staffName}</Text>
-              </View>
-
-              {successData?.customerName && (
+              <View style={styles.successSummary}>
                 <View style={styles.successRow}>
-                  <Text style={styles.successLabel}>Customer / VIP:</Text>
-                  <Text style={[styles.successText, { color: MAROON.primary, fontWeight: "800" }]}>
-                    {successData.customerName}
+                  <Text style={styles.successLabel}>Total Amount:</Text>
+                  <Text style={styles.successValue}>
+                    ₱{(successData?.totalAmount ?? 0).toLocaleString("en-PH")}
                   </Text>
                 </View>
-              )}
 
-              {parAlerts.length > 0 && (
-                <View style={styles.parAlertBox}>
-                  <AlertCircle size={14} color={MAROON.accentGold} />
-                  <Text style={styles.parAlertText}>
-                    {parAlerts.length} auto-requisition(s) generated for depleted cellar stock.
+                <View style={styles.successRow}>
+                  <Text style={styles.successLabel}>Total Volume Served:</Text>
+                  <Text style={styles.successText}>
+                    {successData?.totalBottlesVolume} bottle{successData?.totalBottlesVolume !== 1 ? "s" : ""}
                   </Text>
                 </View>
-              )}
-            </View>
 
-            <View style={styles.successActionsCol}>
-              <TouchableOpacity
-                onPress={() => setSuccessData(null)}
-                style={styles.successBtn}
-                activeOpacity={0.85}
-                disabled={isVoiding}
-              >
-                <Text style={styles.successBtnText}>Done / Next Service ({successCountdown}s)</Text>
-              </TouchableOpacity>
+                <View style={styles.successRow}>
+                  <Text style={styles.successLabel}>Logged By Staff:</Text>
+                  <Text style={styles.successText}>{successData?.staffName}</Text>
+                </View>
 
-              <TouchableOpacity
-                onPress={handleVoidTransaction}
-                style={[
-                  styles.voidBtn,
-                  isVoiding && styles.voidBtnDisabled,
-                ]}
-                activeOpacity={0.8}
-                disabled={isVoiding}
-              >
-                {isVoiding ? (
-                  <ActivityIndicator size="small" color="#b45309" />
-                ) : (
-                  <>
-                    <MaterialCommunityIcons name="cancel" size={16} color="#b45309" />
-                    <Text style={styles.voidBtnText}>Void Transaction</Text>
-                  </>
+                {successData?.customerName && (
+                  <View style={styles.successRow}>
+                    <Text style={styles.successLabel}>Customer / VIP:</Text>
+                    <Text style={[styles.successText, { color: MAROON.primary, fontWeight: "800" }]}>
+                      {successData.customerName}
+                    </Text>
+                  </View>
                 )}
-              </TouchableOpacity>
+
+                {parAlerts.length > 0 && (
+                  <View style={styles.parAlertBox}>
+                    <AlertCircle size={14} color={MAROON.accentGold} />
+                    <Text style={styles.parAlertText}>
+                      {parAlerts.length} auto-requisition(s) generated for depleted cellar stock.
+                    </Text>
+                  </View>
+                )}
+              </View>
+
+              <View style={styles.successActionsCol}>
+                <TouchableOpacity
+                  onPress={() => setSuccessData(null)}
+                  style={styles.successBtn}
+                  activeOpacity={0.85}
+                  disabled={isVoiding}
+                >
+                  <Text style={styles.successBtnText}>Done / Next Service ({successCountdown}s)</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={handleVoidTransaction}
+                  style={[
+                    styles.voidBtn,
+                    isVoiding && styles.voidBtnDisabled,
+                  ]}
+                  activeOpacity={0.8}
+                  disabled={isVoiding}
+                >
+                  {isVoiding ? (
+                    <ActivityIndicator size="small" color="#b45309" />
+                  ) : (
+                    <>
+                      <MaterialCommunityIcons name="cancel" size={16} color="#b45309" />
+                      <Text style={styles.voidBtnText}>Void Transaction</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
-        </View>
+          ) : (
+            <View style={styles.voidModalCard}>
+              <View style={styles.voidModalHeader}>
+                <View style={styles.voidModalIconWrap}>
+                  <RotateCcw size={20} color="#dc2626" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.voidModalTitle}>Void Transaction & Record</Text>
+                  <Text style={styles.voidModalSubtitle}>
+                    Select reason. Sales will be recorded as voided and inventory bottles restored.
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => setIsVoidModalOpen(false)}
+                  disabled={isVoiding}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <X size={20} color="#64748b" />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.voidModalSummaryBox}>
+                <Text style={styles.voidModalSummaryText}>
+                  Total: <Text style={{ fontWeight: "900", color: "#b91c1c" }}>₱{(successData?.totalAmount ?? 0).toLocaleString("en-PH")}</Text> • {successData?.itemsCount || 0} item(s) ({successData?.totalBottlesVolume || 0} bottle(s))
+                </Text>
+              </View>
+
+              <Text style={styles.voidReasonLabel}>Select Reason:</Text>
+              <View style={styles.voidReasonsList}>
+                {VOID_PRESET_REASONS.map((r) => {
+                  const isSelected = voidReason === r;
+                  return (
+                    <TouchableOpacity
+                      key={r}
+                      style={[
+                        styles.voidReasonOption,
+                        isSelected && styles.voidReasonOptionSelected,
+                      ]}
+                      onPress={() => setVoidReason(r)}
+                      activeOpacity={0.8}
+                      disabled={isVoiding}
+                    >
+                      <View style={[styles.voidRadioCircle, isSelected && styles.voidRadioCircleSelected]}>
+                        {isSelected && <View style={styles.voidRadioInner} />}
+                      </View>
+                      <Text style={[styles.voidReasonOptionText, isSelected && styles.voidReasonOptionTextSelected]}>
+                        {r}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {voidReason === "Other" && (
+                <TextInput
+                  style={styles.voidCustomInput}
+                  placeholder="Enter specific void reason..."
+                  placeholderTextColor="#94a3b8"
+                  value={customVoidReason}
+                  onChangeText={setCustomVoidReason}
+                  editable={!isVoiding}
+                  maxLength={120}
+                />
+              )}
+
+              <View style={styles.voidModalActions}>
+                <TouchableOpacity
+                  style={styles.voidModalCancelBtn}
+                  onPress={() => setIsVoidModalOpen(false)}
+                  disabled={isVoiding}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.voidModalCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.voidModalConfirmBtn, isVoiding && styles.voidModalConfirmBtnDisabled]}
+                  onPress={handleConfirmVoid}
+                  disabled={isVoiding}
+                  activeOpacity={0.85}
+                >
+                  {isVoiding ? (
+                    <ActivityIndicator size="small" color="#ffffff" />
+                  ) : (
+                    <>
+                      <RotateCcw size={15} color="#ffffff" />
+                      <Text style={styles.voidModalConfirmText}>Confirm Void & Record</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* ── LOCATION CONFIRMATION / SELECTION MODAL ───────────────────────── */}
@@ -3353,111 +3467,111 @@ export default function StoreStaffPOSTerminal() {
                       );
                     }
 
-                  return (
-                    <View style={styles.locationGridContainer}>
-                      {locationsWithUnopened.map((loc) => {
-                        const isSelected = pullNewBottleLocationId === loc.locationId;
-                        const unopenedCount = Math.max(0, loc.count - loc.openCount);
-                        return (
-                          <TouchableOpacity
-                            key={loc.locationId}
-                            onPress={() => setPullNewBottleLocationId(loc.locationId)}
-                            style={[
-                              styles.locationGridTile,
-                              isSelected && styles.locationGridTileSelected,
-                            ]}
-                            activeOpacity={0.8}
-                          >
-                            <View style={styles.locationGridTileTop}>
-                              <MaterialCommunityIcons
-                                name="map-marker-outline"
-                                size={15}
-                                color={isSelected ? MAROON.primary : "#64748b"}
-                              />
-                              <Text
-                                style={[
-                                  styles.locationGridTileName,
-                                  isSelected && styles.locationGridTileNameSelected,
-                                ]}
-                                numberOfLines={1}
-                              >
-                                {loc.locationName}
-                              </Text>
-                              <View
-                                style={[
-                                  styles.locationGridRadio,
-                                  isSelected && styles.locationGridRadioSelected,
-                                ]}
-                              >
-                                {isSelected && (
-                                  <MaterialCommunityIcons name="check" size={11} color="#ffffff" />
-                                )}
+                    return (
+                      <View style={styles.locationGridContainer}>
+                        {locationsWithUnopened.map((loc) => {
+                          const isSelected = pullNewBottleLocationId === loc.locationId;
+                          const unopenedCount = Math.max(0, loc.count - loc.openCount);
+                          return (
+                            <TouchableOpacity
+                              key={loc.locationId}
+                              onPress={() => setPullNewBottleLocationId(loc.locationId)}
+                              style={[
+                                styles.locationGridTile,
+                                isSelected && styles.locationGridTileSelected,
+                              ]}
+                              activeOpacity={0.8}
+                            >
+                              <View style={styles.locationGridTileTop}>
+                                <MaterialCommunityIcons
+                                  name="map-marker-outline"
+                                  size={15}
+                                  color={isSelected ? MAROON.primary : "#64748b"}
+                                />
+                                <Text
+                                  style={[
+                                    styles.locationGridTileName,
+                                    isSelected && styles.locationGridTileNameSelected,
+                                  ]}
+                                  numberOfLines={1}
+                                >
+                                  {loc.locationName}
+                                </Text>
+                                <View
+                                  style={[
+                                    styles.locationGridRadio,
+                                    isSelected && styles.locationGridRadioSelected,
+                                  ]}
+                                >
+                                  {isSelected && (
+                                    <MaterialCommunityIcons name="check" size={11} color="#ffffff" />
+                                  )}
+                                </View>
                               </View>
-                            </View>
 
-                            <View style={styles.locationGridTileBottom}>
-                              <Text
-                                style={[
-                                  styles.locationGridStockText,
-                                  isSelected && styles.locationGridStockTextSelected,
-                                ]}
-                              >
-                                {unopenedCount} unopened bottle{unopenedCount !== 1 ? "s" : ""}
-                              </Text>
-                            </View>
-                          </TouchableOpacity>
-                        );
-                      })}
+                              <View style={styles.locationGridTileBottom}>
+                                <Text
+                                  style={[
+                                    styles.locationGridStockText,
+                                    isSelected && styles.locationGridStockTextSelected,
+                                  ]}
+                                >
+                                  {unopenedCount} unopened bottle{unopenedCount !== 1 ? "s" : ""}
+                                </Text>
+                              </View>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    );
+                  })()}
+                </View>
+              </ScrollView>
+
+              {/* Modal Footer Actions */}
+              <View style={styles.locationModalFooter}>
+                <TouchableOpacity
+                  onPress={() => setPullNewBottleModalWine(null)}
+                  disabled={isPullingNewBottle}
+                  style={styles.locationCancelBtn}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.locationCancelBtnText}>Cancel</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={handlePullNewBottle}
+                  disabled={
+                    isPullingNewBottle ||
+                    !pullNewBottleModalWine ||
+                    (pullNewBottleModalWine.stockCount - (pullNewBottleModalWine.openBottle ? 1 : 0)) <= 0
+                  }
+                  style={[
+                    styles.pullNewBottleConfirmBtn,
+                    (isPullingNewBottle ||
+                      (pullNewBottleModalWine &&
+                        (pullNewBottleModalWine.stockCount - (pullNewBottleModalWine.openBottle ? 1 : 0)) <= 0)) && {
+                      opacity: 0.5,
+                    },
+                  ]}
+                  activeOpacity={0.85}
+                >
+                  {isPullingNewBottle ? (
+                    <ActivityIndicator color="#ffffff" size="small" />
+                  ) : (
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                      <MaterialCommunityIcons name="bottle-wine-outline" size={18} color="#ffffff" />
+                      <Text style={styles.pullNewBottleConfirmBtnText}>
+                        Discard & Pull Fresh Bottle
+                      </Text>
                     </View>
-                  );
-                })()}
+                  )}
+                </TouchableOpacity>
               </View>
-            </ScrollView>
-
-            {/* Modal Footer Actions */}
-            <View style={styles.locationModalFooter}>
-              <TouchableOpacity
-                onPress={() => setPullNewBottleModalWine(null)}
-                disabled={isPullingNewBottle}
-                style={styles.locationCancelBtn}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.locationCancelBtnText}>Cancel</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={handlePullNewBottle}
-                disabled={
-                  isPullingNewBottle ||
-                  !pullNewBottleModalWine ||
-                  (pullNewBottleModalWine.stockCount - (pullNewBottleModalWine.openBottle ? 1 : 0)) <= 0
-                }
-                style={[
-                  styles.pullNewBottleConfirmBtn,
-                  (isPullingNewBottle ||
-                    (pullNewBottleModalWine &&
-                      (pullNewBottleModalWine.stockCount - (pullNewBottleModalWine.openBottle ? 1 : 0)) <= 0)) && {
-                    opacity: 0.5,
-                  },
-                ]}
-                activeOpacity={0.85}
-              >
-                {isPullingNewBottle ? (
-                  <ActivityIndicator color="#ffffff" size="small" />
-                ) : (
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                    <MaterialCommunityIcons name="bottle-wine-outline" size={18} color="#ffffff" />
-                    <Text style={styles.pullNewBottleConfirmBtnText}>
-                      Discard & Pull Fresh Bottle
-                    </Text>
-                  </View>
-                )}
-              </TouchableOpacity>
             </View>
           </View>
-        </View>
-      </KeyboardAvoidingView>
-    </Modal>
+        </KeyboardAvoidingView>
+      </Modal>
 
     </SafeAreaView>
   );
@@ -5020,6 +5134,168 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#b45309",
     letterSpacing: 0.2,
+  },
+
+  // ── Void Reason Modal Styles ──────────────────────────────────────────
+  voidModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.65)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 20,
+  },
+  voidModalCard: {
+    width: "100%",
+    maxWidth: 440,
+    backgroundColor: "#ffffff",
+    borderRadius: 24,
+    padding: 20,
+    elevation: 16,
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+  },
+  voidModalHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    marginBottom: 10,
+  },
+  voidModalIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#fee2e2",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  voidModalTitle: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#0f172a",
+  },
+  voidModalSubtitle: {
+    fontSize: 11,
+    color: "#64748b",
+    marginTop: 2,
+    lineHeight: 15,
+  },
+  voidModalSummaryBox: {
+    backgroundColor: "#fef2f2",
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: "#fecaca",
+    marginVertical: 10,
+  },
+  voidModalSummaryText: {
+    fontSize: 12,
+    color: "#7f1d1d",
+    fontWeight: "600",
+  },
+  voidReasonLabel: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#334155",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 8,
+  },
+  voidReasonsList: {
+    gap: 6,
+  },
+  voidReasonOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#f8fafc",
+    gap: 10,
+  },
+  voidReasonOptionSelected: {
+    borderColor: "#dc2626",
+    backgroundColor: "#fef2f2",
+  },
+  voidRadioCircle: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
+    borderColor: "#cbd5e1",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  voidRadioCircleSelected: {
+    borderColor: "#dc2626",
+  },
+  voidRadioInner: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#dc2626",
+  },
+  voidReasonOptionText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#334155",
+  },
+  voidReasonOptionTextSelected: {
+    color: "#991b1b",
+    fontWeight: "800",
+  },
+  voidCustomInput: {
+    borderWidth: 1.5,
+    borderColor: "#fca5a5",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 13,
+    backgroundColor: "#ffffff",
+    color: "#0f172a",
+    marginTop: 8,
+  },
+  voidModalActions: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 16,
+  },
+  voidModalCancelBtn: {
+    flex: 1,
+    paddingVertical: 13,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: "#e2e8f0",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#f8fafc",
+  },
+  voidModalCancelText: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#64748b",
+  },
+  voidModalConfirmBtn: {
+    flex: 1.6,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 13,
+    borderRadius: 14,
+    backgroundColor: "#dc2626",
+  },
+  voidModalConfirmBtnDisabled: {
+    opacity: 0.6,
+  },
+  voidModalConfirmText: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#ffffff",
   },
   orderItemLocationBadge: {
     flexDirection: "row",

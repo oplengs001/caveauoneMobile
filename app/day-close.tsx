@@ -578,7 +578,7 @@ export default function DayCloseScreen() {
     try {
       const fromISO = new Date(`${selectedDateStr}T00:00:00.000Z`).toISOString();
       const toISO = new Date(`${selectedDateStr}T23:59:59.999Z`).toISOString();
-      const res = await apiFetch(`/sales?storeId=${profile.locationId}&from=${fromISO}&to=${toISO}&limit=200`);
+      const res = await apiFetch(`/sales?storeId=${profile.locationId}&from=${fromISO}&to=${toISO}&limit=200&includeVoided=true`);
       const list = Array.isArray(res) ? res : Array.isArray(res.sales) ? res.sales : [];
       setSalesDrillDown(list);
     } catch (err) {
@@ -1269,20 +1269,33 @@ export default function DayCloseScreen() {
                 keyExtractor={(s) => s.id}
                 contentContainerStyle={{ gap: 10, paddingBottom: 20 }}
                 renderItem={({ item }) => (
-                  <View style={styles.saleDrillRow}>
+                  <View style={[styles.saleDrillRow, item.isVoided && styles.saleDrillRowVoided]}>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.saleDrillWineName}>{item.wineName || item.masterWine?.name || "Wine Sale"}</Text>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                        <Text style={[styles.saleDrillWineName, item.isVoided && styles.saleDrillWineNameVoided]}>
+                          {item.wineName || item.masterWine?.name || "Wine Sale"}
+                        </Text>
+                        {item.isVoided && (
+                          <View style={styles.voidTag}>
+                            <Text style={styles.voidTagText}>VOIDED</Text>
+                          </View>
+                        )}
+                      </View>
                       <Text style={styles.saleDrillMeta}>
                         {(item.saleType || "bottle").toUpperCase()} • Sold by: {item.soldByEmail || item.soldBy || "Staff"}
                       </Text>
-                      {item.vatAmount ? (
+                      {item.isVoided ? (
+                        <Text style={styles.saleDrillVoidReason}>
+                          Voided: {item.voidReason || "Voided from POS"}{item.voidedByEmail ? ` • By: ${item.voidedByEmail}` : ""}
+                        </Text>
+                      ) : item.vatAmount ? (
                         <Text style={styles.saleDrillVat}>
                           Net: ₱{Number(item.price || 0).toFixed(2)} | VAT: ₱{Number(item.vatAmount || 0).toFixed(2)}
                         </Text>
                       ) : null}
                     </View>
                     <View style={{ alignItems: "flex-end" }}>
-                      <Text style={styles.saleDrillPrice}>
+                      <Text style={[styles.saleDrillPrice, item.isVoided && styles.saleDrillPriceVoided]}>
                         ₱{Number(item.totalAmount || item.price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </Text>
                       <Text style={styles.saleDrillTime}>
@@ -1799,5 +1812,36 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: "#94a3b8",
     marginTop: 2,
+  },
+  saleDrillRowVoided: {
+    backgroundColor: "#fef2f2",
+    borderColor: "#fecaca",
+  },
+  saleDrillWineNameVoided: {
+    color: "#991b1b",
+  },
+  saleDrillPriceVoided: {
+    textDecorationLine: "line-through",
+    color: "#94a3b8",
+  },
+  saleDrillVoidReason: {
+    fontSize: 10,
+    color: "#dc2626",
+    fontWeight: "700",
+    marginTop: 2,
+  },
+  voidTag: {
+    backgroundColor: "#fee2e2",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: "#fca5a5",
+  },
+  voidTagText: {
+    color: "#991b1b",
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 0.5,
   },
 });

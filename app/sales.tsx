@@ -45,6 +45,11 @@ interface Sale {
     toDate: () => Date;
   };
   buyerName?: string;
+  isVoided?: boolean;
+  voidedAt?: Date;
+  voidedBy?: string;
+  voidedByEmail?: string;
+  voidReason?: string;
 }
 
 type PeriodType = "all" | "today" | "week" | "month" | "lastMonth" | "custom";
@@ -101,9 +106,13 @@ export default function SalesScreen() {
     totalGrossSales: 0,
     totalCost: 0,
     totalBottles: 0,
+    totalVoidedCount: 0,
+    totalVoidedAmount: 0,
     categoryCounts: { fun: 0, fine: 0, reserve: 0, standard: 0 },
     portionCounts: { bottle: 0, glass: 0, carafe: 0 },
   });
+
+  const [statusFilter, setStatusFilter] = useState<"all" | "completed" | "voided">("all");
 
   // Initialize the state with the passed parameter, or default to "all"
   const [period, setPeriod] = useState<PeriodType>(
@@ -147,6 +156,7 @@ export default function SalesScreen() {
 
       const params = new URLSearchParams();
       if (activeStoreId) params.set("storeId", activeStoreId);
+      params.set("includeVoided", "true");
       if (startDate) params.set("from", startDate.toISOString());
       if (endDate) params.set("to", endDate.toISOString());
       if (forceNoCache) params.set("_t", Date.now().toString());
@@ -164,6 +174,11 @@ export default function SalesScreen() {
           soldAt: {
             toDate: () => validDate,
           },
+          isVoided: Boolean(s.isVoided),
+          voidedAt: s.voidedAt ? new Date(s.voidedAt) : undefined,
+          voidedBy: s.voidedBy || undefined,
+          voidedByEmail: s.voidedByEmail || (s.soldByEmail && s.soldByEmail.includes("@") ? s.soldByEmail : undefined),
+          voidReason: s.voidReason || undefined,
         };
       });
 
@@ -176,15 +191,18 @@ export default function SalesScreen() {
         );
       }
 
-      const totalBase = salesData.reduce((sum, s: any) => sum + Number(s.price || 0), 0);
-      const totalGross = salesData.reduce((sum, s: any) => sum + Number(s.totalAmount || s.price || 0), 0);
+      const activeSales = salesData.filter((s) => !s.isVoided);
+      const voidedSales = salesData.filter((s) => s.isVoided);
+
+      const totalBase = activeSales.reduce((sum, s: any) => sum + Number(s.price || 0), 0);
+      const totalGross = activeSales.reduce((sum, s: any) => sum + Number(s.totalAmount || s.price || 0), 0);
 
       let totalCost = 0;
       let totalVolume = 0;
       const catCounts = { fun: 0, fine: 0, reserve: 0, standard: 0 };
       const portionCounts = { bottle: 0, glass: 0, carafe: 0 };
 
-      salesData.forEach((s: any) => {
+      activeSales.forEach((s: any) => {
         const rawCost = Number(s.masterWinePrice || s.masterWine?.price || 0);
         const st = (s.saleType || "bottle").toLowerCase();
         if (st === "glass") {
@@ -211,11 +229,15 @@ export default function SalesScreen() {
       });
       const roundedBottles = Math.round(totalVolume * 100) / 100;
 
+      const voidedAmount = voidedSales.reduce((sum, s: any) => sum + Number(s.totalAmount || s.price || 0), 0);
+
       setAggregates({
         totalBaseSales: totalBase,
         totalGrossSales: totalGross,
         totalCost: totalCost,
         totalBottles: roundedBottles,
+        totalVoidedCount: voidedSales.length,
+        totalVoidedAmount: voidedAmount,
         categoryCounts: catCounts,
         portionCounts: portionCounts,
       });
@@ -256,6 +278,12 @@ export default function SalesScreen() {
 
   const isStaffUser = profile?.role === "store_staff";
 
+  const displayedSales = React.useMemo(() => {
+    if (statusFilter === "completed") return sales.filter((s) => !s.isVoided);
+    if (statusFilter === "voided") return sales.filter((s) => s.isVoided);
+    return sales;
+  }, [sales, statusFilter]);
+
   const renderDashboardSummary = () => (
     <View style={styles.summaryContainer}>
       <Text style={[styles.sectionTitle, { color: theme.text }]}>
@@ -274,7 +302,7 @@ export default function SalesScreen() {
               {totalBottles}
             </Text>
             <Text style={[styles.metricSubText, { color: theme.textSecondary }]}>
-              {sales.length} transactions by {profile?.displayName || profile?.email?.split("@")[0] || "Logged-in Account"}
+              {sales.filter((s) => !s.isVoided).length} completed transaction(s) by {profile?.displayName || profile?.email?.split("@")[0] || "Logged-in Account"}
             </Text>
           </View>
         </>
@@ -384,13 +412,67 @@ export default function SalesScreen() {
         </>
       )}
 
+      {/* Voided Transactions Audit Alert Banner */}
+      {aggregates.totalVoidedCount > 0 && (
+        <View style={styles.voidAlertBanner}>
+          <View style={styles.voidAlertIconCircle}>
+            <RotateCcw size={16} color="#dc2626" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.voidAlertTitle}>
+              {aggregates.totalVoidedCount} Voided Transaction{aggregates.totalVoidedCount > 1 ? "s" : ""} Recorded
+            </Text>
+            <Text style={styles.voidAlertSub}>
+              ₱{aggregates.totalVoidedAmount.toLocaleString("en-PH", { minimumFractionDigits: 2 })} reversed to stock & logged in audit trail
+            </Text>
+          </View>
+        </View>
+      )}
+
+      {/* Transaction Status Filter Tabs */}
+      <View style={styles.statusTabContainer}>
+        {(
+          [
+            { id: "all", label: `All (${sales.length})` },
+            { id: "completed", label: `Completed (${sales.filter((s) => !s.isVoided).length})` },
+            { id: "voided", label: `Voided (${aggregates.totalVoidedCount})` },
+          ] as const
+        ).map((tab) => (
+          <TouchableOpacity
+            key={tab.id}
+            style={[
+              styles.statusTabBtn,
+              { borderColor: theme.border },
+              statusFilter === tab.id && {
+                backgroundColor: tab.id === "voided" ? "#fee2e2" : theme.primary + "18",
+                borderColor: tab.id === "voided" ? "#ef4444" : theme.primary,
+              },
+            ]}
+            onPress={() => setStatusFilter(tab.id)}
+          >
+            <Text
+              style={[
+                styles.statusTabText,
+                { color: theme.textSecondary },
+                statusFilter === tab.id && {
+                  color: tab.id === "voided" ? "#dc2626" : theme.primary,
+                  fontWeight: "bold",
+                },
+              ]}
+            >
+              {tab.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
       <Text
         style={[
           styles.sectionTitle,
-          { color: theme.text, marginTop: 24, marginBottom: 8 },
+          { color: theme.text, marginTop: 18, marginBottom: 8 },
         ]}
       >
-        Recent Transactions
+        Recent Transactions {statusFilter !== "all" ? `(${statusFilter.toUpperCase()})` : ""}
       </Text>
     </View>
   );
@@ -410,13 +492,33 @@ export default function SalesScreen() {
       <View
         style={[
           styles.saleCard,
-          { backgroundColor: theme.card, borderColor: theme.border },
+          {
+            backgroundColor: item.isVoided ? "#fef2f2" : theme.card,
+            borderColor: item.isVoided ? "#fecaca" : theme.border,
+          },
         ]}
       >
         <View style={styles.saleInfo}>
-          <Text style={[styles.wineName, { color: theme.text }]}>
-            {item.wineName} {item.vintage && `(${item.vintage})`}
-          </Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 2 }}>
+            <Text
+              style={[
+                styles.wineName,
+                {
+                  color: item.isVoided ? "#6b7280" : theme.text,
+                  textDecorationLine: item.isVoided ? "line-through" : "none",
+                },
+              ]}
+            >
+              {item.wineName} {item.vintage && `(${item.vintage})`}
+            </Text>
+            {item.isVoided && (
+              <View style={styles.voidBadge}>
+                <RotateCcw size={10} color="#dc2626" />
+                <Text style={styles.voidBadgeText}>VOIDED</Text>
+              </View>
+            )}
+          </View>
+
           <Text style={[styles.wineDetails, { color: theme.textSecondary }]}>
             {item.producer} {item.format && `• ${item.format}`}
           </Text>
@@ -425,7 +527,7 @@ export default function SalesScreen() {
             <Text style={[styles.bottleIdText, { color: theme.textSecondary }]}>
               ID: {item.readableId || item.bottleId}
             </Text>
-            {!isStaffUser && cost > 0 && (
+            {!isStaffUser && cost > 0 && !item.isVoided && (
               <View
                 style={[
                   styles.profitBadge,
@@ -450,26 +552,75 @@ export default function SalesScreen() {
               Buyer: {item.buyerName}
             </Text>
           )}
-          <Text style={[styles.saleDate, { color: theme.textSecondary }]}>
-            {formatDate(item.soldAt?.toDate())}
-          </Text>
+
+          {item.isVoided ? (
+            <View style={{ marginTop: 4 }}>
+              {item.voidReason && (
+                <Text style={{ fontSize: 11, fontWeight: "700", color: "#dc2626" }}>
+                  Reason: {item.voidReason}
+                </Text>
+              )}
+              <Text style={{ fontSize: 11, color: "#9ca3af", marginTop: 1 }}>
+                Voided on {formatDate(item.voidedAt || item.soldAt?.toDate())}
+                {item.voidedByEmail ? ` by ${item.voidedByEmail}` : ""}
+              </Text>
+            </View>
+          ) : (
+            <Text style={[styles.saleDate, { color: theme.textSecondary }]}>
+              {formatDate(item.soldAt?.toDate())}
+            </Text>
+          )}
         </View>
 
         {isStaffUser ? (
           <View style={styles.priceContainer}>
-            <View style={{ backgroundColor: theme.primary + "15", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 }}>
-              <Text style={{ fontSize: 12, fontWeight: "800", color: theme.primary }}>
+            <View
+              style={{
+                backgroundColor: item.isVoided ? "#fee2e2" : theme.primary + "15",
+                paddingHorizontal: 10,
+                paddingVertical: 4,
+                borderRadius: 8,
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 12,
+                  fontWeight: "800",
+                  color: item.isVoided ? "#dc2626" : theme.primary,
+                }}
+              >
                 {saleType === "glass" ? "🍷 Glass" : saleType === "carafe" ? "🫗 Carafe" : "🍾 Bottle"}
               </Text>
             </View>
+            {item.isVoided && (
+              <Text style={{ fontSize: 10, fontWeight: "700", color: "#dc2626", marginTop: 4 }}>
+                Voided
+              </Text>
+            )}
           </View>
         ) : (
           <View style={styles.priceContainer}>
-            <Text style={[styles.price, { color: theme.primary }]}>
+            <Text
+              style={[
+                styles.price,
+                {
+                  color: item.isVoided ? "#9ca3af" : theme.primary,
+                  textDecorationLine: item.isVoided ? "line-through" : "none",
+                },
+              ]}
+            >
               {formatCurrency(itemTotal)}
             </Text>
-            <Text style={[styles.vatText, { color: theme.textSecondary }]}>
-              inc. VAT
+            <Text
+              style={[
+                styles.vatText,
+                {
+                  color: item.isVoided ? "#dc2626" : theme.textSecondary,
+                  fontWeight: item.isVoided ? "700" : "400",
+                },
+              ]}
+            >
+              {item.isVoided ? "Reversed" : "inc. VAT"}
             </Text>
           </View>
         )}
@@ -534,7 +685,7 @@ export default function SalesScreen() {
         </View>
       ) : (
         <FlatList
-          data={sales}
+          data={displayedSales}
           ListHeaderComponent={sales.length > 0 ? renderDashboardSummary : null}
           renderItem={renderItem}
           keyExtractor={(item) => item.id}
@@ -551,7 +702,11 @@ export default function SalesScreen() {
                 style={{ marginBottom: 16, opacity: 0.5 }}
               />
               <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
-                No sales recorded for this period.
+                {statusFilter === "voided"
+                  ? "No voided transactions recorded for this period."
+                  : statusFilter === "completed"
+                  ? "No completed sales recorded for this period."
+                  : "No sales recorded for this period."}
               </Text>
             </View>
           }
@@ -828,4 +983,76 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   applyButtonText: { color: "#fff", fontSize: 15, fontWeight: "bold" },
+
+  // Void & Status Styles
+  voidAlertBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#fef2f2",
+    borderColor: "#fecaca",
+    borderWidth: 1,
+    padding: 12,
+    borderRadius: 14,
+    marginBottom: 14,
+  },
+  voidAlertIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#fee2e2",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  voidAlertTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#991b1b",
+  },
+  voidAlertSub: {
+    fontSize: 11,
+    color: "#b91c1c",
+    marginTop: 1,
+  },
+  statusTabContainer: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 14,
+  },
+  statusTabBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "transparent",
+  },
+  statusTabText: {
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  voidBadgeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  voidBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: "#fee2e2",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 0.5,
+    borderColor: "#fca5a5",
+  },
+  voidBadgeText: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: "#dc2626",
+    letterSpacing: 0.5,
+  },
 });
