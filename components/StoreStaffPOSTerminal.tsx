@@ -296,6 +296,15 @@ export default function StoreStaffPOSTerminal() {
   const [locationModalPortion, setLocationModalPortion] = useState<PortionType>("glass");
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
 
+  // Feature A: Counter Location ID for opened bottles
+  const [counterLocationId, setCounterLocationId] = useState<string | null>(null);
+
+  // Feature B: Discard Broken/Spilled Bottle & Pull Replacement Modal State
+  const [pullNewBottleModalWine, setPullNewBottleModalWine] = useState<FastWineItem | null>(null);
+  const [pullNewBottleReason, setPullNewBottleReason] = useState<"broken" | "spilled" | "spoiled" | "discarded">("broken");
+  const [pullNewBottleLocationId, setPullNewBottleLocationId] = useState<string | null>(null);
+  const [isPullingNewBottle, setIsPullingNewBottle] = useState(false);
+
   // Customer / VIP Guest Attachment (for Fine Wine sales)
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
@@ -349,65 +358,76 @@ export default function StoreStaffPOSTerminal() {
     return () => clearInterval(timer);
   }, [successData, isVoiding]);
 
-  // Load staff, store name & inventory data
-  const loadData = useCallback(async () => {
+  // Load staff, store name & inventory data in parallel (No waterfalls)
+  const loadData = useCallback(async (isFullRefresh = false) => {
     try {
-      if (storeId) {
-        try {
-          const storeData = await apiFetch(`/stores/${storeId}`);
-          if (storeData?.name) setStoreName(storeData.name);
-        } catch {
-          // ignore error
-        }
-      }
-
-      const staff = await fetchStoreStaff(storeId);
-      setStaffList(staff);
-      const activeUserInStaff: AppUser = staff.find((u) => u.id === profile?.id) || {
-        id: profile?.id || "unknown",
-        displayName: profile?.displayName || profile?.email?.split("@")[0] || "Staff Member",
-        email: profile?.email || "",
-        role: "store_staff",
-        createdAt: new Date(),
-      };
-      setSelectedStaff(activeUserInStaff);
-
-      // Load On-Duty Shift Roster from AsyncStorage
-      try {
-        const storedShift = await AsyncStorage.getItem(`@caveau:pos_shift_staff_${storeId || "default"}`);
-        if (storedShift) {
-          const parsed: string[] = JSON.parse(storedShift);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            const valid = parsed.filter((id) => staff.some((s) => s.id === id));
-            if (!valid.includes(activeUserInStaff.id)) {
-              valid.unshift(activeUserInStaff.id);
-            }
-            setShiftStaffIds(valid);
-          } else {
-            setShiftStaffIds([activeUserInStaff.id]);
-          }
-        } else {
-          // Default shift: active user + first 3 other store staff
-          const otherStaff = staff.filter((s) => s.id !== activeUserInStaff.id).slice(0, 3).map((s) => s.id);
-          const initialShift = [activeUserInStaff.id, ...otherStaff];
-          setShiftStaffIds(initialShift);
-          AsyncStorage.setItem(
-            `@caveau:pos_shift_staff_${storeId || "default"}`,
-            JSON.stringify(initialShift)
-          ).catch(() => { });
-        }
-      } catch {
-        setShiftStaffIds([activeUserInStaff.id]);
-      }
-
-      const [winesData, settingsData, bottlesData, locationsData] = await Promise.all([
+      // 1. Fire all queries simultaneously in parallel
+      const [
+        storeData,
+        staff,
+        storedShift,
+        winesData,
+        settingsData,
+        bottlesData,
+        locationsData,
+      ] = await Promise.all([
+        storeId && (!storeName || isFullRefresh)
+          ? apiFetch(`/stores/${storeId}`).catch(() => null)
+          : Promise.resolve(null),
+        staffList.length === 0 || isFullRefresh
+          ? fetchStoreStaff(storeId).catch(() => [])
+          : Promise.resolve(staffList),
+        AsyncStorage.getItem(`@caveau:pos_shift_staff_${storeId || "default"}`).catch(() => null),
         apiFetch("/wines"),
         storeId ? apiFetch(`/stock-settings?storeId=${storeId}`) : Promise.resolve([]),
         storeId
-          ? apiFetch(`/bottles?storeId=${storeId}&status=received,shelved,open`)
+          ? apiFetch(`/bottles?storeId=${storeId}&status=received,shelved,open&pos=true`)
           : Promise.resolve([]),
-        apiFetch("/locations").catch(() => []),
+        apiFetch(storeId ? `/locations?storeId=${storeId}` : "/locations").catch(() => []),
       ]);
+
+      if (storeData?.name) setStoreName(storeData.name);
+
+      if (Array.isArray(staff) && staff.length > 0) {
+        setStaffList(staff);
+        const activeUserInStaff: AppUser = staff.find((u) => u.id === profile?.id) || {
+          id: profile?.id || "unknown",
+          displayName: profile?.displayName || profile?.email?.split("@")[0] || "Staff Member",
+          email: profile?.email || "",
+          role: "store_staff",
+          createdAt: new Date(),
+        };
+        setSelectedStaff((prev) => prev || activeUserInStaff);
+
+        // Setup shift roster
+        if (shiftStaffIds.length === 0 || isFullRefresh) {
+          try {
+            if (storedShift) {
+              const parsed: string[] = JSON.parse(storedShift);
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                const valid = parsed.filter((id) => staff.some((s) => s.id === id));
+                if (!valid.includes(activeUserInStaff.id)) {
+                  valid.unshift(activeUserInStaff.id);
+                }
+                setShiftStaffIds(valid);
+              } else {
+                setShiftStaffIds([activeUserInStaff.id]);
+              }
+            } else {
+              // Default shift: active user + first 3 other store staff
+              const otherStaff = staff.filter((s) => s.id !== activeUserInStaff.id).slice(0, 3).map((s) => s.id);
+              const initialShift = [activeUserInStaff.id, ...otherStaff];
+              setShiftStaffIds(initialShift);
+              AsyncStorage.setItem(
+                `@caveau:pos_shift_staff_${storeId || "default"}`,
+                JSON.stringify(initialShift)
+              ).catch(() => { });
+            }
+          } catch {
+            setShiftStaffIds([activeUserInStaff.id]);
+          }
+        }
+      }
 
       if (storeId) {
         prefetchCustomers(storeId).catch(() => { });
@@ -418,6 +438,32 @@ export default function StoreStaffPOSTerminal() {
         : Array.isArray(locationsData?.locations)
           ? locationsData.locations
           : [];
+
+      // Feature A: Auto-detect or auto-create "Bar Counter" location for the store
+      let counterLocId: string | null = null;
+      const counterLoc = locs.find(
+        (l) =>
+          (l.name?.toLowerCase().includes("counter") || l.type?.toLowerCase() === "counter") &&
+          (!storeId || !l.storeId || l.storeId === storeId)
+      );
+      if (counterLoc) {
+        counterLocId = counterLoc.id;
+      } else if (storeId) {
+        try {
+          const newLoc = await apiFetch("/locations", {
+            method: "POST",
+            body: JSON.stringify({ storeId, name: "Bar Counter", type: "Counter" }),
+          });
+          if (newLoc?.id) {
+            counterLocId = newLoc.id;
+            locs.push(newLoc);
+          }
+        } catch (e) {
+          console.warn("[StoreStaffPOSTerminal] Auto-create Bar Counter failed:", e);
+        }
+      }
+      setCounterLocationId(counterLocId);
+
       const locationMap: Record<string, string> = {};
       locs.forEach((l) => {
         if (l.id) locationMap[l.id] = l.name || l.code || "Bin";
@@ -529,8 +575,8 @@ export default function StoreStaffPOSTerminal() {
             openBottle: openB
               ? {
                 id: openB.id,
-                locationId: openB.locationId || null,
-                locationName: openB.locationName || "Bar",
+                locationId: openB.locationId || counterLocId || null,
+                locationName: openB.locationName || (openB.locationId && locationMap[openB.locationId]) || "Bar Counter",
                 glassesRemaining: openB.glassesRemaining ?? 6,
               }
               : null,
@@ -545,7 +591,7 @@ export default function StoreStaffPOSTerminal() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [storeId, profile]);
+  }, [storeId, profile?.id, isManager, storeName, staffList.length, shiftStaffIds.length]);
 
   useEffect(() => {
     loadData();
@@ -553,7 +599,7 @@ export default function StoreStaffPOSTerminal() {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadData();
+    await loadData(true);
   };
 
   // Staff Selection Handlers & Filtered Lists (Inline Accordion + Shift Roster)
@@ -830,6 +876,88 @@ export default function StoreStaffPOSTerminal() {
     await executeSaleOrder(itemsToProcess);
   };
 
+  // Feature B: Discard Damaged/Broken Bottle & Pull Fresh Replacement
+  const handlePullNewBottle = async () => {
+    if (!pullNewBottleModalWine) return;
+    setIsPullingNewBottle(true);
+
+    try {
+      const activeOpenBottleId = pullNewBottleModalWine.openBottle?.id;
+      const allBottles = pullNewBottleModalWine.bottles || [];
+
+      // Find available unopened replacement candidate
+      const unopenedCandidates = allBottles.filter(
+        (b) =>
+          b.id !== activeOpenBottleId &&
+          (b.status === "shelved" ||
+            b.status === "received" ||
+            !["open", "consumed", "damaged", "lost", "outbound"].includes(b.status))
+      );
+
+      if (unopenedCandidates.length === 0) {
+        Alert.alert(
+          "No Unopened Bottles",
+          `There are no unopened bottles of ${pullNewBottleModalWine.name} left in inventory to pull.`
+        );
+        setIsPullingNewBottle(false);
+        return;
+      }
+
+      // Prioritize chosen location, otherwise first candidate
+      const chosenBottle = pullNewBottleLocationId
+        ? unopenedCandidates.find((b) => b.locationId === pullNewBottleLocationId) || unopenedCandidates[0]
+        : unopenedCandidates[0];
+
+      // 1. Mark active open bottle as damaged/discarded if it exists
+      if (activeOpenBottleId) {
+        await apiFetch(`/bottles/${activeOpenBottleId}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            status: "damaged",
+            glassesRemaining: 0,
+            locationId: null,
+          }),
+        });
+      }
+
+      // 2. Open the replacement bottle and tag to Bar Counter
+      await apiFetch(`/bottles/${chosenBottle.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          status: "open",
+          glassesRemaining: 6,
+          ...(counterLocationId ? { locationId: counterLocationId } : {}),
+        }),
+      });
+
+      // 3. Refresh POS data
+      await loadData();
+
+      // 4. Close modal and inform staff
+      const wineName = pullNewBottleModalWine.name;
+      const reasonLabel =
+        pullNewBottleReason === "broken"
+          ? "broken bottle"
+          : pullNewBottleReason === "spilled"
+            ? "spilled wine"
+            : pullNewBottleReason === "spoiled"
+              ? "spoiled/corked wine"
+              : "discarded bottle";
+
+      setPullNewBottleModalWine(null);
+
+      Alert.alert(
+        "Replacement Bottle Ready",
+        `Damaged bottle discarded (${reasonLabel}).\nFresh bottle of ${wineName} has been pulled and opened on the Bar Counter.`
+      );
+    } catch (err: any) {
+      console.error("[handlePullNewBottle] Error:", err);
+      Alert.alert("Pullout Failed", err?.message || "Failed to pull replacement bottle. Please try again.");
+    } finally {
+      setIsPullingNewBottle(false);
+    }
+  };
+
   // Cart / Current Order Handlers
   const addToOrder = (
     wine: FastWineItem,
@@ -1051,7 +1179,9 @@ export default function StoreStaffPOSTerminal() {
               method: "POST",
               body: JSON.stringify({
                 bottleId: activeOpenBottleId || availableUnopenedIds[0] || null,
-                locationId: wine.openBottle?.locationId || null,
+                locationId: activeOpenBottleId
+                  ? (wine.openBottle?.locationId || counterLocationId || null)
+                  : (counterLocationId || null),
                 masterWineId: wine.id,
                 wineName: wine.name,
                 vintage: wine.vintage,
@@ -1089,7 +1219,9 @@ export default function StoreStaffPOSTerminal() {
                 body: JSON.stringify({
                   status: isNowConsumed ? "consumed" : "open",
                   glassesRemaining: remainingInThis,
-                  ...(isNowConsumed ? { locationId: null } : {}),
+                  ...(isNowConsumed
+                    ? { locationId: null }
+                    : (counterLocationId ? { locationId: counterLocationId } : {})),
                 }),
               });
 
@@ -1102,12 +1234,23 @@ export default function StoreStaffPOSTerminal() {
               const remainingInThis = 6 - glassesFromThis;
               const isNowConsumed = remainingInThis === 0;
 
+              // Track in bottlesToRevert for void safety
+              const origBottle = wine.bottles?.find((b: any) => b.id === nextBottleId);
+              bottlesToRevert.push({
+                bottleId: nextBottleId,
+                status: "shelved",
+                glassesRemaining: 6,
+                locationId: origBottle?.locationId || null,
+              });
+
               await apiFetch(`/bottles/${nextBottleId}`, {
                 method: "PATCH",
                 body: JSON.stringify({
                   status: isNowConsumed ? "consumed" : "open",
                   glassesRemaining: remainingInThis,
-                  ...(isNowConsumed ? { locationId: null } : {}),
+                  ...(isNowConsumed
+                    ? { locationId: null }
+                    : (counterLocationId ? { locationId: counterLocationId } : {})),
                 }),
               });
 
@@ -2834,18 +2977,37 @@ export default function StoreStaffPOSTerminal() {
                     if (hasActiveOpen) {
                       return (
                         <View style={styles.singleLocationCard}>
-                          <View style={{ flex: 1 }}>
+                          <View style={{ flex: 1, paddingRight: 8 }}>
                             <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                               <Text style={styles.singleLocationBadgeLabel}>POURING FROM OPEN BOTTLE</Text>
                               <View style={styles.lockedBadge}>
                                 <Text style={styles.lockedBadgeText}>Priority</Text>
                               </View>
                             </View>
-                            <Text style={styles.singleLocationTitle}>{activeOpen!.locationName || "Bar / Service Area"}</Text>
+                            <Text style={styles.singleLocationTitle}>{activeOpen!.locationName || "Bar Counter"}</Text>
                             <Text style={[styles.singleLocationStockText, { fontWeight: "700", marginTop: 2 }]}>
                               {activeOpen!.glassesRemaining} glass{activeOpen!.glassesRemaining !== 1 ? "es" : ""} remaining to pour
                             </Text>
                           </View>
+
+                          {/* Discard & Pull Replacement Button on the right */}
+                          <TouchableOpacity
+                            style={styles.openBottleDiscardBtn}
+                            onPress={() => {
+                              const currentWine = locationModalWine;
+                              setLocationModalWine(null);
+                              setPullNewBottleModalWine(currentWine);
+                              setPullNewBottleReason("broken");
+                              const validLoc = (currentWine?.locationBreakdown || []).find(
+                                (loc) => (loc.count - loc.openCount) > 0
+                              ) || currentWine?.locationBreakdown?.[0];
+                              setPullNewBottleLocationId(validLoc?.locationId || null);
+                            }}
+                            activeOpacity={0.8}
+                          >
+                            <MaterialCommunityIcons name="alert-circle-outline" size={15} color="#b45309" />
+                            <Text style={styles.openBottleDiscardBtnText}>Discard & Replace</Text>
+                          </TouchableOpacity>
                         </View>
                       );
                     }
@@ -3067,6 +3229,235 @@ export default function StoreStaffPOSTerminal() {
           selectedCustomerId={selectedCustomer?.id}
         />
       )}
+
+      {/* ── Feature B: Pull Replacement Bottle Modal (Discard Broken/Spilled & Open New) ── */}
+      <Modal
+        visible={Boolean(pullNewBottleModalWine)}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => {
+          if (!isPullingNewBottle) setPullNewBottleModalWine(null);
+        }}
+      >
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
+          <View style={styles.locationModalOverlay}>
+            <BlurView
+              intensity={20}
+              tint="systemMaterialDark"
+              style={StyleSheet.absoluteFill}
+            />
+            <View style={[styles.locationModalCard, { maxWidth: 520 }]}>
+              {/* Modal Header */}
+              <View style={styles.locationModalHeader}>
+                <View style={{ flex: 1, paddingRight: 8 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                    <Text style={styles.locationModalTitle}>Pull Replacement Bottle</Text>
+                    <View style={styles.pullNewBottleHeaderBadge}>
+                      <Text style={styles.pullNewBottleHeaderBadgeText}>Replacement</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.locationModalSub} numberOfLines={1}>
+                    {pullNewBottleModalWine?.producer ? `${pullNewBottleModalWine.producer} · ` : ""}
+                    {pullNewBottleModalWine?.vintage ? `${pullNewBottleModalWine.vintage} ` : ""}
+                    {pullNewBottleModalWine?.name}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => setPullNewBottleModalWine(null)}
+                  disabled={isPullingNewBottle}
+                  style={styles.locationCloseBtn}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <MaterialCommunityIcons name="close" size={18} color="#64748b" />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView style={{ maxHeight: 420 }} showsVerticalScrollIndicator={false}>
+                {/* Active Open Bottle Discard Notice */}
+                {pullNewBottleModalWine?.openBottle && (
+                  <View style={styles.pullNewBottleNoticeCard}>
+                    <MaterialCommunityIcons name="alert-circle" size={20} color="#b45309" />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.pullNewBottleNoticeTitle}>
+                        Active Open Bottle Will Be Discarded
+                      </Text>
+                      <Text style={styles.pullNewBottleNoticeSub}>
+                        Current bottle at {pullNewBottleModalWine.openBottle.locationName || "Bar Counter"} ({pullNewBottleModalWine.openBottle.glassesRemaining ?? 0} glasses left) will be marked as Damaged and cleared.
+                      </Text>
+                    </View>
+                  </View>
+                )}
+
+                {/* Reason Selector */}
+                <View style={styles.pullNewBottleSection}>
+                  <Text style={styles.pullNewBottleSectionLabel}>REASON FOR REPLACEMENT</Text>
+                  <View style={styles.pullNewBottleReasonRow}>
+                    {[
+                      { key: "broken", label: "Broken", icon: "bottle-wine" },
+                      { key: "spilled", label: "Spilled", icon: "water-alert" },
+                      { key: "spoiled", label: "Spoiled / Corked", icon: "alert-decagram" },
+                      { key: "discarded", label: "Other Discard", icon: "delete-outline" },
+                    ].map((r) => {
+                      const isSelected = pullNewBottleReason === r.key;
+                      return (
+                        <TouchableOpacity
+                          key={r.key}
+                          onPress={() => setPullNewBottleReason(r.key as any)}
+                          style={[
+                            styles.pullNewBottleReasonPill,
+                            isSelected && styles.pullNewBottleReasonPillSelected,
+                          ]}
+                          activeOpacity={0.8}
+                        >
+                          <MaterialCommunityIcons
+                            name={r.icon as any}
+                            size={15}
+                            color={isSelected ? MAROON.primary : "#64748b"}
+                          />
+                          <Text
+                            style={[
+                              styles.pullNewBottleReasonPillText,
+                              isSelected && styles.pullNewBottleReasonPillTextSelected,
+                            ]}
+                          >
+                            {r.label}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+
+                {/* Location Picker */}
+                <View style={styles.pullNewBottleSection}>
+                  <Text style={styles.pullNewBottleSectionLabel}>
+                    SELECT LOCATION TO PULL FRESH BOTTLE
+                  </Text>
+                  {(() => {
+                    const breakdown = pullNewBottleModalWine?.locationBreakdown || [];
+                    const locationsWithUnopened = breakdown.filter(
+                      (loc) => (loc.count - loc.openCount) > 0
+                    );
+
+                    if (locationsWithUnopened.length === 0) {
+                      return (
+                        <View style={styles.pullNewBottleEmptyBox}>
+                          <MaterialCommunityIcons name="bottle-wine-outline" size={24} color="#94a3b8" />
+                          <Text style={styles.pullNewBottleEmptyText}>
+                            No unopened bottles available in storage.
+                          </Text>
+                        </View>
+                      );
+                    }
+
+                  return (
+                    <View style={styles.locationGridContainer}>
+                      {locationsWithUnopened.map((loc) => {
+                        const isSelected = pullNewBottleLocationId === loc.locationId;
+                        const unopenedCount = Math.max(0, loc.count - loc.openCount);
+                        return (
+                          <TouchableOpacity
+                            key={loc.locationId}
+                            onPress={() => setPullNewBottleLocationId(loc.locationId)}
+                            style={[
+                              styles.locationGridTile,
+                              isSelected && styles.locationGridTileSelected,
+                            ]}
+                            activeOpacity={0.8}
+                          >
+                            <View style={styles.locationGridTileTop}>
+                              <MaterialCommunityIcons
+                                name="map-marker-outline"
+                                size={15}
+                                color={isSelected ? MAROON.primary : "#64748b"}
+                              />
+                              <Text
+                                style={[
+                                  styles.locationGridTileName,
+                                  isSelected && styles.locationGridTileNameSelected,
+                                ]}
+                                numberOfLines={1}
+                              >
+                                {loc.locationName}
+                              </Text>
+                              <View
+                                style={[
+                                  styles.locationGridRadio,
+                                  isSelected && styles.locationGridRadioSelected,
+                                ]}
+                              >
+                                {isSelected && (
+                                  <MaterialCommunityIcons name="check" size={11} color="#ffffff" />
+                                )}
+                              </View>
+                            </View>
+
+                            <View style={styles.locationGridTileBottom}>
+                              <Text
+                                style={[
+                                  styles.locationGridStockText,
+                                  isSelected && styles.locationGridStockTextSelected,
+                                ]}
+                              >
+                                {unopenedCount} unopened bottle{unopenedCount !== 1 ? "s" : ""}
+                              </Text>
+                            </View>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  );
+                })()}
+              </View>
+            </ScrollView>
+
+            {/* Modal Footer Actions */}
+            <View style={styles.locationModalFooter}>
+              <TouchableOpacity
+                onPress={() => setPullNewBottleModalWine(null)}
+                disabled={isPullingNewBottle}
+                style={styles.locationCancelBtn}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.locationCancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={handlePullNewBottle}
+                disabled={
+                  isPullingNewBottle ||
+                  !pullNewBottleModalWine ||
+                  (pullNewBottleModalWine.stockCount - (pullNewBottleModalWine.openBottle ? 1 : 0)) <= 0
+                }
+                style={[
+                  styles.pullNewBottleConfirmBtn,
+                  (isPullingNewBottle ||
+                    (pullNewBottleModalWine &&
+                      (pullNewBottleModalWine.stockCount - (pullNewBottleModalWine.openBottle ? 1 : 0)) <= 0)) && {
+                    opacity: 0.5,
+                  },
+                ]}
+                activeOpacity={0.85}
+              >
+                {isPullingNewBottle ? (
+                  <ActivityIndicator color="#ffffff" size="small" />
+                ) : (
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                    <MaterialCommunityIcons name="bottle-wine-outline" size={18} color="#ffffff" />
+                    <Text style={styles.pullNewBottleConfirmBtnText}>
+                      Discard & Pull Fresh Bottle
+                    </Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
 
     </SafeAreaView>
   );
@@ -5142,5 +5533,150 @@ const styles = StyleSheet.create({
   },
   cardReserveGhostText: {
     fontSize: 16,
+  },
+  openBottleDiscardBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    backgroundColor: "#fffbeb",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#fde68a",
+    flexShrink: 0,
+  },
+  openBottleDiscardBtnText: {
+    fontSize: 11.5,
+    fontWeight: "700",
+    color: "#b45309",
+  },
+  pullNewBottleEscapeBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: "#fffbeb",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#fde68a",
+  },
+  pullNewBottleEscapeBtnText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#b45309",
+  },
+  pullNewBottleEscapeBtnSub: {
+    fontSize: 11,
+    color: "#92400e",
+    marginTop: 2,
+    lineHeight: 15,
+  },
+  pullNewBottleHeaderBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    backgroundColor: "#fef3c7",
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#fde68a",
+  },
+  pullNewBottleHeaderBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#b45309",
+    textTransform: "uppercase",
+  },
+  pullNewBottleNoticeCard: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    backgroundColor: "#fffbeb",
+    borderWidth: 1,
+    borderColor: "#fde68a",
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 16,
+  },
+  pullNewBottleNoticeTitle: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#92400e",
+  },
+  pullNewBottleNoticeSub: {
+    fontSize: 11,
+    color: "#b45309",
+    marginTop: 2,
+    lineHeight: 15,
+  },
+  pullNewBottleSection: {
+    marginBottom: 16,
+  },
+  pullNewBottleSectionLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#64748b",
+    letterSpacing: 0.5,
+    marginBottom: 8,
+    textTransform: "uppercase",
+  },
+  pullNewBottleReasonRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  pullNewBottleReasonPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: "#f8fafc",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  pullNewBottleReasonPillSelected: {
+    backgroundColor: "#fdf2f2",
+    borderColor: MAROON.primary,
+  },
+  pullNewBottleReasonPillText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#64748b",
+  },
+  pullNewBottleReasonPillTextSelected: {
+    color: MAROON.primary,
+    fontWeight: "700",
+  },
+  pullNewBottleEmptyBox: {
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+    backgroundColor: "#f8fafc",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    gap: 6,
+  },
+  pullNewBottleEmptyText: {
+    fontSize: 12,
+    color: "#64748b",
+    fontWeight: "500",
+  },
+  pullNewBottleConfirmBtn: {
+    flex: 2,
+    height: 44,
+    borderRadius: 10,
+    backgroundColor: MAROON.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 14,
+  },
+  pullNewBottleConfirmBtnText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#ffffff",
   },
 });
