@@ -337,17 +337,17 @@ export default function StoreStaffPOSTerminal() {
     { wineName: string; stockCount: number; requestedQty: number }[]
   >([]);
 
-  // Auto-close countdown timer for sales confirmation modal (5 seconds)
+  // Auto-close countdown timer for sales confirmation modal (10 seconds)
   // Pauses if staff is in the middle of voiding or selecting a void reason
-  const [successCountdown, setSuccessCountdown] = useState(5);
+  const [successCountdown, setSuccessCountdown] = useState(10);
 
   useEffect(() => {
     if (!successData || isVoiding || isVoidModalOpen) {
-      setSuccessCountdown(5);
+      setSuccessCountdown(10);
       return;
     }
 
-    setSuccessCountdown(5);
+    setSuccessCountdown(10);
     const timer = setInterval(() => {
       setSuccessCountdown((prev) => {
         if (prev <= 1) {
@@ -2381,12 +2381,12 @@ export default function StoreStaffPOSTerminal() {
           {/* ── WINE TYPE PILLS (Full Width - Clean No Icons) ─────────────── */}
           <View style={styles.wineTypeFilterContainer}>
             {([
-              { key: "all", label: "All", color: "#18181b", defaultBg: "#f4f4f5", activeBg: "#18181b", activeText: "#ffffff" },
-              { key: "Red Wine", label: "Red", color: "#dc2626", defaultBg: "#fee2e2", activeBg: "#dc2626", activeText: "#ffffff" },
-              { key: "Sparkling", label: "Sparkling", color: "#ca8a04", defaultBg: "#fef9c3", activeBg: "#ca8a04", activeText: "#ffffff" },
-              { key: "White Wine", label: "White", color: "#eab308", defaultBg: "#fef9c3", activeBg: "#eab308", activeText: "#18181b" },
-              { key: "Rosé", label: "Rosé", color: "#ec4899", defaultBg: "#fce7f3", activeBg: "#ec4899", activeText: "#ffffff" },
-              { key: "Sweet Wine", label: "Sweet", color: "#ea580c", defaultBg: "#ffedd5", activeBg: "#ea580c", activeText: "#ffffff" },
+              { key: "all", label: "All", color: "#18181b", activeBg: "#18181b", activeText: "#ffffff" },
+              { key: "Red Wine", label: "Red", color: "#dc2626", activeBg: "#dc2626", activeText: "#ffffff" },
+              { key: "Sparkling", label: "Sparkling", color: "#ca8a04", activeBg: "#ca8a04", activeText: "#ffffff" },
+              { key: "White Wine", label: "White", color: "#eab308", activeBg: "#eab308", activeText: "#18181b" },
+              { key: "Rosé", label: "Rosé", color: "#ec4899", activeBg: "#ec4899", activeText: "#ffffff" },
+              { key: "Sweet Wine", label: "Sweet", color: "#ea580c", activeBg: "#ea580c", activeText: "#ffffff" },
             ] as const).map((pill) => {
               const count = wineTypeCounts[pill.key] ?? 0;
               if (pill.key !== "all" && count === 0) return null;
@@ -2400,7 +2400,7 @@ export default function StoreStaffPOSTerminal() {
                     {
                       borderColor: pill.color,
                       borderWidth: 2,
-                      backgroundColor: isActive ? pill.activeBg : pill.defaultBg,
+                      backgroundColor: isActive ? pill.activeBg : "#ffffff",
                     },
                   ]}
                   activeOpacity={0.8}
