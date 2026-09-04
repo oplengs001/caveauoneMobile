@@ -1,6 +1,7 @@
 import { useAuth } from "@/context/AuthContext";
 import { apiFetch } from "@/lib/api";
 import { InventoryBottle, MasterWine } from "@/types";
+import { useResponsivePadding } from "@/hooks/useResponsivePadding";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { Stack, useRouter } from "expo-router";
 import {
@@ -41,6 +42,7 @@ import { similarityScore } from "@/lib/utils/wineMatching";
 export default function BottleTaggingScreen() {
   const router = useRouter();
   const { profile } = useAuth();
+  const { horizontalPadding } = useResponsivePadding(24);
 
   const [phase, setPhase] = useState<Phase>("search");
   const [loading, setLoading] = useState(false);
@@ -244,7 +246,7 @@ export default function BottleTaggingScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingHorizontal: horizontalPadding }]}>
         <TouchableOpacity
           onPress={() => {
             if (phase === "search") {
@@ -271,7 +273,7 @@ export default function BottleTaggingScreen() {
       </View>
 
       {phase === "search" && (
-        <View style={styles.content}>
+        <View style={[styles.content, { paddingHorizontal: horizontalPadding }]}>
           {isCameraActive ? (
             <View style={styles.cameraContainer}>
               {capturedImage ? (
@@ -372,7 +374,7 @@ export default function BottleTaggingScreen() {
       )}
 
       {phase === "confirm" && selectedWine && (
-        <View style={styles.content}>
+        <View style={[styles.content, { paddingHorizontal: horizontalPadding }]}>
           <View style={styles.wineCard}>
             <View style={styles.wineHeader}>
               <Text style={styles.wineName}>{selectedWine.name}</Text>
@@ -476,7 +478,7 @@ export default function BottleTaggingScreen() {
             </View>
           </CameraView>
 
-          <View style={styles.infoBanner}>
+          <View style={[styles.infoBanner, { marginHorizontal: horizontalPadding }]}>
             <Info size={20} color="#3b82f6" style={{ marginTop: 2 }} />
             <View style={{ flex: 1 }}>
               <Text style={styles.infoBannerTitle}>Stick Label First!</Text>
@@ -486,7 +488,7 @@ export default function BottleTaggingScreen() {
             </View>
           </View>
 
-          <View style={styles.progressHeader}>
+          <View style={[styles.progressHeader, { paddingHorizontal: horizontalPadding }]}>
             <Text style={styles.progressTitle}>Verification Progress</Text>
             <Text style={styles.progressCount}>
               {verifiedIds.size} / {qtyToTag} Verified
@@ -494,13 +496,13 @@ export default function BottleTaggingScreen() {
           </View>
 
           {lastScanError && (
-            <View style={styles.errorBanner}>
+            <View style={[styles.errorBanner, { paddingHorizontal: horizontalPadding }]}>
               <AlertCircle size={16} color="#ef4444" />
               <Text style={styles.errorText}>{lastScanError}</Text>
             </View>
           )}
 
-          <ScrollView style={styles.bottleList}>
+          <ScrollView style={styles.bottleList} contentContainerStyle={{ paddingHorizontal: horizontalPadding }}>
             {untaggedBottles.slice(0, qtyToTag).map((bottle, idx) => {
               const bottleDisplayId =
                 bottle.bottleId || bottle.readableId || bottle.id;
@@ -554,7 +556,7 @@ export default function BottleTaggingScreen() {
       )}
 
       {phase === "success" && (
-        <View style={styles.successContainer}>
+        <View style={[styles.successContainer, { paddingHorizontal: horizontalPadding }]}>
           <CheckCircle2 size={80} color="#10b981" />
           <Text style={styles.successTitle}>Successfully Verified!</Text>
           <Text style={styles.successSub}>
@@ -598,11 +600,11 @@ export default function BottleTaggingScreen() {
       )}
 
       {phase === "no_match" && lastAiResult && (
-        <View style={styles.successContainer}>
+        <View style={[styles.successContainer, { paddingHorizontal: horizontalPadding }]}>
           <AlertCircle size={80} color="#fbbf24" />
           <Text style={styles.successTitle}>No Match Found</Text>
           <Text style={[styles.successSub, { marginBottom: 24 }]}>
-            The scanned label didn't strongly match any wine in the database.
+            The scanned label didn&apos;t strongly match any wine in the database.
           </Text>
 
           <View style={[styles.wineCard, { width: "100%", marginBottom: 32 }]}>

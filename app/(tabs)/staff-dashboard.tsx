@@ -2,6 +2,7 @@ import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { apiFetch } from "@/lib/api";
 import { clearToken } from "@/lib/auth";
+import { useResponsivePadding } from "@/hooks/useResponsivePadding";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
 import {
@@ -28,7 +29,7 @@ import {
 
 export default function StaffDashboardScreen() {
   const router = useRouter();
-  const { width } = useWindowDimensions();
+  const { horizontalPadding, isTablet, width } = useResponsivePadding(20);
   const { profile, refreshProfile } = useAuth();
   const theme = Colors.store;
 
@@ -297,14 +298,12 @@ export default function StaffDashboardScreen() {
     ]);
   };
 
-  const isTablet = width >= 768;
-
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
       <Stack.Screen options={{ headerShown: false }} />
 
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingHorizontal: horizontalPadding }]}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}

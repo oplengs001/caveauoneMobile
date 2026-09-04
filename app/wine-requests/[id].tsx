@@ -11,6 +11,7 @@ import {
   getWineRequestFromCache,
   setWineRequestInCache,
 } from "@/lib/queries/wineRequests";
+import { useResponsivePadding } from "@/hooks/useResponsivePadding";
 import {
   ArrowLeft,
   Ban,
@@ -45,6 +46,7 @@ export default function WineRequestDetail() {
   }>();
   const router = useRouter();
   const { profile } = useAuth();
+  const { horizontalPadding } = useResponsivePadding(24);
 
   const [scanning, setScanning] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
@@ -1280,7 +1282,7 @@ export default function WineRequestDetail() {
       <Stack.Screen options={{ headerShown: false }} />
 
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingHorizontal: horizontalPadding }]}>
         <TouchableOpacity
           onPress={() => router.back()}
           style={styles.backButton}
@@ -1298,7 +1300,7 @@ export default function WineRequestDetail() {
       </View>
 
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingHorizontal: horizontalPadding }]}
         showsVerticalScrollIndicator={false}
       >
         {/* Status Banner */}

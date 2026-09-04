@@ -3,6 +3,7 @@ import { useAuth } from "@/context/AuthContext";
 import { apiFetch } from "@/lib/api";
 import { formatDate } from "@/lib/utils/format";
 import { Delivery } from "@/types";
+import { useResponsivePadding } from "@/hooks/useResponsivePadding";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
 import {
   ArrowLeft,
@@ -29,6 +30,7 @@ import {
 export default function DeliveriesIndex() {
   const router = useRouter();
   const { profile } = useAuth();
+  const { horizontalPadding } = useResponsivePadding(16);
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -125,7 +127,7 @@ export default function DeliveriesIndex() {
       <View
         style={[
           styles.header,
-          { backgroundColor: theme.card, borderBottomColor: theme.border },
+          { backgroundColor: theme.card, borderBottomColor: theme.border, paddingHorizontal: horizontalPadding },
         ]}
       >
         <View style={styles.headerTop}>
@@ -160,7 +162,7 @@ export default function DeliveriesIndex() {
 
       {/* List */}
       <ScrollView
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[styles.listContent, { paddingHorizontal: horizontalPadding }]}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}

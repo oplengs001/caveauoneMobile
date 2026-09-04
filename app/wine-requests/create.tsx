@@ -6,6 +6,7 @@ import { getMasterWines } from "@/lib/queries/masterWines";
 import { getStores } from "@/lib/queries/stores";
 import { logActivity } from "@/lib/utils/activityLogger";
 import { MasterWine } from "@/types";
+import { useResponsivePadding } from "@/hooks/useResponsivePadding";
 import { Stack, useRouter } from "expo-router";
 
 
@@ -40,6 +41,7 @@ const { height } = Dimensions.get("window");
 export default function CreateWineRequest() {
   const router = useRouter();
   const { profile } = useAuth();
+  const { horizontalPadding } = useResponsivePadding(24);
   const theme = Colors.store;
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -460,7 +462,7 @@ export default function CreateWineRequest() {
     >
       <Stack.Screen options={{ headerShown: false }} />
 
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingHorizontal: horizontalPadding }]}>
         <TouchableOpacity
           onPress={() => router.back()}
           style={styles.backButton}
@@ -478,7 +480,7 @@ export default function CreateWineRequest() {
         <View style={{ width: 28 }} />
       </View>
 
-      <View style={styles.searchSection}>
+      <View style={[styles.searchSection, { paddingHorizontal: horizontalPadding }]}>
         <View
           style={[
             styles.searchBar,
@@ -565,7 +567,7 @@ export default function CreateWineRequest() {
           data={filteredWines}
           keyExtractor={(item) => item.id}
           renderItem={renderWineItem}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[styles.listContent, { paddingHorizontal: horizontalPadding }]}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
@@ -581,7 +583,7 @@ export default function CreateWineRequest() {
         <View
           style={[
             styles.summaryFooter,
-            { backgroundColor: theme.card, borderTopColor: theme.border },
+            { backgroundColor: theme.card, borderTopColor: theme.border, paddingHorizontal: horizontalPadding },
           ]}
         >
           <View style={styles.summaryTop}>

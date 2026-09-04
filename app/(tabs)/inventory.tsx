@@ -1,6 +1,7 @@
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { apiFetch } from "@/lib/api";
+import { useResponsivePadding } from "@/hooks/useResponsivePadding";
 import { Stack, useRouter } from "expo-router";
 import {
   ArrowUpDown,
@@ -397,6 +398,7 @@ const WineCard = memo(function WineCard({
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function InventoryScreen() {
+  const { horizontalPadding } = useResponsivePadding(20);
   const { profile } = useAuth();
   const isStore = profile?.role === "store" || profile?.role === "store_manager" || profile?.role === "store_staff";
   const theme = isStore ? Colors.store : Colors.warehouse;
@@ -655,6 +657,7 @@ export default function InventoryScreen() {
           {
             borderBottomWidth: isStore ? 1 : 0,
             borderBottomColor: theme.border,
+            paddingHorizontal: horizontalPadding,
           },
         ]}
       >
@@ -692,7 +695,7 @@ export default function InventoryScreen() {
       </View>
 
       {/* ── Search + Controls ── */}
-      <View style={styles.topControls}>
+      <View style={[styles.topControls, { paddingHorizontal: horizontalPadding }]}>
         <View
           style={[
             styles.searchWrapper,
@@ -808,7 +811,7 @@ export default function InventoryScreen() {
           data={sections}
           renderItem={({ item }) => <WineCard item={item} theme={theme} />}
           keyExtractor={(item) => item.masterWineData?.id || item.title}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[styles.listContent, { paddingHorizontal: horizontalPadding }]}
           onEndReached={() => fetchInventory(false)}
           onEndReachedThreshold={0.5}
           maintainVisibleContentPosition={{ minIndexForVisible: 0 }}

@@ -7,6 +7,7 @@ import { clearToken } from "@/lib/auth";
 import { countBottlesForStoreDashboard, getStores } from "@/lib/queries";
 import { Delivery, PulloutRequest, Store, WineRequest } from "@/types";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useResponsivePadding } from "@/hooks/useResponsivePadding";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
 import {
   AlertOctagon,
@@ -99,16 +100,8 @@ export default function HomeScreen() {
     }
   }, [isStoreUser, loadingMetrics, loadingRequests, loadingSales]);
 
-  // --- Calculate Responsive Layout with Full Landscape Support ---
-  const isLandscape = width > height;
-  const isTablet = width >= 768 || (isLandscape && width >= 680);
-
-  // Responsive left & right padding to eliminate long-span stretched cards
-  const horizontalPadding = isTablet
-    ? isLandscape
-      ? Math.max(64, Math.round((width - 780) / 2))
-      : Math.max(48, Math.round((width - 660) / 2))
-    : 20;
+  // --- Responsive Layout from Hook ---
+  const { horizontalPadding, isLandscape, isTablet } = useResponsivePadding(20);
 
   const containerPadding = horizontalPadding * 2; // scrollContent padding
 

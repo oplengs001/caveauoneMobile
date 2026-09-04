@@ -1,6 +1,7 @@
 import { useAuth } from "@/context/AuthContext";
 import { saveToken } from "@/lib/auth";
 
+import { useResponsivePadding } from "@/hooks/useResponsivePadding";
 import { useRouter } from "expo-router";
 import { Lock, LogIn, Mail, ShieldCheck, Warehouse } from "lucide-react-native";
 import React, { useRef, useState } from "react";
@@ -23,6 +24,7 @@ import {
 const BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || "https://stg-caveauone.grapey.io";
 
 export default function LoginScreen() {
+  const { horizontalPadding } = useResponsivePadding(28);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -97,7 +99,10 @@ export default function LoginScreen() {
       >
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
           <ScrollView
-            contentContainerStyle={styles.scrollContent}
+            contentContainerStyle={[
+              styles.scrollContent,
+              { paddingHorizontal: horizontalPadding },
+            ]}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >

@@ -4,6 +4,7 @@ import { apiFetch } from "@/lib/api";
 import { getStores } from "@/lib/queries";
 import { setWineRequestInCache } from "@/lib/queries/wineRequests";
 import { Delivery, Store, WineRequest } from "@/types";
+import { useResponsivePadding } from "@/hooks/useResponsivePadding";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
 import {
   CheckCircle2,
@@ -74,15 +75,7 @@ export interface IntakeLogRecord {
 export default function DeliveryLogsScreen() {
   const router = useRouter();
   const { profile } = useAuth();
-  const { width } = useWindowDimensions();
-
-  // Responsive horizontal padding to squeeze content on wider screens & tablets
-  const horizontalPadding = useMemo(() => {
-    if (width >= 1024) return 60;
-    if (width >= 768) return 48;
-    if (width >= 600) return 36;
-    return 28;
-  }, [width]);
+  const { horizontalPadding } = useResponsivePadding(20);
 
   const [records, setRecords] = useState<IntakeLogRecord[]>([]);
   const [loading, setLoading] = useState(true);

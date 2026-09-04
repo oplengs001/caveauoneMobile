@@ -1,5 +1,6 @@
 import { useAuth } from "@/context/AuthContext";
 import { apiFetch } from "@/lib/api";
+import { useResponsivePadding } from "@/hooks/useResponsivePadding";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
 import {
   ArrowRight,
@@ -30,6 +31,7 @@ export default function PulloutRequestsScreen() {
   >("pending");
   const [refreshing, setRefreshing] = useState(false);
   const { profile } = useAuth();
+  const { horizontalPadding } = useResponsivePadding(24);
   const router = useRouter();
 
   const fetchRequests = async (
@@ -180,7 +182,7 @@ export default function PulloutRequestsScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingHorizontal: horizontalPadding }]}>
         <TouchableOpacity
           onPress={() => router.back()}
           style={styles.backButton}
@@ -195,7 +197,7 @@ export default function PulloutRequestsScreen() {
         </View>
       </View>
 
-      <View style={styles.tabBar}>
+      <View style={[styles.tabBar, { paddingHorizontal: horizontalPadding }]}>
         {renderTab("pending", "Pending")}
         {renderTab("in_progress", "Active")}
         {renderTab("completed", "Done")}
@@ -211,7 +213,7 @@ export default function PulloutRequestsScreen() {
           data={requests}
           renderItem={renderItem}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[styles.listContent, { paddingHorizontal: horizontalPadding }]}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}

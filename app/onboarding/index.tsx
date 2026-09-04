@@ -1,4 +1,5 @@
 import { apiFetch } from "@/lib/api";
+import { useResponsivePadding } from "@/hooks/useResponsivePadding";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
 import {
   ArrowRight,
@@ -20,6 +21,7 @@ import {
 import { OnboardingTask } from "../../types";
 
 function OnboardingListSkeleton() {
+  const { horizontalPadding } = useResponsivePadding(24);
   const pulseAnim = useRef(new Animated.Value(0.25)).current;
 
   useEffect(() => {
@@ -40,7 +42,7 @@ function OnboardingListSkeleton() {
   }, [pulseAnim]);
 
   return (
-    <View style={{ flex: 1, paddingHorizontal: 16, paddingTop: 8, gap: 12 }}>
+    <View style={{ flex: 1, paddingHorizontal: horizontalPadding, paddingTop: 8, gap: 12 }}>
       {[1, 2, 3, 4].map((i) => (
         <View
           key={i}
@@ -79,6 +81,7 @@ export default function OnboardingTasksScreen() {
   const [selectedTab, setSelectedTab] = useState<
     "incoming" | "active" | "completed"
   >("incoming");
+  const { horizontalPadding } = useResponsivePadding(24);
   const router = useRouter();
 
   useFocusEffect(
@@ -224,7 +227,7 @@ export default function OnboardingTasksScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingHorizontal: horizontalPadding }]}>
         <TouchableOpacity
           onPress={() => router.dismissTo("/home")}
           style={styles.backButton}
@@ -239,7 +242,7 @@ export default function OnboardingTasksScreen() {
         </View>
       </View>
 
-      <View style={styles.tabBar}>
+      <View style={[styles.tabBar, { paddingHorizontal: horizontalPadding }]}>
         {renderTab("incoming", "Incoming")}
         {renderTab("active", "Active")}
         {renderTab("completed", "Done")}
@@ -252,7 +255,7 @@ export default function OnboardingTasksScreen() {
           data={tasks}
           renderItem={renderItem}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[styles.listContent, { paddingHorizontal: horizontalPadding }]}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Package size={64} color="#334155" strokeWidth={1} />

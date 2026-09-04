@@ -4,6 +4,7 @@ import { formatDate } from "@/lib/utils/format";
 import { InventoryBottle, Delivery } from "@/types";
 import { useAuth } from "@/context/AuthContext";
 import { logActivity } from "@/lib/utils/activityLogger";
+import { useResponsivePadding } from "@/hooks/useResponsivePadding";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import {
@@ -35,6 +36,7 @@ export default function DeliveryDetail() {
   }>();
   const router = useRouter();
   const { profile } = useAuth();
+  const { horizontalPadding } = useResponsivePadding(24);
 
   const [scanning, setScanning] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
@@ -484,7 +486,7 @@ export default function DeliveryDetail() {
       <Stack.Screen options={{ headerShown: false }} />
 
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingHorizontal: horizontalPadding }]}>
         <TouchableOpacity
           onPress={() => router.back()}
           style={styles.backButton}
@@ -502,7 +504,7 @@ export default function DeliveryDetail() {
       </View>
 
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingHorizontal: horizontalPadding }]}
         showsVerticalScrollIndicator={false}
       >
         {/* Status Banner */}

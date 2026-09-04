@@ -4,6 +4,7 @@ import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { apiFetch } from "@/lib/api";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useResponsivePadding } from "@/hooks/useResponsivePadding";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import {
@@ -59,6 +60,7 @@ import VatBreakdownCard, { formatCurrency } from "../../components/VatBreakdownC
 
 export default function TaggingScreen() {
   const { profile } = useAuth();
+  const { horizontalPadding } = useResponsivePadding(24);
   const isStoreUser = profile?.role === "store" || profile?.role === "store_manager" || profile?.role === "store_staff";
   const theme = isStoreUser ? Colors.store : profile?.role === "admin" ? Colors.admin : Colors.warehouse;
   const isStore = isStoreUser || profile?.role === "admin";
@@ -708,7 +710,7 @@ export default function TaggingScreen() {
 
       {/* ── Success ── */}
       {state === "success" && (
-        <View style={styles.successContainer}>
+        <View style={[styles.successContainer, { paddingHorizontal: horizontalPadding }]}>
           <View style={styles.successCircle}>
             <CheckCircle2 size={80} color="#10b981" strokeWidth={3} />
           </View>
@@ -899,7 +901,7 @@ export default function TaggingScreen() {
 
       {/* ── Entry Options ── */}
       {state === "entry" && (
-        <View style={{ flex: 1, padding: 24 }}>
+        <View style={{ flex: 1, paddingVertical: 24, paddingHorizontal: horizontalPadding }}>
           <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 24 }}>
             <TouchableOpacity
               onPress={() => router.back()}
@@ -1039,7 +1041,7 @@ export default function TaggingScreen() {
         <View
           style={[
             styles.detailsContainer,
-            { backgroundColor: theme.background },
+            { backgroundColor: theme.background, paddingHorizontal: horizontalPadding },
           ]}
         >
           {/* Header */}
@@ -1188,7 +1190,7 @@ export default function TaggingScreen() {
                 Bottle Already {mode === "sell" ? "Sold" : "Consumed"}
               </Text>
               <Text style={styles.incomingWarningText}>
-                This bottle is already marked as 'consumed' and cannot be
+                This bottle is already marked as &apos;consumed&apos; and cannot be
                 processed again.
               </Text>
               <TouchableOpacity
@@ -1655,7 +1657,7 @@ export default function TaggingScreen() {
                       { color: theme.textSecondary },
                     ]}
                   >
-                    Scan a unit's QR code to set location
+                    Scan a unit&apos;s QR code to set location
                   </Text>
                 </View>
               ) : (

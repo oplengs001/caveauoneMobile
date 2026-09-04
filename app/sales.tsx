@@ -2,6 +2,7 @@ import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { apiFetch } from "@/lib/api";
 import { calculateDashboardSalesMetrics } from "@/lib/utils/salesMath";
+import { useResponsivePadding } from "@/hooks/useResponsivePadding";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import {
   Banknote,
@@ -81,6 +82,7 @@ const formatCurrency = (amount: number) => {
 
 export default function SalesScreen() {
   const router = useRouter();
+  const { horizontalPadding } = useResponsivePadding(16);
   const { profile } = useAuth();
   const theme = profile?.role === "admin" ? Colors.admin : profile?.role === "store" ? Colors.store : Colors.warehouse;
 
@@ -642,7 +644,7 @@ export default function SalesScreen() {
       style={[styles.container, { backgroundColor: theme.background }]}
     >
       <Stack.Screen options={{ headerShown: false }} />
-      <View style={[styles.header, { borderBottomColor: theme.border }]}>
+      <View style={[styles.header, { borderBottomColor: theme.border, paddingHorizontal: horizontalPadding }]}>
         <TouchableOpacity
           onPress={() => router.back()}
           style={styles.backButton}
@@ -673,7 +675,7 @@ export default function SalesScreen() {
       </View>
 
       {cacheToast && (
-        <View style={{ backgroundColor: "#dcfce7", borderColor: "#86efac", borderWidth: 1, padding: 10, marginHorizontal: 16, marginTop: 8, borderRadius: 10, flexDirection: "row", alignItems: "center", gap: 8 }}>
+        <View style={{ backgroundColor: "#dcfce7", borderColor: "#86efac", borderWidth: 1, padding: 10, marginHorizontal: horizontalPadding, marginTop: 8, borderRadius: 10, flexDirection: "row", alignItems: "center", gap: 8 }}>
           <RotateCcw size={14} color="#15803d" />
           <Text style={{ fontSize: 12, fontWeight: "700", color: "#15803d" }}>{cacheToast}</Text>
         </View>
@@ -689,7 +691,7 @@ export default function SalesScreen() {
           ListHeaderComponent={sales.length > 0 ? renderDashboardSummary : null}
           renderItem={renderItem}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContainer}
+          contentContainerStyle={[styles.listContainer, { paddingHorizontal: horizontalPadding }]}
           showsVerticalScrollIndicator={false}
           initialNumToRender={20}
           maxToRenderPerBatch={10}

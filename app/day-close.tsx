@@ -1,6 +1,7 @@
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { apiFetch } from "@/lib/api";
+import { useResponsivePadding } from "@/hooks/useResponsivePadding";
 import { Stack, useRouter } from "expo-router";
 import {
   AlertCircle,
@@ -393,6 +394,7 @@ const DISCREPANCY_TYPES = [
 
 export default function DayCloseScreen() {
   const router = useRouter();
+  const { horizontalPadding } = useResponsivePadding(16);
   const { profile } = useAuth();
   const theme = Colors.store;
 
@@ -697,7 +699,7 @@ export default function DayCloseScreen() {
       <Stack.Screen options={{ headerShown: false }} />
 
       {/* Header */}
-      <View style={[styles.header, { borderColor: theme.border }]}>
+      <View style={[styles.header, { borderColor: theme.border, paddingHorizontal: horizontalPadding }]}>
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
           <ArrowLeft size={20} color={theme.text} />
         </TouchableOpacity>
@@ -708,7 +710,7 @@ export default function DayCloseScreen() {
         <CalendarCheck size={24} color={theme.primary} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView contentContainerStyle={[styles.scrollContent, { paddingHorizontal: horizontalPadding }]}>
 
         {/* ── Unclosed Days Alert ─────────────────────────────────────────── */}
         {unclosedDays.length > 0 && (
@@ -1068,7 +1070,7 @@ export default function DayCloseScreen() {
                         <Text style={styles.flaggedReason}>
                           {item.discrepancyType.toUpperCase()} • {item.discrepancyUnits} bottle(s)
                         </Text>
-                        {item.notes ? <Text style={styles.flaggedNotes}>"{item.notes}"</Text> : null}
+                        {item.notes ? <Text style={styles.flaggedNotes}>&quot;{item.notes}&quot;</Text> : null}
                       </View>
                       {!isClosed && (
                         <TouchableOpacity onPress={() => handleRemoveFlaggedItem(idx)}>

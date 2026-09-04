@@ -4,6 +4,7 @@ import { apiFetch } from "@/lib/api";
 import { formatDate } from "@/lib/utils/format";
 import { WineRequest } from "@/types";
 import { setWineRequestInCache } from "@/lib/queries/wineRequests";
+import { useResponsivePadding } from "@/hooks/useResponsivePadding";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
 import {
   Ban,
@@ -48,6 +49,7 @@ const FILTER_TAGS = [
 export default function WineRequestsIndex() {
   const router = useRouter();
   const { profile } = useAuth();
+  const { horizontalPadding } = useResponsivePadding(20);
   const theme = Colors.store;
 
   const [requests, setRequests] = useState<WineRequest[]>([]);
@@ -482,7 +484,7 @@ export default function WineRequestsIndex() {
       />
 
       {/* Header Bar */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingHorizontal: horizontalPadding }]}>
         <TouchableOpacity
           onPress={() => router.back()}
           style={styles.backButton}
@@ -507,7 +509,7 @@ export default function WineRequestsIndex() {
 
 
       {/* Search Input Bar */}
-      <View style={styles.searchSection}>
+      <View style={[styles.searchSection, { paddingHorizontal: horizontalPadding }]}>
         <View style={[styles.searchBox, { backgroundColor: theme.card, borderColor: theme.border }]}>
           <Search size={16} color={theme.textSecondary} />
           <TextInput
@@ -530,7 +532,7 @@ export default function WineRequestsIndex() {
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filterScrollContent}
+          contentContainerStyle={[styles.filterScrollContent, { paddingHorizontal: horizontalPadding }]}
         >
           {FILTER_TAGS.map((tag) => {
             const isActive = activeFilter === tag.id;
@@ -576,7 +578,7 @@ export default function WineRequestsIndex() {
           data={filteredRequests}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[styles.listContent, { paddingHorizontal: horizontalPadding }]}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}

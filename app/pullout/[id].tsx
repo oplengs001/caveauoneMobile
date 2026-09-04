@@ -3,6 +3,7 @@ import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { apiFetch } from "@/lib/api";
 import { logActivity } from "@/lib/utils/activityLogger";
+import { useResponsivePadding } from "@/hooks/useResponsivePadding";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 
@@ -39,6 +40,7 @@ const SEARCH_PAGE_SIZE = 20;
 export default function PulloutDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { profile } = useAuth();
+  const { horizontalPadding } = useResponsivePadding(24);
   const isStore = profile?.role === "store" || profile?.role === "store_manager" || profile?.role === "store_staff";
   const theme = isStore ? Colors.store : Colors.warehouse;
   const [request, setRequest] = useState<PulloutRequest | null>(null);
@@ -706,7 +708,7 @@ export default function PulloutDetailScreen() {
       style={[styles.container, { backgroundColor: theme.background }]}
     >
       <Stack.Screen options={{ headerShown: false }} />
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingHorizontal: horizontalPadding }]}>
         <TouchableOpacity
           onPress={() => router.back()}
           style={styles.backButton}
@@ -726,7 +728,7 @@ export default function PulloutDetailScreen() {
         />
       ) : request ? (
         <>
-          <ScrollView contentContainerStyle={styles.scrollContent}>
+          <ScrollView contentContainerStyle={[styles.scrollContent, { paddingHorizontal: horizontalPadding }]}>
             <View
               style={[
                 styles.statusCard,

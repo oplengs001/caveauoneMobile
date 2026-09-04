@@ -1,5 +1,6 @@
 import { useAuth } from "@/context/AuthContext";
 import { apiFetch } from "@/lib/api";
+import { useResponsivePadding } from "@/hooks/useResponsivePadding";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import {
@@ -268,6 +269,7 @@ export default function OnboardingDetailScreen() {
   }>();
   const router = useRouter();
   const { profile } = useAuth();
+  const { horizontalPadding } = useResponsivePadding(24);
   const [task, setTask] = useState<OnboardingTask | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentStep, setCurrentStep] = useState<Step>("overview");
@@ -894,6 +896,7 @@ export default function OnboardingDetailScreen() {
   };
 
 function OnboardingDetailSkeleton() {
+  const { horizontalPadding } = useResponsivePadding(24);
   const pulseAnim = useRef(new Animated.Value(0.25)).current;
 
   useEffect(() => {
@@ -918,7 +921,7 @@ function OnboardingDetailSkeleton() {
       <Stack.Screen options={{ headerShown: false }} />
 
       {/* HEADER SKELETON */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingHorizontal: horizontalPadding }]}>
         <View style={styles.backButton}>
           <ChevronLeft size={28} color="#334155" strokeWidth={2.5} />
         </View>
@@ -928,7 +931,7 @@ function OnboardingDetailSkeleton() {
         </View>
       </View>
 
-      <View style={styles.content}>
+      <View style={[styles.content, { paddingHorizontal: horizontalPadding }]}>
         {/* OVERVIEW STATS CARD SKELETON */}
         <View style={styles.statsCard}>
           <Animated.View style={{ width: 140, height: 14, borderRadius: 6, backgroundColor: "#334155", opacity: pulseAnim, marginBottom: 12 }} />
@@ -983,7 +986,7 @@ function OnboardingDetailSkeleton() {
       <Stack.Screen options={{ headerShown: false }} />
 
       {/* HEADER */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingHorizontal: horizontalPadding }]}>
         <TouchableOpacity
           onPress={() => {
             if (currentStep === "overview") {
@@ -1008,7 +1011,7 @@ function OnboardingDetailSkeleton() {
 
       {/* OVERVIEW */}
       {currentStep === "overview" && (
-        <View style={styles.content}>
+        <View style={[styles.content, { paddingHorizontal: horizontalPadding }]}>
           <View style={styles.statsCard}>
             <Text style={styles.statsTitle}>Progress Overview</Text>
             <View style={styles.progressBarBg}>
@@ -1139,7 +1142,7 @@ function OnboardingDetailSkeleton() {
 
       {/* SELECT ITEM FOR REPORT */}
       {currentStep === "select_item_for_report" && (
-        <ScrollView style={styles.content}>
+        <ScrollView style={[styles.content, { paddingHorizontal: horizontalPadding }]}>
           <Text style={styles.sectionTitle}>Which item has an issue?</Text>
           {task.items
             .filter((item) => item.onboardedQty < item.qty)
@@ -1172,7 +1175,7 @@ function OnboardingDetailSkeleton() {
 
       {/* SELECT BOTTLE FOR REPORT */}
       {currentStep === "select_bottle_for_report" && activeItem && (
-        <ScrollView style={styles.content}>
+        <ScrollView style={[styles.content, { paddingHorizontal: horizontalPadding }]}>
           <Text style={styles.sectionTitle}>
             Which bottle of {activeItem.wineName} has an issue?
           </Text>
@@ -1322,7 +1325,7 @@ function OnboardingDetailSkeleton() {
       {/* CONFIRM QTY */}
       {currentStep === "confirm_qty" && activeItem && (
         <ScrollView
-          style={styles.content}
+          style={[styles.content, { paddingHorizontal: horizontalPadding }]}
           contentContainerStyle={{ paddingBottom: 60 }}
         >
           {/* Wine confirmation card */}
@@ -1539,7 +1542,7 @@ function OnboardingDetailSkeleton() {
           </View>
 
           {/* Progress */}
-          <View style={{ paddingHorizontal: 24, marginBottom: 12 }}>
+          <View style={{ paddingHorizontal: horizontalPadding, marginBottom: 12 }}>
             <View
               style={{
                 flexDirection: "row",
@@ -1604,7 +1607,7 @@ function OnboardingDetailSkeleton() {
 
           {/* Bottle list */}
           <ScrollView
-            style={{ flex: 1, paddingHorizontal: 16 }}
+            style={{ flex: 1, paddingHorizontal: horizontalPadding }}
             showsVerticalScrollIndicator={false}
           >
             {batchBottleIds.map((bottleId, index) => {
@@ -1773,7 +1776,7 @@ function OnboardingDetailSkeleton() {
 
       {/* VERIFY QR */}
       {currentStep === "verify_qr" && activeItem && (
-        <View style={styles.verifyContainer}>
+        <View style={[styles.verifyContainer, { paddingHorizontal: horizontalPadding }]}>
           <View style={styles.matchCard}>
             <Text style={styles.matchLabel}>Bottle Recognized</Text>
             <Text style={styles.matchProducer}>{activeItem.producerName}</Text>
@@ -1842,13 +1845,13 @@ function OnboardingDetailSkeleton() {
 
       {/* NO MATCH */}
       {currentStep === "no_match" && (
-        <View style={styles.noMatchContainer}>
+        <View style={[styles.noMatchContainer, { paddingHorizontal: horizontalPadding }]}>
           <View style={styles.noMatchIconCircle}>
             <AlertCircle size={56} color="#f59e0b" strokeWidth={2} />
           </View>
           <Text style={styles.noMatchTitle}>No Match Found</Text>
           <Text style={styles.noMatchDesc}>
-            The AI detected a wine but it didn't match anything in this task
+            The AI detected a wine but it didn&apos;t match anything in this task
             with enough confidence.
           </Text>
 
@@ -1902,7 +1905,7 @@ function OnboardingDetailSkeleton() {
       )}
       {/* MANUAL SELECT */}
       {currentStep === "manual_select" && lastAiResult && (
-        <ScrollView style={styles.content}>
+        <ScrollView style={[styles.content, { paddingHorizontal: horizontalPadding }]}>
           <Text style={styles.sectionTitle}>Select the correct wine</Text>
           <Text style={styles.manualSelectHint}>
             Showing all pending items ranked by how closely they matched the
@@ -1998,7 +2001,7 @@ function OnboardingDetailSkeleton() {
       )}
       {/* SUCCESS */}
       {currentStep === "success" && activeItem && (
-        <View style={styles.successContainer}>
+        <View style={[styles.successContainer, { paddingHorizontal: horizontalPadding }]}>
           <View style={styles.successCircle}>
             <CheckCircle2 size={80} color="#10b981" strokeWidth={3} />
           </View>
