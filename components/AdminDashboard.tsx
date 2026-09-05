@@ -1,6 +1,7 @@
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
+import { useResponsivePadding } from "@/hooks/useResponsivePadding";
 import { apiFetch } from "@/lib/api";
 import { clearToken } from "@/lib/auth";
 import { getStores } from "@/lib/queries";
@@ -16,12 +17,18 @@ import {
   ChevronRight,
   ChevronUp,
   ClipboardList,
+  FlaskConical,
+  Gem,
+  Ghost,
+  GlassWater,
   LayoutList,
   LogOut,
   Package,
   PackageCheck,
   RotateCcw,
   Search,
+  Smile,
+  Tag,
   Truck,
   Wine,
 } from "lucide-react-native";
@@ -72,7 +79,6 @@ interface CategorySalesBreakdown {
   categoryKey: string;
   label: string;
   badgeColor: string;
-  iconText: string;
   count: number;
   revenue: number;
   volume: number;
@@ -81,6 +87,31 @@ interface CategorySalesBreakdown {
 }
 
 const theme = Colors.admin;
+
+function getCategoryIcon(key: string, color: string, size = 14) {
+  switch (key) {
+    case "fun":
+      return <Smile size={size} color={color} strokeWidth={2.2} />;
+    case "fine":
+      return <Gem size={size} color={color} strokeWidth={2.2} />;
+    case "reserve":
+    case "reserved":
+      return <Ghost size={size} color={color} strokeWidth={2.2} />;
+    default:
+      return <Wine size={size} color={color} strokeWidth={2.2} />;
+  }
+}
+
+function getPortionIcon(type: string, color: string, size = 14) {
+  switch (type) {
+    case "glass":
+      return <GlassWater size={size} color={color} strokeWidth={2.2} />;
+    case "carafe":
+      return <FlaskConical size={size} color={color} strokeWidth={2.2} />;
+    default:
+      return <Wine size={size} color={color} strokeWidth={2.2} />;
+  }
+}
 
 function formatCurrency(value: number) {
   return `₱${value.toLocaleString("en-PH", {
@@ -91,16 +122,12 @@ function formatCurrency(value: number) {
 
 export default function AdminDashboard() {
   const router = useRouter();
-  const { width, height } = useWindowDimensions();
+  const { width } = useWindowDimensions();
   const { profile } = useAuth();
   const { notification } = usePushNotifications();
 
-  const isLandscape = width > height;
-  const isTablet = width >= 768 || (isLandscape && width >= 680);
-  const cardsPerRow = isLandscape || isTablet ? 3 : 2;
-  const containerPadding = isLandscape ? 48 : 40;
-  const totalGap = 14 * (cardsPerRow - 1);
-  const cardWidth = (width - containerPadding - totalGap) / cardsPerRow;
+  const { horizontalPadding, isLandscape, isTablet } = useResponsivePadding(20);
+  const containerPadding = horizontalPadding * 2;
 
   const storeCardsPerRow = isLandscape || isTablet ? 5 : 2;
   const storeTotalGap = 12 * (storeCardsPerRow - 1);
@@ -109,6 +136,7 @@ export default function AdminDashboard() {
   const [salesPeriod, setSalesPeriod] = useState<"today" | "week" | "all">("today");
   const [breakdownMode, setBreakdownMode] = useState<"store" | "category" | "type">("store");
   const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
+  const [showBreakdown, setShowBreakdown] = useState(false);
 
   const [salesMetrics, setSalesMetrics] = useState({ totalRevenue: 0, totalItems: 0 });
   const [storeSales, setStoreSales] = useState<StoreSalesBreakdown[]>([]);
@@ -206,17 +234,16 @@ export default function AdminDashboard() {
         {
           label: string;
           badgeColor: string;
-          iconText: string;
           count: number;
           revenue: number;
           volume: number;
           stores: Record<string, { storeId: string; storeName: string; count: number; revenue: number }>;
         }
       > = {
-        fun: { label: "Fun Wine", badgeColor: "#f59e0b", iconText: "😁 FUN", count: 0, revenue: 0, volume: 0, stores: {} },
-        fine: { label: "Fine Wine", badgeColor: "#ec4899", iconText: "💎 FINE", count: 0, revenue: 0, volume: 0, stores: {} },
-        reserve: { label: "Reserve Collection", badgeColor: "#6366f1", iconText: "👻 RESERVE", count: 0, revenue: 0, volume: 0, stores: {} },
-        other: { label: "Standard Catalog", badgeColor: "#64748b", iconText: "🍷 STANDARD", count: 0, revenue: 0, volume: 0, stores: {} },
+        fun: { label: "Fun Wine", badgeColor: "#f59e0b", count: 0, revenue: 0, volume: 0, stores: {} },
+        fine: { label: "Fine Wine", badgeColor: "#ec4899", count: 0, revenue: 0, volume: 0, stores: {} },
+        reserve: { label: "Reserve Collection", badgeColor: "#6366f1", count: 0, revenue: 0, volume: 0, stores: {} },
+        other: { label: "Standard Catalog", badgeColor: "#64748b", count: 0, revenue: 0, volume: 0, stores: {} },
       };
 
       salesList.forEach((item: any) => {
@@ -271,7 +298,7 @@ export default function AdminDashboard() {
 
         // Wine Category grouping
         const catRaw = (item.masterWine?.wineCategory || item.wineCategory || "other").toLowerCase();
-        const cKey = (catRaw === "fun" || catRaw === "fast") ? "fun" : catRaw === "fine" ? "fine" : catRaw === "reserve" ? "reserve" : "other";
+        const cKey = (catRaw === "fun" || catRaw === "fast") ? "fun" : catRaw === "fine" ? "fine" : (catRaw === "reserve" || catRaw === "reserved") ? "reserve" : "other";
 
         if (!storeAgg[sId].catCounts[cKey]) {
           storeAgg[sId].catCounts[cKey] = { count: 0, revenue: 0 };
@@ -317,7 +344,6 @@ export default function AdminDashboard() {
           categoryKey: cKey,
           label: val.label,
           badgeColor: val.badgeColor,
-          iconText: val.iconText,
           count: val.count,
           revenue: val.revenue,
           volume: Math.round(val.volume * 100) / 100,
@@ -502,7 +528,10 @@ export default function AdminDashboard() {
     <SafeAreaView style={styles.container}>
       <ScrollView
         style={{ flex: 1 }}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingHorizontal: horizontalPadding },
+        ]}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -554,29 +583,31 @@ export default function AdminDashboard() {
             onPress={() => router.push({ pathname: "/sales", params: { period: salesPeriod } })}
             activeOpacity={0.85}
           >
-            <View style={styles.topCardBody}>
-              <View style={styles.topCardTitleRow}>
+            {/* Row 1 */}
+            <View style={styles.topCardRow1}>
+              <View style={styles.topCardRow1Left}>
                 <View style={[styles.topCardIconCircle, { backgroundColor: theme.primary + "18" }]}>
-                  <Banknote size={15} color={theme.primary} strokeWidth={2.4} />
+                  <Banknote size={14} color={theme.primary} strokeWidth={2.4} />
                 </View>
                 <Text style={[styles.topCardTitle, { color: theme.text }]} numberOfLines={1}>
                   All-Store Sales
                 </Text>
               </View>
-              <Text style={[styles.topCardSubtitle, { color: theme.textSecondary }]} numberOfLines={1}>
-                {formatCurrency(salesMetrics.totalRevenue)} · {salesMetrics.totalItems} btl
-              </Text>
-            </View>
-
-            <View style={[styles.topCardFooter, { borderTopColor: theme.border + "80" }]}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
                 <View style={[styles.liveDot, { backgroundColor: "#10b981" }]} />
                 <Text style={[styles.topCardBadgeText, { color: "#059669" }]}>
                   {salesPeriod === "today" ? "TODAY" : salesPeriod === "week" ? "THIS WEEK" : "ALL TIME"}
                 </Text>
               </View>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
-                <Text style={[styles.topCardActionText, { color: theme.primary }]}>View Sales</Text>
+            </View>
+
+            {/* Row 2 */}
+            <View style={styles.topCardRow2}>
+              <Text style={[styles.topCardSubtitle, { color: theme.textSecondary }]} numberOfLines={1}>
+                {formatCurrency(salesMetrics.totalRevenue)} · {salesMetrics.totalItems} btl
+              </Text>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
+                <Text style={[styles.topCardActionText, { color: theme.primary }]}>View</Text>
                 <ChevronRight size={13} color={theme.primary} />
               </View>
             </View>
@@ -594,8 +625,9 @@ export default function AdminDashboard() {
             onPress={() => router.push("/store-master-list")}
             activeOpacity={0.85}
           >
-            <View style={styles.topCardBody}>
-              <View style={styles.topCardTitleRow}>
+            {/* Row 1 */}
+            <View style={styles.topCardRow1}>
+              <View style={styles.topCardRow1Left}>
                 <View
                   style={[
                     styles.topCardIconCircle,
@@ -603,51 +635,52 @@ export default function AdminDashboard() {
                   ]}
                 >
                   {totalDeficitWines > 0 ? (
-                    <AlertOctagon size={15} color="#ef4444" strokeWidth={2.4} />
+                    <AlertOctagon size={14} color="#ef4444" strokeWidth={2.4} />
                   ) : (
-                    <CheckCircle2 size={15} color="#10b981" strokeWidth={2.4} />
+                    <CheckCircle2 size={14} color="#10b981" strokeWidth={2.4} />
                   )}
                 </View>
                 <Text style={[styles.topCardTitle, { color: theme.text }]} numberOfLines={1}>
                   {totalDeficitWines > 0 ? "Inventory Alerts" : "Inventory Healthy"}
                 </Text>
               </View>
-              <Text style={[styles.topCardSubtitle, { color: theme.textSecondary }]} numberOfLines={1}>
-                {totalDeficitWines > 0
-                  ? `${totalAlertStores} store${totalAlertStores === 1 ? "" : "s"} · ${totalDeficitWines} deficit items`
-                  : "All boutiques stocked & above PAR"}
-              </Text>
-            </View>
-
-            <View style={[styles.topCardFooter, { borderTopColor: theme.border + "80" }]}>
               <View
                 style={[
                   styles.deliveryStatusBadge,
                   {
                     backgroundColor: totalDeficitWines > 0 ? "rgba(239, 68, 68, 0.12)" : "rgba(16, 185, 129, 0.12)",
                     borderColor: totalDeficitWines > 0 ? "rgba(239, 68, 68, 0.25)" : "rgba(16, 185, 129, 0.25)",
-                    paddingVertical: 2,
-                    paddingHorizontal: 6,
+                    paddingVertical: 1,
+                    paddingHorizontal: 5,
                   },
                 ]}
               >
                 <Text
                   style={[
                     styles.deliveryStatusBadgeText,
-                    { color: totalDeficitWines > 0 ? "#ef4444" : "#059669", fontSize: 9.5 },
+                    { color: totalDeficitWines > 0 ? "#ef4444" : "#059669", fontSize: 9 },
                   ]}
                 >
                   {totalDeficitWines > 0 ? `${totalDeficitWines} ALERTS` : "HEALTHY"}
                 </Text>
               </View>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
+            </View>
+
+            {/* Row 2 */}
+            <View style={styles.topCardRow2}>
+              <Text style={[styles.topCardSubtitle, { color: theme.textSecondary }]} numberOfLines={1}>
+                {totalDeficitWines > 0
+                  ? `${totalAlertStores} store${totalAlertStores === 1 ? "" : "s"} · ${totalDeficitWines} items`
+                  : "All boutiques stocked"}
+              </Text>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
                 <Text
                   style={[
                     styles.topCardActionText,
                     { color: totalDeficitWines > 0 ? "#ef4444" : "#059669" },
                   ]}
                 >
-                  {totalDeficitWines > 0 ? "Review Stock" : "View Stock"}
+                  {totalDeficitWines > 0 ? "Review" : "View"}
                 </Text>
                 <ChevronRight size={13} color={totalDeficitWines > 0 ? "#ef4444" : "#059669"} />
               </View>
@@ -711,450 +744,500 @@ export default function AdminDashboard() {
             </View>
           )}
 
-          <View style={styles.responsiveGrid}>
+          <View style={styles.symmetricalSalesRow}>
             {/* Card 1: Total Revenue */}
             <TouchableOpacity
-              style={[styles.metricCard, { width: cardWidth, backgroundColor: theme.primary }]}
+              style={[
+                styles.symmetricalCard,
+                { backgroundColor: theme.primary, borderColor: theme.primary },
+              ]}
               onPress={() => router.push({ pathname: "/sales", params: { period: salesPeriod } })}
               activeOpacity={0.8}
             >
-              <Banknote size={24} color="#ffffff" strokeWidth={2.4} />
-              {loadingSales && !isFirstLoad && !refreshing ? (
-                <ActivityIndicator color="#fff" size="small" style={{ marginVertical: 2 }} />
-              ) : (
-                <Text style={styles.metricCount} numberOfLines={1} adjustsFontSizeToFit>
-                  {formatCurrency(salesMetrics.totalRevenue)}
-                </Text>
-              )}
-              <Text style={styles.metricLabel}>Total Revenue</Text>
-              <Text style={styles.metricSubLabel}>
-                {salesPeriod === "today" ? "Today" : salesPeriod === "week" ? "This Week" : "All Time"}
+              <View style={styles.symmetricalRow1}>
+                <View style={styles.symmetricalIconCircleSmall}>
+                  <Banknote size={12} color="#ffffff" strokeWidth={2.4} />
+                </View>
+                {loadingSales && !isFirstLoad && !refreshing ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={styles.symmetricalCardValue} numberOfLines={1} adjustsFontSizeToFit>
+                    ₱{salesMetrics.totalRevenue?.toLocaleString(undefined, {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </Text>
+                )}
+              </View>
+              <Text style={styles.symmetricalCardSubtitle} numberOfLines={1} adjustsFontSizeToFit>
+                Total Revenue · {salesPeriod === "today" ? "Today" : salesPeriod === "week" ? "This Week" : "All Time"}
               </Text>
             </TouchableOpacity>
 
             {/* Card 2: Bottles Sold */}
             <TouchableOpacity
-              style={[styles.metricCard, { width: cardWidth, backgroundColor: theme.secondary }]}
+              style={[
+                styles.symmetricalCard,
+                { backgroundColor: theme.secondary, borderColor: theme.secondary },
+              ]}
               onPress={() => router.push({ pathname: "/sales", params: { period: salesPeriod } })}
               activeOpacity={0.8}
             >
-              <Wine size={24} color="#ffffff" strokeWidth={2.4} />
-              {loadingSales && !isFirstLoad && !refreshing ? (
-                <ActivityIndicator color="#fff" size="small" style={{ marginVertical: 2 }} />
-              ) : (
-                <Text style={styles.metricCount}>{salesMetrics.totalItems}</Text>
-              )}
-              <Text style={styles.metricLabel}>Bottles Sold</Text>
-              <Text style={styles.metricSubLabel}>
-                {salesPeriod === "today" ? "Today" : salesPeriod === "week" ? "This Week" : "All Time"}
+              <View style={styles.symmetricalRow1}>
+                <View style={styles.symmetricalIconCircleSmall}>
+                  <Wine size={12} color="#ffffff" strokeWidth={2.4} />
+                </View>
+                {loadingSales && !isFirstLoad && !refreshing ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={styles.symmetricalCardValue} numberOfLines={1} adjustsFontSizeToFit>
+                    {salesMetrics.totalItems % 1 === 0 ? salesMetrics.totalItems : salesMetrics.totalItems.toFixed(1)}
+                    <Text style={styles.symmetricalCardUnit}> btl</Text>
+                  </Text>
+                )}
+              </View>
+              <Text style={styles.symmetricalCardSubtitle} numberOfLines={1} adjustsFontSizeToFit>
+                Bottles Sold · {salesPeriod === "today" ? "Today" : salesPeriod === "week" ? "This Week" : "All Time"}
               </Text>
             </TouchableOpacity>
 
-            {/* Card 3 (on tablet/landscape): Active Boutiques */}
-            {isTablet && (
-              <View style={[styles.metricCard, { width: cardWidth, backgroundColor: "#64748b" }]}>
-                <Building2 size={24} color="#ffffff" strokeWidth={2.4} />
-                <Text style={styles.metricCount}>{storeAlerts.length}</Text>
-                <Text style={styles.metricLabel}>Boutique Stores</Text>
-                <Text style={styles.metricSubLabel}>Network-wide</Text>
+            {/* Card 3: Active Boutiques */}
+            <TouchableOpacity
+              style={[
+                styles.symmetricalCard,
+                { backgroundColor: "#64748b", borderColor: "#64748b" },
+              ]}
+              onPress={() => router.push("/store-master-list")}
+              activeOpacity={0.8}
+            >
+              <View style={styles.symmetricalRow1}>
+                <View style={styles.symmetricalIconCircleSmall}>
+                  <Building2 size={12} color="#ffffff" strokeWidth={2.4} />
+                </View>
+                <Text style={styles.symmetricalCardValue} numberOfLines={1} adjustsFontSizeToFit>
+                  {storeAlerts.length}
+                  <Text style={styles.symmetricalCardUnit}> stores</Text>
+                </Text>
               </View>
-            )}
+              <Text style={styles.symmetricalCardSubtitle} numberOfLines={1} adjustsFontSizeToFit>
+                Boutiques · Network
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
 
         {/* ── Sales Breakdown & Insights (Compact Drilldown) ─────────────── */}
         <View style={styles.metricsDashboard}>
-          <Text style={styles.metricsTitle}>Sales Breakdown & Insights</Text>
+          <TouchableOpacity
+            style={styles.metricsHeaderRow}
+            onPress={() => setShowBreakdown((prev) => !prev)}
+            activeOpacity={0.7}
+          >
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              <Text style={styles.metricsTitle}>Sales Breakdown & Insights</Text>
+            </View>
+            <View style={styles.headerActionLink}>
+              <Text style={styles.headerActionLinkText}>
+                {showBreakdown ? "Hide" : "Show Breakdown"}
+              </Text>
+              {showBreakdown ? (
+                <ChevronUp size={13} color={theme.primary} strokeWidth={2.4} />
+              ) : (
+                <ChevronDown size={13} color={theme.primary} strokeWidth={2.4} />
+              )}
+            </View>
+          </TouchableOpacity>
 
-          <View style={styles.drilldownTabRow}>
-            {[
-              { id: "store", label: "By Store", icon: "🏢" },
-              { id: "category", label: "By Category", icon: "🏷️" },
-              { id: "type", label: "By Portion", icon: "🍷" },
-            ].map((t) => (
-              <TouchableOpacity
-                key={t.id}
-                onPress={() => {
-                  setBreakdownMode(t.id as any);
-                  setExpandedCardId(null);
-                }}
-                style={[
-                  styles.drilldownTabBtn,
-                  breakdownMode === t.id && styles.drilldownTabBtnActive,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.drilldownTabText,
-                    breakdownMode === t.id && styles.drilldownTabTextActive,
-                  ]}
-                >
-                  {t.icon} {t.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          {/* Multi-Segmented Proportional Distribution Bar */}
-          {(() => {
-            const STORE_COLORS = ["#4f46e5", "#059669", "#d97706", "#ec4899", "#06b6d4", "#8b5cf6", "#64748b"];
-            let currentList: { label: string; percentage: number; color: string }[] = [];
-            if (breakdownMode === "store") {
-              currentList = storeSales.map((s, idx) => ({
-                label: s.storeName,
-                percentage: s.percentage,
-                color: STORE_COLORS[idx % STORE_COLORS.length],
-              }));
-            } else if (breakdownMode === "category") {
-              currentList = categorySales.map((c) => ({
-                label: c.label,
-                percentage: c.percentage,
-                color: c.badgeColor,
-              }));
-            } else {
-              currentList = typeSales.map((t) => ({
-                label: t.label,
-                percentage: t.percentage,
-                color: t.type === "bottle" ? "#4f46e5" : t.type === "glass" ? "#059669" : "#d97706",
-              }));
-            }
-
-            const hasData = currentList.some((i) => i.percentage > 0);
-            if (!hasData) return null;
-
-            return (
-              <View style={styles.distStripContainer}>
-                <View style={styles.distStripBar}>
-                  {currentList.map((item, idx) => {
-                    if (item.percentage <= 0) return null;
-                    return (
-                      <View
-                        key={idx}
+          {showBreakdown && (
+            <>
+              <View style={styles.drilldownTabRow}>
+                {[
+                  { id: "store", label: "By Store", icon: (color: string) => <Building2 size={13} color={color} strokeWidth={2.2} /> },
+                  { id: "category", label: "By Category", icon: (color: string) => <Tag size={13} color={color} strokeWidth={2.2} /> },
+                  { id: "type", label: "By Portion", icon: (color: string) => <Wine size={13} color={color} strokeWidth={2.2} /> },
+                ].map((t) => {
+                  const isActive = breakdownMode === t.id;
+                  const iconColor = isActive ? "#ffffff" : theme.textSecondary;
+                  return (
+                    <TouchableOpacity
+                      key={t.id}
+                      onPress={() => {
+                        setBreakdownMode(t.id as any);
+                        setExpandedCardId(null);
+                      }}
+                      style={[
+                        styles.drilldownTabBtn,
+                        isActive && styles.drilldownTabBtnActive,
+                      ]}
+                      activeOpacity={0.8}
+                    >
+                      {t.icon(iconColor)}
+                      <Text
                         style={[
-                          styles.distSegment,
-                          {
-                            width: `${Math.max(item.percentage, 4)}%`,
-                            backgroundColor: item.color,
-                          },
+                          styles.drilldownTabText,
+                          isActive && styles.drilldownTabTextActive,
                         ]}
-                      />
-                    );
-                  })}
-                </View>
-
-                {/* Distribution Legend */}
-                <View style={styles.distLegendRow}>
-                  {currentList.map((item, idx) => {
-                    if (item.percentage <= 0) return null;
-                    return (
-                      <View key={idx} style={styles.distLegendItem}>
-                        <View style={[styles.distLegendDot, { backgroundColor: item.color }]} />
-                        <Text style={styles.distLegendText} numberOfLines={1}>
-                          {item.label} <Text style={{ fontWeight: "800", color: theme.text }}>({item.percentage}%)</Text>
-                        </Text>
-                      </View>
-                    );
-                  })}
-                </View>
-              </View>
-            );
-          })()}
-
-          {/* Drilldown Content */}
-          {loadingSales && !isFirstLoad && !refreshing ? (
-            <ActivityIndicator color={theme.primary} style={{ marginVertical: 16 }} />
-          ) : breakdownMode === "store" ? (
-            /* STORE DRILLDOWN */
-            storeSales.length === 0 ? (
-              <View style={styles.emptyBreakdownCard}>
-                <Text style={styles.emptyBreakdownText}>No store sales recorded for this period</Text>
-              </View>
-            ) : (
-              <View style={{ gap: 8, marginTop: 4 }}>
-                {storeSales.map((item, idx) => {
-                  const isExpanded = expandedCardId === item.storeId;
-                  const STORE_COLORS = ["#4f46e5", "#059669", "#d97706", "#ec4899", "#06b6d4", "#8b5cf6", "#64748b"];
-                  const storeColor = STORE_COLORS[idx % STORE_COLORS.length];
-
-                  return (
-                    <View
-                      key={item.storeId}
-                      style={[styles.breakdownCard, { borderLeftWidth: 3.5, borderLeftColor: storeColor }]}
-                    >
-                      <View style={styles.breakdownHeader}>
-                        <TouchableOpacity
-                          style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}
-                          onPress={() =>
-                            router.push({
-                              pathname: "/sales",
-                              params: { storeId: item.storeId, storeName: item.storeName, period: salesPeriod },
-                            })
-                          }
-                        >
-                          <Building2 size={15} color={storeColor} />
-                          <Text style={styles.breakdownName} numberOfLines={1}>
-                            {item.storeName}
-                          </Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={{ flexDirection: "row", alignItems: "center", gap: 5, paddingVertical: 2 }}
-                          onPress={() => setExpandedCardId(isExpanded ? null : item.storeId)}
-                        >
-                          <Text style={styles.breakdownRevenue}>{formatCurrency(item.revenue)}</Text>
-                          {isExpanded ? (
-                            <ChevronUp size={15} color={theme.textSecondary} />
-                          ) : (
-                            <ChevronDown size={15} color={theme.textSecondary} />
-                          )}
-                        </TouchableOpacity>
-                      </View>
-
-                      <TouchableOpacity
-                        style={styles.breakdownSubRow}
-                        onPress={() => setExpandedCardId(isExpanded ? null : item.storeId)}
-                        activeOpacity={0.7}
                       >
-                        <Text style={styles.breakdownSubText}>
-                          {item.volume} btl sold · {item.count} {item.count === 1 ? "sale" : "sales"}
-                        </Text>
-                        <View style={styles.sharePillContainer}>
-                          {idx === 0 && item.percentage > 0 && (
-                            <View style={[styles.rankBadge, { backgroundColor: storeColor + "1A", borderColor: storeColor + "40" }]}>
-                              <Text style={[styles.rankBadgeText, { color: storeColor }]}>#1 LEADER</Text>
-                            </View>
-                          )}
-                          <View style={[styles.ringPill, { borderColor: storeColor + "40", backgroundColor: storeColor + "0D" }]}>
-                            <View style={[styles.ringDot, { backgroundColor: storeColor }]} />
-                            <Text style={[styles.ringPillText, { color: storeColor }]}>{item.percentage}%</Text>
-                          </View>
-                        </View>
-                      </TouchableOpacity>
-
-                      {/* Expanded Store Details */}
-                      {isExpanded && (
-                        <View style={styles.expandedBox}>
-                          <Text style={styles.expandedBoxTitle}>Portion Breakdown</Text>
-                          <View style={{ gap: 4, marginTop: 4 }}>
-                            {item.types.map((tp, tpIdx) => (
-                              <View key={tpIdx} style={styles.expandedRow}>
-                                <Text style={styles.expandedLabel}>{tp.label}</Text>
-                                <Text style={styles.expandedVal}>
-                                  {tp.count} sold ({formatCurrency(tp.revenue)})
-                                </Text>
-                              </View>
-                            ))}
-                          </View>
-
-                          <Text style={[styles.expandedBoxTitle, { marginTop: 10 }]}>Category Breakdown</Text>
-                          <View style={{ gap: 4, marginTop: 4 }}>
-                            {item.categories.map((cat, catIdx) => (
-                              <View key={catIdx} style={styles.expandedRow}>
-                                <Text style={styles.expandedLabel}>{cat.label}</Text>
-                                <Text style={styles.expandedVal}>
-                                  {cat.count} sold ({formatCurrency(cat.revenue)})
-                                </Text>
-                              </View>
-                            ))}
-                          </View>
-
-                          <TouchableOpacity
-                            style={styles.viewStoreSalesBtn}
-                            onPress={() =>
-                              router.push({
-                                pathname: "/sales",
-                                params: { storeId: item.storeId, storeName: item.storeName, period: salesPeriod },
-                              })
-                            }
-                          >
-                            <Text style={styles.viewStoreSalesText}>View Full Store Sales Report →</Text>
-                          </TouchableOpacity>
-                        </View>
-                      )}
-                    </View>
+                        {t.label}
+                      </Text>
+                    </TouchableOpacity>
                   );
                 })}
               </View>
-            )
-          ) : breakdownMode === "category" ? (
-            /* CATEGORY DRILLDOWN */
-            categorySales.length === 0 ? (
-              <View style={styles.emptyBreakdownCard}>
-                <Text style={styles.emptyBreakdownText}>No category sales recorded for this period</Text>
-              </View>
-            ) : (
-              <View style={{ gap: 8, marginTop: 4 }}>
-                {categorySales.map((item, idx) => {
-                  const isExpanded = expandedCardId === item.categoryKey;
-                  return (
-                    <View
-                      key={item.categoryKey}
-                      style={[styles.typeCard, { borderLeftWidth: 3.5, borderLeftColor: item.badgeColor }]}
-                    >
-                      <TouchableOpacity
-                        style={styles.typeHeader}
-                        onPress={() => setExpandedCardId(isExpanded ? null : item.categoryKey)}
-                        activeOpacity={0.7}
-                      >
-                        <View style={[styles.typeBadge, { backgroundColor: item.badgeColor + "18" }]}>
-                          <Text style={[styles.typeBadgeText, { color: item.badgeColor }]}>
-                            {item.iconText}
-                          </Text>
-                        </View>
-                        <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-                          <Text style={styles.typeRevenue}>{formatCurrency(item.revenue)}</Text>
-                          {isExpanded ? (
-                            <ChevronUp size={15} color={theme.textSecondary} />
-                          ) : (
-                            <ChevronDown size={15} color={theme.textSecondary} />
-                          )}
-                        </View>
-                      </TouchableOpacity>
 
-                      <TouchableOpacity
-                        style={{ marginTop: 6, flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end" }}
-                        onPress={() => setExpandedCardId(isExpanded ? null : item.categoryKey)}
-                        activeOpacity={0.7}
-                      >
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.typeTitle}>{item.label}</Text>
-                          <Text style={styles.typeDetail}>
-                            {item.volume} btl sold ({item.count} {item.count === 1 ? "sale" : "sales"})
-                          </Text>
-                        </View>
-                        <View style={styles.sharePillContainer}>
-                          {idx === 0 && item.percentage > 0 && (
-                            <View style={[styles.rankBadge, { backgroundColor: item.badgeColor + "1A", borderColor: item.badgeColor + "40" }]}>
-                              <Text style={[styles.rankBadgeText, { color: item.badgeColor }]}>#1</Text>
-                            </View>
-                          )}
-                          <View style={[styles.ringPill, { borderColor: item.badgeColor + "40", backgroundColor: item.badgeColor + "0D" }]}>
-                            <View style={[styles.ringDot, { backgroundColor: item.badgeColor }]} />
-                            <Text style={[styles.ringPillText, { color: item.badgeColor }]}>{item.percentage}%</Text>
-                          </View>
-                        </View>
-                      </TouchableOpacity>
+              {/* Multi-Segmented Proportional Distribution Bar */}
+              {(() => {
+                const STORE_COLORS = [
+                  theme.primary,
+                  theme.accent,
+                  theme.secondary,
+                  "#ec4899",
+                  "#06b6d4",
+                  "#8b5cf6",
+                  "#64748b",
+                ];
+                let currentList: { label: string; percentage: number; color: string }[] = [];
+                if (breakdownMode === "store") {
+                  currentList = storeSales.map((s, idx) => ({
+                    label: s.storeName,
+                    percentage: s.percentage,
+                    color: STORE_COLORS[idx % STORE_COLORS.length],
+                  }));
+                } else if (breakdownMode === "category") {
+                  currentList = categorySales.map((c) => ({
+                    label: c.label,
+                    percentage: c.percentage,
+                    color: c.badgeColor,
+                  }));
+                } else {
+                  currentList = typeSales.map((t) => ({
+                    label: t.label,
+                    percentage: t.percentage,
+                    color: t.type === "bottle" ? theme.primary : t.type === "glass" ? theme.accent : theme.secondary,
+                  }));
+                }
 
-                      {/* Expanded Category Store Details */}
-                      {isExpanded && (
-                        <View style={styles.expandedBox}>
-                          <Text style={styles.expandedBoxTitle}>Sales per Store</Text>
-                          <View style={{ gap: 4, marginTop: 4 }}>
-                            {item.stores.map((st, sIdx) => (
-                              <TouchableOpacity
-                                key={sIdx}
-                                style={styles.expandedRow}
-                                onPress={() =>
-                                  router.push({
-                                    pathname: "/sales",
-                                    params: { storeId: st.storeId, storeName: st.storeName, period: salesPeriod },
-                                  })
-                                }
-                              >
-                                <Text style={styles.expandedLabel}>{st.storeName}</Text>
-                                <Text style={styles.expandedVal}>
-                                  {st.count} sold ({formatCurrency(st.revenue)}) →
-                                </Text>
-                              </TouchableOpacity>
-                            ))}
-                          </View>
-                        </View>
-                      )}
-                    </View>
-                  );
-                })}
-              </View>
-            )
-          ) : (
-            /* PORTION DRILLDOWN */
-            <View style={{ gap: 8, marginTop: 4 }}>
-              {typeSales.map((item, idx) => {
-                const isBottle = item.type === "bottle";
-                const isGlass = item.type === "glass";
-                const bgBadgeColor = isBottle ? "#4f46e5" : isGlass ? "#059669" : "#d97706";
-                const isExpanded = expandedCardId === item.type;
+                const hasData = currentList.some((i) => i.percentage > 0);
+                if (!hasData) return null;
 
                 return (
-                  <View
-                    key={item.type}
-                    style={[styles.typeCard, { borderLeftWidth: 3.5, borderLeftColor: bgBadgeColor }]}
-                  >
-                    <TouchableOpacity
-                      style={styles.typeHeader}
-                      onPress={() => setExpandedCardId(isExpanded ? null : item.type)}
-                      activeOpacity={0.7}
-                    >
-                      <View style={[styles.typeBadge, { backgroundColor: bgBadgeColor + "18" }]}>
-                        <Text style={[styles.typeBadgeText, { color: bgBadgeColor }]}>
-                          {isBottle ? "🍾 BOTTLE" : isGlass ? "🍷 GLASS" : "🫗 CARAFE"}
-                        </Text>
-                      </View>
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-                        <Text style={styles.typeRevenue}>{formatCurrency(item.revenue)}</Text>
-                        {isExpanded ? (
-                          <ChevronUp size={15} color={theme.textSecondary} />
-                        ) : (
-                          <ChevronDown size={15} color={theme.textSecondary} />
-                        )}
-                      </View>
-                    </TouchableOpacity>
+                  <View style={styles.distStripContainer}>
+                    <View style={styles.distStripBar}>
+                      {currentList.map((item, idx) => {
+                        if (item.percentage <= 0) return null;
+                        return (
+                          <View
+                            key={idx}
+                            style={[
+                              styles.distSegment,
+                              {
+                                width: `${Math.max(item.percentage, 4)}%`,
+                                backgroundColor: item.color,
+                              },
+                            ]}
+                          />
+                        );
+                      })}
+                    </View>
 
-                    <TouchableOpacity
-                      style={{ marginTop: 6, flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end" }}
-                      onPress={() => setExpandedCardId(isExpanded ? null : item.type)}
-                      activeOpacity={0.7}
-                    >
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.typeTitle}>{item.label}</Text>
-                        <Text style={styles.typeDetail}>
-                          {item.count} sold ({item.volume} btl equiv)
-                        </Text>
-                      </View>
-                      <View style={styles.sharePillContainer}>
-                        {idx === 0 && item.percentage > 0 && (
-                          <View style={[styles.rankBadge, { backgroundColor: bgBadgeColor + "1A", borderColor: bgBadgeColor + "40" }]}>
-                            <Text style={[styles.rankBadgeText, { color: bgBadgeColor }]}>#1 TOP</Text>
+                    {/* Distribution Legend */}
+                    <View style={styles.distLegendRow}>
+                      {currentList.map((item, idx) => {
+                        if (item.percentage <= 0) return null;
+                        return (
+                          <View key={idx} style={styles.distLegendItem}>
+                            <View style={[styles.distLegendDot, { backgroundColor: item.color }]} />
+                            <Text style={styles.distLegendText} numberOfLines={1}>
+                              {item.label} <Text style={{ fontWeight: "800", color: theme.text }}>({item.percentage}%)</Text>
+                            </Text>
                           </View>
-                        )}
-                        <View style={[styles.ringPill, { borderColor: bgBadgeColor + "40", backgroundColor: bgBadgeColor + "0D" }]}>
-                          <View style={[styles.ringDot, { backgroundColor: bgBadgeColor }]} />
-                          <Text style={[styles.ringPillText, { color: bgBadgeColor }]}>{item.percentage}%</Text>
-                        </View>
-                      </View>
-                    </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+                );
+              })()}
 
-                    {/* Expanded Portion Store Details */}
-                    {isExpanded && (
-                      <View style={styles.expandedBox}>
-                        <Text style={styles.expandedBoxTitle}>Sales per Store</Text>
-                        <View style={{ gap: 4, marginTop: 4 }}>
-                          {item.stores.length === 0 ? (
-                            <Text style={styles.expandedLabel}>No sales recorded</Text>
-                          ) : (
-                            item.stores.map((st, sIdx) => (
+              {/* Drilldown Content */}
+              {loadingSales && !isFirstLoad && !refreshing ? (
+                <ActivityIndicator color={theme.primary} style={{ marginVertical: 16 }} />
+              ) : breakdownMode === "store" ? (
+                /* STORE DRILLDOWN */
+                storeSales.length === 0 ? (
+                  <View style={styles.emptyBreakdownCard}>
+                    <Text style={styles.emptyBreakdownText}>No store sales recorded for this period</Text>
+                  </View>
+                ) : (
+                  <View style={{ gap: 8, marginTop: 4 }}>
+                    {storeSales.map((item, idx) => {
+                      const isExpanded = expandedCardId === item.storeId;
+                      const STORE_COLORS = [
+                        theme.primary,
+                        theme.accent,
+                        theme.secondary,
+                        "#ec4899",
+                        "#06b6d4",
+                        "#8b5cf6",
+                        "#64748b",
+                      ];
+                      const storeColor = STORE_COLORS[idx % STORE_COLORS.length];
+
+                      return (
+                        <View key={item.storeId} style={styles.breakdownCard}>
+                          <TouchableOpacity
+                            style={styles.breakdownCardLine1}
+                            onPress={() => setExpandedCardId(isExpanded ? null : item.storeId)}
+                            activeOpacity={0.7}
+                          >
+                            <View style={styles.breakdownCardLine1Left}>
+                              <View style={[styles.breakdownIconCircle, { backgroundColor: storeColor + "18" }]}>
+                                <Building2 size={14} color={storeColor} strokeWidth={2.2} />
+                              </View>
+                              <Text style={styles.breakdownTitle} numberOfLines={1}>
+                                {item.storeName}
+                              </Text>
+                            </View>
+                            <View style={styles.breakdownCardLine1Right}>
+                              <Text style={styles.breakdownRevenue}>{formatCurrency(item.revenue)}</Text>
+                              {isExpanded ? (
+                                <ChevronUp size={14} color={theme.textSecondary} />
+                              ) : (
+                                <ChevronDown size={14} color={theme.textSecondary} />
+                              )}
+                            </View>
+                          </TouchableOpacity>
+
+                          <TouchableOpacity
+                            style={styles.breakdownCardLine2}
+                            onPress={() => setExpandedCardId(isExpanded ? null : item.storeId)}
+                            activeOpacity={0.7}
+                          >
+                            <Text style={styles.breakdownSubtitle} numberOfLines={1}>
+                              {item.volume} btl sold · {item.count} {item.count === 1 ? "sale" : "sales"}
+                            </Text>
+                            <View style={[styles.breakdownShareBadge, { backgroundColor: storeColor + "15", borderColor: storeColor + "30" }]}>
+                              {idx === 0 && item.percentage > 0 && (
+                                <Text style={[styles.breakdownRankText, { color: storeColor }]}>#1 · </Text>
+                              )}
+                              <Text style={[styles.breakdownShareText, { color: storeColor }]}>{item.percentage}% share</Text>
+                            </View>
+                          </TouchableOpacity>
+
+                          {isExpanded && (
+                            <View style={styles.expandedBox}>
+                              <Text style={styles.expandedBoxTitle}>Portion Breakdown</Text>
+                              <View style={styles.expandedList}>
+                                {item.types.map((tp, tpIdx) => (
+                                  <View key={tpIdx} style={styles.expandedRow}>
+                                    <Text style={styles.expandedLabel}>{tp.label}</Text>
+                                    <Text style={styles.expandedVal}>
+                                      {tp.count} sold ({formatCurrency(tp.revenue)})
+                                    </Text>
+                                  </View>
+                                ))}
+                              </View>
+
+                              <Text style={[styles.expandedBoxTitle, { marginTop: 10 }]}>Category Breakdown</Text>
+                              <View style={styles.expandedList}>
+                                {item.categories.map((cat, catIdx) => (
+                                  <View key={catIdx} style={styles.expandedRow}>
+                                    <Text style={styles.expandedLabel}>{cat.label}</Text>
+                                    <Text style={styles.expandedVal}>
+                                      {cat.count} sold ({formatCurrency(cat.revenue)})
+                                    </Text>
+                                  </View>
+                                ))}
+                              </View>
+
                               <TouchableOpacity
-                                key={sIdx}
-                                style={styles.expandedRow}
+                                style={styles.viewStoreSalesBtn}
                                 onPress={() =>
                                   router.push({
                                     pathname: "/sales",
-                                    params: { storeId: st.storeId, storeName: st.storeName, period: salesPeriod },
+                                    params: { storeId: item.storeId, storeName: item.storeName, period: salesPeriod },
                                   })
                                 }
+                                activeOpacity={0.8}
                               >
-                                <Text style={styles.expandedLabel}>{st.storeName}</Text>
-                                <Text style={styles.expandedVal}>
-                                  {st.count} sold ({formatCurrency(st.revenue)}) →
-                                </Text>
+                                <Text style={styles.viewStoreSalesText}>View Store Sales Report →</Text>
                               </TouchableOpacity>
-                            ))
+                            </View>
                           )}
                         </View>
-                      </View>
-                    )}
+                      );
+                    })}
                   </View>
-                );
-              })}
-            </View>
+                )
+              ) : breakdownMode === "category" ? (
+                /* CATEGORY DRILLDOWN */
+                categorySales.length === 0 ? (
+                  <View style={styles.emptyBreakdownCard}>
+                    <Text style={styles.emptyBreakdownText}>No category sales recorded for this period</Text>
+                  </View>
+                ) : (
+                  <View style={{ gap: 8, marginTop: 4 }}>
+                    {categorySales.map((item, idx) => {
+                      const isExpanded = expandedCardId === item.categoryKey;
+                      return (
+                        <View key={item.categoryKey} style={styles.breakdownCard}>
+                          <TouchableOpacity
+                            style={styles.breakdownCardLine1}
+                            onPress={() => setExpandedCardId(isExpanded ? null : item.categoryKey)}
+                            activeOpacity={0.7}
+                          >
+                            <View style={styles.breakdownCardLine1Left}>
+                              <View style={[styles.breakdownIconCircle, { backgroundColor: item.badgeColor + "18" }]}>
+                                {getCategoryIcon(item.categoryKey, item.badgeColor, 14)}
+                              </View>
+                              <Text style={styles.breakdownTitle} numberOfLines={1}>
+                                {item.label}
+                              </Text>
+                            </View>
+                            <View style={styles.breakdownCardLine1Right}>
+                              <Text style={styles.breakdownRevenue}>{formatCurrency(item.revenue)}</Text>
+                              {isExpanded ? (
+                                <ChevronUp size={14} color={theme.textSecondary} />
+                              ) : (
+                                <ChevronDown size={14} color={theme.textSecondary} />
+                              )}
+                            </View>
+                          </TouchableOpacity>
+
+                          <TouchableOpacity
+                            style={styles.breakdownCardLine2}
+                            onPress={() => setExpandedCardId(isExpanded ? null : item.categoryKey)}
+                            activeOpacity={0.7}
+                          >
+                            <Text style={styles.breakdownSubtitle} numberOfLines={1}>
+                              {item.volume} btl sold · {item.count} {item.count === 1 ? "sale" : "sales"}
+                            </Text>
+                            <View style={[styles.breakdownShareBadge, { backgroundColor: item.badgeColor + "15", borderColor: item.badgeColor + "30" }]}>
+                              {idx === 0 && item.percentage > 0 && (
+                                <Text style={[styles.breakdownRankText, { color: item.badgeColor }]}>#1 · </Text>
+                              )}
+                              <Text style={[styles.breakdownShareText, { color: item.badgeColor }]}>{item.percentage}% share</Text>
+                            </View>
+                          </TouchableOpacity>
+
+                          {isExpanded && (
+                            <View style={styles.expandedBox}>
+                              <Text style={styles.expandedBoxTitle}>Store Distribution</Text>
+                              <View style={styles.expandedList}>
+                                {item.stores.length === 0 ? (
+                                  <Text style={styles.expandedEmptyText}>No store sales recorded</Text>
+                                ) : (
+                                  item.stores.map((st, sIdx) => (
+                                    <TouchableOpacity
+                                      key={sIdx}
+                                      style={styles.expandedRow}
+                                      onPress={() =>
+                                        router.push({
+                                          pathname: "/sales",
+                                          params: { storeId: st.storeId, storeName: st.storeName, period: salesPeriod },
+                                        })
+                                      }
+                                      activeOpacity={0.7}
+                                    >
+                                      <Text style={styles.expandedLabel}>{st.storeName}</Text>
+                                      <Text style={styles.expandedVal}>
+                                        {st.count} sold ({formatCurrency(st.revenue)}) →
+                                      </Text>
+                                    </TouchableOpacity>
+                                  ))
+                                )}
+                              </View>
+                            </View>
+                          )}
+                        </View>
+                      );
+                    })}
+                  </View>
+                )
+              ) : (
+                /* PORTION DRILLDOWN */
+                <View style={{ gap: 8, marginTop: 4 }}>
+                  {typeSales.map((item, idx) => {
+                    const isBottle = item.type === "bottle";
+                    const isGlass = item.type === "glass";
+                    const portionColor = isBottle ? theme.primary : isGlass ? theme.accent : theme.secondary;
+                    const isExpanded = expandedCardId === item.type;
+
+                    return (
+                      <View key={item.type} style={styles.breakdownCard}>
+                        <TouchableOpacity
+                          style={styles.breakdownCardLine1}
+                          onPress={() => setExpandedCardId(isExpanded ? null : item.type)}
+                          activeOpacity={0.7}
+                        >
+                          <View style={styles.breakdownCardLine1Left}>
+                            <View style={[styles.breakdownIconCircle, { backgroundColor: portionColor + "18" }]}>
+                              {getPortionIcon(item.type, portionColor, 14)}
+                            </View>
+                            <Text style={styles.breakdownTitle} numberOfLines={1}>
+                              {item.label}
+                            </Text>
+                          </View>
+                          <View style={styles.breakdownCardLine1Right}>
+                            <Text style={styles.breakdownRevenue}>{formatCurrency(item.revenue)}</Text>
+                            {isExpanded ? (
+                              <ChevronUp size={14} color={theme.textSecondary} />
+                            ) : (
+                              <ChevronDown size={14} color={theme.textSecondary} />
+                            )}
+                          </View>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={styles.breakdownCardLine2}
+                          onPress={() => setExpandedCardId(isExpanded ? null : item.type)}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={styles.breakdownSubtitle} numberOfLines={1}>
+                            {item.count} sold ({item.volume} btl equiv)
+                          </Text>
+                          <View style={[styles.breakdownShareBadge, { backgroundColor: portionColor + "15", borderColor: portionColor + "30" }]}>
+                            {idx === 0 && item.percentage > 0 && (
+                              <Text style={[styles.breakdownRankText, { color: portionColor }]}>#1 · </Text>
+                            )}
+                            <Text style={[styles.breakdownShareText, { color: portionColor }]}>{item.percentage}% share</Text>
+                          </View>
+                        </TouchableOpacity>
+
+                        {isExpanded && (
+                          <View style={styles.expandedBox}>
+                            <Text style={styles.expandedBoxTitle}>Store Distribution</Text>
+                            <View style={styles.expandedList}>
+                              {item.stores.length === 0 ? (
+                                <Text style={styles.expandedEmptyText}>No sales recorded</Text>
+                              ) : (
+                                item.stores.map((st, sIdx) => (
+                                  <TouchableOpacity
+                                    key={sIdx}
+                                    style={styles.expandedRow}
+                                    onPress={() =>
+                                      router.push({
+                                        pathname: "/sales",
+                                        params: { storeId: st.storeId, storeName: st.storeName, period: salesPeriod },
+                                      })
+                                    }
+                                    activeOpacity={0.7}
+                                  >
+                                    <Text style={styles.expandedLabel}>{st.storeName}</Text>
+                                    <Text style={styles.expandedVal}>
+                                      {st.count} sold ({formatCurrency(st.revenue)}) →
+                                    </Text>
+                                  </TouchableOpacity>
+                                ))
+                              )}
+                            </View>
+                          </View>
+                        )}
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
+            </>
           )}
         </View>
 
@@ -1201,8 +1284,8 @@ export default function AdminDashboard() {
                     onPress={() => router.push({ pathname: "/store-master-list", params: { storeId: sa.storeId } })}
                     activeOpacity={0.85}
                   >
-                    <View style={styles.topCardBody}>
-                      <View style={styles.topCardTitleRow}>
+                    <View style={styles.deliveryLine1}>
+                      <View style={styles.deliveryLine1Left}>
                         <View
                           style={[
                             styles.topCardIconCircle,
@@ -1228,14 +1311,6 @@ export default function AdminDashboard() {
                         </Text>
                       </View>
 
-                      <Text style={[styles.topCardSubtitle, { color: theme.textSecondary }]} numberOfLines={1}>
-                        {!hasAlert
-                          ? "All wines in stock"
-                          : `${sa.stockout} zero · ${sa.parAlert + sa.underSafety} below PAR`}
-                      </Text>
-                    </View>
-
-                    <View style={[styles.deliveryCardFooter, { borderTopColor: theme.border + "80" }]}>
                       <View
                         style={[
                           styles.deliveryStatusBadge,
@@ -1246,22 +1321,30 @@ export default function AdminDashboard() {
                             borderColor: hasAlert
                               ? sa.stockout > 0 ? "rgba(239, 68, 68, 0.25)" : "rgba(249, 115, 22, 0.25)"
                               : "rgba(16, 185, 129, 0.25)",
-                            paddingVertical: 2,
-                            paddingHorizontal: 6,
+                            paddingVertical: 1,
+                            paddingHorizontal: 5,
                           },
                         ]}
                       >
                         <Text
                           style={[
                             styles.deliveryStatusBadgeText,
-                            { color: hasAlert ? (sa.stockout > 0 ? "#ef4444" : "#d97706") : "#059669" },
+                            { color: hasAlert ? (sa.stockout > 0 ? "#ef4444" : "#d97706") : "#059669", fontSize: 9 },
                           ]}
                         >
                           {hasAlert ? (sa.stockout > 0 ? "STOCKOUT" : "PAR ALERT") : "HEALTHY"}
                         </Text>
                       </View>
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
-                        <Text style={{ fontSize: 11, fontWeight: "700", color: hasAlert ? "#ef4444" : "#059669" }}>
+                    </View>
+
+                    <View style={styles.deliveryLine2}>
+                      <Text style={[styles.topCardSubtitle, { color: theme.textSecondary }]} numberOfLines={1}>
+                        {!hasAlert
+                          ? "All wines in stock"
+                          : `${sa.stockout} zero · ${sa.parAlert + sa.underSafety} below PAR`}
+                      </Text>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
+                        <Text style={{ fontSize: 10.5, fontWeight: "700", color: hasAlert ? "#ef4444" : "#059669" }}>
                           {hasAlert ? `${deficitTotal} items` : "OK"}
                         </Text>
                         <ChevronRight size={13} color="#94a3b8" />
@@ -1337,34 +1420,26 @@ export default function AdminDashboard() {
                         onPress={() => router.push({ pathname: "/pullout/[id]", params: { id: task.id } })}
                         activeOpacity={0.85}
                       >
-                        <View style={styles.topCardBody}>
-                          <View style={styles.topCardTitleRow}>
-                            <View style={[styles.topCardIconCircle, { backgroundColor: "#f59e0b18" }]}>
-                              <ClipboardList size={15} color="#f59e0b" strokeWidth={2.4} />
+                        <View style={styles.deliveryLine1}>
+                          <View style={styles.deliveryLine1Left}>
+                            <View style={[styles.deliveryCardIconCircle, { backgroundColor: "#f59e0b18" }]}>
+                              <ClipboardList size={14} color="#f59e0b" strokeWidth={2.4} />
                             </View>
-                            <Text style={[styles.topCardTitle, { color: theme.text }]} numberOfLines={1}>
+                            <Text style={[styles.deliveryCardTitle, { color: theme.text }]} numberOfLines={1}>
                               {storeMap[task.outBoundStoreId || ""] || "Store Transfer"}
                             </Text>
                           </View>
-                          <Text style={[styles.topCardSubtitle, { color: theme.textSecondary }]} numberOfLines={1}>
-                            REQ: {task.id.slice(0, 6).toUpperCase()}
-                          </Text>
+                          <ChevronRight size={14} color="#94a3b8" />
                         </View>
 
-                        <View style={[styles.deliveryCardFooter, { borderTopColor: theme.border + "80" }]}>
+                        <View style={styles.deliveryLine2}>
+                          <Text style={[styles.deliveryCardSubtitle, { color: theme.textSecondary }]} numberOfLines={1}>
+                            REQ: {task.id.slice(0, 6).toUpperCase()} · {task.items.reduce((acc, i) => acc + (i.requestedQty || 0), 0)} btl
+                          </Text>
                           <View style={[styles.deliveryStatusBadge, { backgroundColor: "rgba(245, 158, 11, 0.12)", borderColor: "rgba(245, 158, 11, 0.3)" }]}>
                             <Text style={[styles.deliveryStatusBadgeText, { color: "#d97706" }]}>
                               {task.status === "in_progress" ? "IN PROGRESS" : "PENDING"}
                             </Text>
-                          </View>
-                          <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
-                            <View style={styles.deliveryQtyPill}>
-                              <Package size={12} color="#d97706" strokeWidth={2.2} />
-                              <Text style={[styles.deliveryQtyText, { color: theme.text }]}>
-                                {task.items.reduce((acc, i) => acc + (i.requestedQty || 0), 0)} btl
-                              </Text>
-                            </View>
-                            <ChevronRight size={13} color="#94a3b8" />
                           </View>
                         </View>
                       </TouchableOpacity>
@@ -1440,34 +1515,26 @@ export default function AdminDashboard() {
                         onPress={() => router.push({ pathname: "/deliveries/[id]", params: { id: del.id } })}
                         activeOpacity={0.85}
                       >
-                        <View style={styles.topCardBody}>
-                          <View style={styles.topCardTitleRow}>
-                            <View style={[styles.topCardIconCircle, { backgroundColor: theme.primary + "18" }]}>
-                              <Truck size={15} color={theme.primary} strokeWidth={2.4} />
+                        <View style={styles.deliveryLine1}>
+                          <View style={styles.deliveryLine1Left}>
+                            <View style={[styles.deliveryCardIconCircle, { backgroundColor: theme.primary + "18" }]}>
+                              <Truck size={14} color={theme.primary} strokeWidth={2.4} />
                             </View>
-                            <Text style={[styles.topCardTitle, { color: theme.text }]} numberOfLines={1}>
+                            <Text style={[styles.deliveryCardTitle, { color: theme.text }]} numberOfLines={1}>
                               → {storeMap[del.storeId] || "Store Delivery"}
                             </Text>
                           </View>
-                          <Text style={[styles.topCardSubtitle, { color: theme.textSecondary }]} numberOfLines={1}>
-                            DEL: {del.id.slice(0, 6).toUpperCase()}
-                          </Text>
+                          <ChevronRight size={14} color="#94a3b8" />
                         </View>
 
-                        <View style={[styles.deliveryCardFooter, { borderTopColor: theme.border + "80" }]}>
+                        <View style={styles.deliveryLine2}>
+                          <Text style={[styles.deliveryCardSubtitle, { color: theme.textSecondary }]} numberOfLines={1}>
+                            DEL: {del.id.slice(0, 6).toUpperCase()} · {del.totalBottles} btl
+                          </Text>
                           <View style={styles.deliveryStatusBadge}>
                             <Text style={styles.deliveryStatusBadgeText}>
                               {del.status === "receiving" ? "RECEIVING" : "DISPATCHED"}
                             </Text>
-                          </View>
-                          <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
-                            <View style={styles.deliveryQtyPill}>
-                              <Package size={12} color={theme.primary} strokeWidth={2.2} />
-                              <Text style={[styles.deliveryQtyText, { color: theme.text }]}>
-                                {del.totalBottles} btl
-                              </Text>
-                            </View>
-                            <ChevronRight size={13} color="#94a3b8" />
                           </View>
                         </View>
                       </TouchableOpacity>
@@ -1720,14 +1787,35 @@ const styles = StyleSheet.create({
     flex: 1,
     borderRadius: 14,
     borderWidth: 1.2,
-    padding: 12,
-    justifyContent: "space-between",
-    minHeight: 90,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    justifyContent: "center",
+    minHeight: 62,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
     shadowRadius: 4,
     elevation: 2,
+  },
+  topCardRow1: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 6,
+    marginBottom: 5,
+  },
+  topCardRow1Left: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flex: 1,
+  },
+  topCardRow2: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 6,
+    paddingLeft: 30,
   },
   topCardBody: {
     marginBottom: 8,
@@ -1739,20 +1827,22 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   topCardIconCircle: {
-    width: 26,
-    height: 26,
-    borderRadius: 7,
+    width: 24,
+    height: 24,
+    borderRadius: 6,
     alignItems: "center",
     justifyContent: "center",
   },
   topCardTitle: {
-    fontSize: 13,
+    fontSize: 12.5,
     fontWeight: "800",
-    flexShrink: 1,
+    flex: 1,
   },
   topCardSubtitle: {
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: "500",
+    flex: 1,
+    marginRight: 4,
   },
   topCardFooter: {
     flexDirection: "row",
@@ -1767,12 +1857,12 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   topCardBadgeText: {
-    fontSize: 9.5,
+    fontSize: 9,
     fontWeight: "800",
-    letterSpacing: 0.4,
+    letterSpacing: 0.3,
   },
   topCardActionText: {
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: "700",
   },
   metricsDashboard: {
@@ -1851,74 +1941,97 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#15803d",
   },
-  responsiveGrid: {
+  symmetricalSalesRow: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 14,
+    gap: 10,
+    width: "100%",
   },
-  metricCard: {
-    height: 124,
-    borderRadius: 16,
-    padding: 14,
+  symmetricalCard: {
+    flex: 1,
+    borderRadius: 14,
+    borderWidth: 1.2,
+    paddingVertical: 10,
+    paddingHorizontal: 6,
     alignItems: "center",
     justifyContent: "center",
+    minHeight: 58,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  metricCount: {
-    fontSize: 22,
-    fontWeight: "900",
-    color: "#ffffff",
-    marginTop: 4,
+  symmetricalRow1: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
     marginBottom: 2,
+    width: "100%",
   },
-  metricLabel: {
-    fontSize: 11,
-    fontWeight: "800",
-    textTransform: "uppercase",
+  symmetricalIconCircleSmall: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  symmetricalCardValue: {
+    fontSize: 14.5,
+    fontWeight: "900",
+    letterSpacing: -0.3,
+    color: "#ffffff",
     textAlign: "center",
-    color: "rgba(255,255,255,0.88)",
   },
-  metricSubLabel: {
-    marginTop: 3,
+  symmetricalCardUnit: {
     fontSize: 10,
-    fontWeight: "600",
-    color: "rgba(255,255,255,0.75)",
+    fontWeight: "700",
+    color: "rgba(255, 255, 255, 0.85)",
+  },
+  symmetricalCardSubtitle: {
+    fontSize: 9.5,
+    fontWeight: "700",
+    letterSpacing: 0.2,
+    color: "rgba(255, 255, 255, 0.85)",
     textAlign: "center",
   },
   drilldownTabRow: {
     flexDirection: "row",
-    backgroundColor: "#f1f5f9",
+    backgroundColor: "rgba(255, 255, 255, 0.04)",
     borderRadius: 12,
     padding: 3,
     marginBottom: 10,
+    borderWidth: 1,
+    borderColor: theme.border,
+    gap: 4,
   },
   drilldownTabBtn: {
     flex: 1,
+    flexDirection: "row",
     paddingVertical: 7,
+    paddingHorizontal: 8,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 10,
+    borderRadius: 9,
+    gap: 6,
   },
   drilldownTabBtnActive: {
-    backgroundColor: "#ffffff",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 2,
-    elevation: 2,
+    backgroundColor: theme.primary,
+    shadowColor: theme.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.35,
+    shadowRadius: 4,
+    elevation: 3,
   },
   drilldownTabText: {
     fontSize: 12,
     fontWeight: "600",
-    color: "#64748b",
+    color: theme.textSecondary,
   },
   drilldownTabTextActive: {
     fontWeight: "800",
-    color: theme.primary,
+    color: "#ffffff",
   },
   distStripContainer: {
     backgroundColor: theme.card,
@@ -1929,15 +2042,16 @@ const styles = StyleSheet.create({
     borderColor: theme.border,
   },
   distStripBar: {
-    height: 10,
-    borderRadius: 5,
+    height: 8,
+    borderRadius: 4,
     flexDirection: "row",
     overflow: "hidden",
-    backgroundColor: "#e2e8f0",
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
     gap: 2,
   },
   distSegment: {
     height: "100%",
+    borderRadius: 2,
   },
   distLegendRow: {
     flexDirection: "row",
@@ -1951,9 +2065,9 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   distLegendDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
   },
   distLegendText: {
     fontSize: 11,
@@ -1966,85 +2080,99 @@ const styles = StyleSheet.create({
     padding: 12,
     borderWidth: 1.2,
     borderColor: theme.border,
-    gap: 6,
+    gap: 8,
   },
-  breakdownHeader: {
+  breakdownCardLine1: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
-  breakdownName: {
+  breakdownCardLine1Left: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+    flex: 1,
+    marginRight: 8,
+  },
+  breakdownIconCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  breakdownTitle: {
     fontSize: 13.5,
     fontWeight: "700",
     color: theme.text,
+    flexShrink: 1,
+  },
+  breakdownCardLine1Right: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
   breakdownRevenue: {
     fontSize: 13.5,
     fontWeight: "800",
-    color: theme.primary,
+    color: theme.text,
   },
-  breakdownSubRow: {
+  breakdownCardLine2: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
+    justifyContent: "space-between",
+    paddingLeft: 37,
   },
-  breakdownSubText: {
+  breakdownSubtitle: {
     fontSize: 11.5,
     color: theme.textSecondary,
     fontWeight: "500",
+    flexShrink: 1,
+    marginRight: 8,
   },
-  sharePillContainer: {
+  breakdownShareBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-  },
-  rankBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    paddingHorizontal: 7,
+    paddingVertical: 2.5,
     borderRadius: 6,
     borderWidth: 1,
   },
-  rankBadgeText: {
-    fontSize: 9,
-    fontWeight: "900",
-    letterSpacing: 0.5,
-  },
-  ringPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 10,
-    borderWidth: 1.2,
-  },
-  ringDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-  },
-  ringPillText: {
-    fontSize: 10.5,
+  breakdownRankText: {
+    fontSize: 10,
     fontWeight: "800",
+    letterSpacing: 0.2,
+  },
+  breakdownShareText: {
+    fontSize: 10,
+    fontWeight: "700",
   },
   expandedBox: {
-    marginTop: 8,
-    paddingTop: 8,
+    marginTop: 6,
+    paddingTop: 10,
     borderTopWidth: 1,
     borderTopColor: theme.border,
+    paddingLeft: 37,
   },
   expandedBoxTitle: {
-    fontSize: 10.5,
+    fontSize: 10,
     fontWeight: "800",
     color: theme.textSecondary,
     textTransform: "uppercase",
     letterSpacing: 0.5,
+    marginBottom: 6,
+  },
+  expandedList: {
+    gap: 4,
   },
   expandedRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 2,
+    paddingVertical: 5,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    backgroundColor: "rgba(255, 255, 255, 0.03)",
   },
   expandedLabel: {
     fontSize: 11.5,
@@ -2056,63 +2184,32 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: theme.primary,
   },
+  expandedEmptyText: {
+    fontSize: 11,
+    color: theme.textSecondary,
+    fontStyle: "italic",
+    paddingVertical: 4,
+  },
   viewStoreSalesBtn: {
-    marginTop: 10,
+    marginTop: 8,
     paddingVertical: 7,
     paddingHorizontal: 12,
-    backgroundColor: theme.primary + "12",
+    backgroundColor: theme.primary + "18",
     borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: theme.primary + "30",
+    borderColor: theme.primary + "35",
   },
   viewStoreSalesText: {
     fontSize: 11.5,
     fontWeight: "700",
     color: theme.primary,
   },
-  typeCard: {
-    backgroundColor: theme.card,
-    borderRadius: 14,
-    padding: 12,
-    borderWidth: 1.2,
-    borderColor: theme.border,
-  },
-  typeHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  typeBadge: {
-    paddingHorizontal: 7,
-    paddingVertical: 2.5,
-    borderRadius: 6,
-  },
-  typeBadgeText: {
-    fontSize: 10.5,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-  },
-  typeRevenue: {
-    fontSize: 13.5,
-    fontWeight: "800",
-    color: theme.text,
-  },
-  typeTitle: {
-    fontSize: 12.5,
-    fontWeight: "700",
-    color: theme.text,
-  },
-  typeDetail: {
-    fontSize: 11.5,
-    color: theme.textSecondary,
-    marginTop: 1,
-  },
   emptyBreakdownCard: {
     backgroundColor: theme.card,
     borderRadius: 14,
-    padding: 14,
+    padding: 16,
     alignItems: "center",
     borderWidth: 1.2,
     borderColor: theme.border,
@@ -2137,17 +2234,37 @@ const styles = StyleSheet.create({
     color: theme.primary,
   },
   storeAlertCompactCard: {
-    width: 175,
+    width: 220,
     borderRadius: 14,
     borderWidth: 1.2,
-    padding: 12,
-    justifyContent: "space-between",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    justifyContent: "center",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
     shadowRadius: 4,
     elevation: 2,
-    minHeight: 90,
+    minHeight: 58,
+  },
+  deliveryLine1: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    marginBottom: 5,
+  },
+  deliveryLine1Left: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+  },
+  deliveryLine2: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingLeft: 30,
   },
   tasksRow: {
     flexDirection: "row",
@@ -2199,33 +2316,36 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   deliveryCardIconCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 9,
+    width: 26,
+    height: 26,
+    borderRadius: 7,
     alignItems: "center",
     justifyContent: "center",
   },
   deliveryCardTitle: {
-    fontSize: 13,
+    fontSize: 12.5,
     fontWeight: "800",
-    marginBottom: 2,
+    flex: 1,
   },
   deliveryCardSubtitle: {
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: "500",
+    flex: 1,
+    marginRight: 4,
   },
   deliveryCardCompact: {
-    width: 236,
+    width: 275,
     borderRadius: 14,
     borderWidth: 1.2,
-    padding: 12,
-    justifyContent: "space-between",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    justifyContent: "center",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
     shadowRadius: 4,
     elevation: 2,
-    minHeight: 90,
+    minHeight: 58,
   },
   deliveryCardFooter: {
     flexDirection: "row",
@@ -2272,12 +2392,14 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
     justifyContent: "space-between",
+    alignItems: "center",
     minHeight: 96,
   },
   tileHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    width: "100%",
     marginBottom: 8,
   },
   tileIconCircle: {
@@ -2289,15 +2411,18 @@ const styles = StyleSheet.create({
   },
   tileTextContainer: {
     marginTop: 2,
+    alignItems: "center",
   },
   tileTitle: {
     fontSize: 13,
     fontWeight: "900",
     marginBottom: 1,
+    textAlign: "center",
   },
   tileDesc: {
     fontSize: 10.5,
     fontWeight: "500",
+    textAlign: "center",
   },
   footerBadge: {
     marginTop: 8,
