@@ -1,10 +1,10 @@
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
+import { useResponsivePadding } from "@/hooks/useResponsivePadding";
 import { apiFetch } from "@/lib/api";
+import { setWineRequestInCache } from "@/lib/queries/wineRequests";
 import { formatDate } from "@/lib/utils/format";
 import { WineRequest } from "@/types";
-import { setWineRequestInCache } from "@/lib/queries/wineRequests";
-import { useResponsivePadding } from "@/hooks/useResponsivePadding";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
 import {
   Ban,
@@ -245,19 +245,42 @@ export default function WineRequestsIndex() {
     }
   };
 
-  // Filter requests by search query
+  // Filter requests by search query and sort pending on top
   const filteredRequests = useMemo(() => {
-    if (!searchQuery.trim()) return requests;
-    const q = searchQuery.toLowerCase().trim();
-    return requests.filter((r) => {
-      const matchId = r.id.toLowerCase().includes(q);
-      const matchWine = r.items.some(
-        (i) =>
-          i.wineName.toLowerCase().includes(q) ||
-          i.producer?.toLowerCase().includes(q) ||
-          i.vintage?.toLowerCase().includes(q)
-      );
-      return matchId || matchWine;
+    let list = requests;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      list = requests.filter((r) => {
+        const matchId = r.id.toLowerCase().includes(q);
+        const matchWine = r.items.some(
+          (i) =>
+            i.wineName.toLowerCase().includes(q) ||
+            i.producer?.toLowerCase().includes(q) ||
+            i.vintage?.toLowerCase().includes(q)
+        );
+        return matchId || matchWine;
+      });
+    }
+
+    const getTime = (val: any): number => {
+      if (!val) return 0;
+      if (typeof val?.toDate === "function") return val.toDate().getTime();
+      if (val instanceof Date) return val.getTime();
+      if (typeof val === "object") {
+        if (typeof val.seconds === "number") return val.seconds * 1000;
+        if (typeof val._seconds === "number") return val._seconds * 1000;
+      }
+      const d = new Date(val);
+      return isNaN(d.getTime()) ? 0 : d.getTime();
+    };
+
+    return [...list].sort((a, b) => {
+      const aIsPending = a.status === "pending" ? 1 : 0;
+      const bIsPending = b.status === "pending" ? 1 : 0;
+      if (aIsPending !== bIsPending) {
+        return bIsPending - aIsPending;
+      }
+      return getTime(b.createdAt) - getTime(a.createdAt);
     });
   }, [requests, searchQuery]);
 
