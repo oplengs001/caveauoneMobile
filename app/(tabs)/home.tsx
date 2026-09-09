@@ -2,12 +2,12 @@ import AdminDashboard from "@/components/AdminDashboard";
 import StoreStaffPOSTerminal from "@/components/StoreStaffPOSTerminal";
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
+import { useResponsivePadding } from "@/hooks/useResponsivePadding";
 import { apiFetch } from "@/lib/api";
 import { clearToken } from "@/lib/auth";
 import { countBottlesForStoreDashboard, getStores } from "@/lib/queries";
 import { Delivery, PulloutRequest, Store, WineRequest } from "@/types";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useResponsivePadding } from "@/hooks/useResponsivePadding";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
 import {
   AlertOctagon,
