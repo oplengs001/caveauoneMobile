@@ -155,41 +155,43 @@ export default function WineRequestsIndex() {
 
   // Status Style Helper
   const getStatusStyle = (status: string, resolutionType?: string | null) => {
-    if (resolutionType === "swap") {
-      return {
-        color: "#9333ea",
-        bg: "#f3e8ff",
-        icon: Package,
-        label: "🔄 SWAP / PULLING OUT",
-        step: 2,
-      };
-    }
-    if (resolutionType === "discontinued") {
-      return {
-        color: "#d97706",
-        bg: "#fef3c7",
-        icon: Ban,
-        label: "🚫 DISCONTINUED",
-        step: 0,
-      };
-    }
-    if (resolutionType === "stay_pending") {
-      return {
-        color: "#2563eb",
-        bg: "#dbeafe",
-        icon: Clock,
-        label: "⏳ DELAYED",
-        step: 1,
-      };
-    }
-    if (resolutionType === "stockout") {
-      return {
-        color: "#dc2626",
-        bg: "#fee2e2",
-        icon: Ban,
-        label: "📦 STOCKOUT",
-        step: 0,
-      };
+    if (status === "pending") {
+      if (resolutionType === "swap") {
+        return {
+          color: "#9333ea",
+          bg: "#f3e8ff",
+          icon: Package,
+          label: "🔄 SWAP / PULLING OUT",
+          step: 2,
+        };
+      }
+      if (resolutionType === "discontinued") {
+        return {
+          color: "#d97706",
+          bg: "#fef3c7",
+          icon: Ban,
+          label: "🚫 DISCONTINUED",
+          step: 0,
+        };
+      }
+      if (resolutionType === "stay_pending") {
+        return {
+          color: "#2563eb",
+          bg: "#dbeafe",
+          icon: Clock,
+          label: "⏳ DELAYED",
+          step: 1,
+        };
+      }
+      if (resolutionType === "stockout") {
+        return {
+          color: "#dc2626",
+          bg: "#fee2e2",
+          icon: Ban,
+          label: "📦 STOCKOUT",
+          step: 0,
+        };
+      }
     }
 
     switch (status) {
