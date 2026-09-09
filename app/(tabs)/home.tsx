@@ -717,6 +717,12 @@ export default function HomeScreen() {
     (outboundRequests.length > 0 || incomingDeliveries.length > 0);
   const hasPulloutTasks = !isStoreStaff && pulloutTasks.length > 0;
 
+  const totalIncomingBottles =
+    outboundRequests.reduce((sum, req) => sum + (req.items?.reduce((s, i) => s + Number(i.qty || 0), 0) || 0), 0) +
+    incomingDeliveries.reduce((sum, del) => sum + Number(del.totalBottles || 0), 0);
+  const totalPulloutBottles =
+    pulloutTasks.reduce((sum, t) => sum + (t.items?.reduce((s, i) => s + Number(i.requestedQty || 0), 0) || 0), 0);
+
   return (
     <SafeAreaView
       style={[styles.container, { backgroundColor: theme.background }]}
@@ -991,13 +997,19 @@ export default function HomeScreen() {
                 {/* Row 2 */}
                 <View style={styles.topCardRow2}>
                   <Text style={[styles.topCardSubtitle, { color: theme.textSecondary }]} numberOfLines={1}>
-                    {activeAlerts[0].subtitle}
-                  </Text>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
-                    <Text style={[styles.topCardActionText, { color: activeAlerts[0].color }]}>
-                      {activeAlerts[0].bottles} btl
+                    <Text style={{ fontWeight: "800", color: activeAlerts[0].color }}>
+                      {activeAlerts[0].wines} SKU{activeAlerts[0].wines === 1 ? "" : "s"}
                     </Text>
-                    <ChevronRight size={13} color={activeAlerts[0].color} />
+                    {" "}near safety
+                  </Text>
+                  <View style={styles.topCardBigStatRow}>
+                    <Text style={[styles.topCardHeroNumber, { color: activeAlerts[0].color }]}>
+                      {activeAlerts[0].bottles}
+                    </Text>
+                    <Text style={[styles.topCardHeroUnit, { color: activeAlerts[0].color }]}>
+                      btl
+                    </Text>
+                    <ChevronRight size={14} color={activeAlerts[0].color} style={{ alignSelf: "center", marginLeft: 1 }} />
                   </View>
                 </View>
               </TouchableOpacity>
@@ -1034,12 +1046,12 @@ export default function HomeScreen() {
                       {
                         backgroundColor: "rgba(239, 68, 68, 0.15)",
                         paddingVertical: 1,
-                        paddingHorizontal: 5,
+                        paddingHorizontal: 6,
                         borderRadius: 6,
                       },
                     ]}
                   >
-                    <Text style={[styles.deliveryCountPillText, { color: "#ef4444", fontSize: 9 }]}>
+                    <Text style={[styles.deliveryCountPillText, { color: "#ef4444", fontSize: 9.5 }]}>
                       {dashboardMetrics.stockout.wines + dashboardMetrics.parAlert.wines + dashboardMetrics.underSafety.wines} ALERTS
                     </Text>
                   </View>
@@ -1049,14 +1061,17 @@ export default function HomeScreen() {
                 <View style={styles.topCardRow2}>
                   <Text style={[styles.topCardSubtitle, { color: theme.textSecondary }]} numberOfLines={1}>
                     {dashboardMetrics.stockout.wines > 0
-                      ? `${dashboardMetrics.stockout.wines} Stockout · ${dashboardMetrics.parAlert.wines + dashboardMetrics.underSafety.wines} PAR`
+                      ? `${dashboardMetrics.stockout.wines} Stockout · ${dashboardMetrics.underSafety.wines > 0 ? `${dashboardMetrics.underSafety.wines} Safety` : `${dashboardMetrics.parAlert.wines} PAR`}`
                       : `${dashboardMetrics.parAlert.wines} PAR · ${dashboardMetrics.underSafety.wines} Safety`}
                   </Text>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
-                    <Text style={[styles.topCardActionText, { color: "#ef4444" }]}>
-                      {dashboardMetrics.stockout.bottles + dashboardMetrics.parAlert.bottles + dashboardMetrics.underSafety.bottles} btl
+                  <View style={styles.topCardBigStatRow}>
+                    <Text style={[styles.topCardHeroNumber, { color: "#ef4444" }]}>
+                      {dashboardMetrics.stockout.bottles + dashboardMetrics.parAlert.bottles + dashboardMetrics.underSafety.bottles}
                     </Text>
-                    <ChevronRight size={13} color="#ef4444" />
+                    <Text style={[styles.topCardHeroUnit, { color: "#ef4444" }]}>
+                      btl
+                    </Text>
+                    <ChevronRight size={14} color="#ef4444" style={{ alignSelf: "center", marginLeft: 1 }} />
                   </View>
                 </View>
               </TouchableOpacity>
@@ -1104,11 +1119,18 @@ export default function HomeScreen() {
                   <Text style={[styles.topCardSubtitle, { color: theme.textSecondary }]} numberOfLines={1}>
                     {pendingRequestsCount} request{pendingRequestsCount === 1 ? "" : "s"} in progress
                   </Text>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
-                    <Text style={[styles.topCardActionText, { color: "#d97706" }]}>
-                      {effectivePendingBottles > 0 ? `${effectivePendingBottles} btl` : "View"}
-                    </Text>
-                    <ChevronRight size={13} color="#d97706" />
+                  <View style={styles.topCardBigStatRow}>
+                    {effectivePendingBottles > 0 && (
+                      <>
+                        <Text style={[styles.topCardHeroNumber, { color: "#d97706" }]}>
+                          {effectivePendingBottles}
+                        </Text>
+                        <Text style={[styles.topCardHeroUnit, { color: "#d97706" }]}>
+                          btl
+                        </Text>
+                      </>
+                    )}
+                    <ChevronRight size={14} color="#d97706" style={{ alignSelf: "center", marginLeft: 1 }} />
                   </View>
                 </View>
               </TouchableOpacity>
@@ -1218,15 +1240,20 @@ export default function HomeScreen() {
                     </View>
 
                     {/* Row 2 */}
-                    <View style={styles.topCardRow2}>
-                      <Text style={[styles.topCardSubtitle, { color: theme.textSecondary }]} numberOfLines={1}>
-                        {alert.subtitle}
-                      </Text>
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
-                        <Text style={[styles.topCardActionText, { color: alert.color }]}>
-                          {alert.bottles} needed
+                    <View style={styles.alertCardRow2}>
+                      <View style={{ flexDirection: "row", alignItems: "baseline", gap: 3 }}>
+                        <Text style={[styles.alertHeroNumber, { color: alert.color }]}>
+                          {alert.bottles}
                         </Text>
-                        <ChevronRight size={13} color={alert.color} />
+                        <Text style={[styles.alertHeroUnit, { color: alert.color }]}>
+                          btl needed
+                        </Text>
+                      </View>
+                      <View style={[styles.alertSkuBadge, { backgroundColor: alert.bgColor, borderColor: alert.borderColor }]}>
+                        <Text style={[styles.alertSkuBadgeText, { color: alert.color }]}>
+                          {alert.wines} SKU{alert.wines === 1 ? "" : "s"}
+                        </Text>
+                        <ChevronRight size={12} color={alert.color} />
                       </View>
                     </View>
                   </TouchableOpacity>
@@ -1248,6 +1275,14 @@ export default function HomeScreen() {
                         {pulloutTasks.length}
                       </Text>
                     </View>
+                    {totalPulloutBottles > 0 && (
+                      <View style={[styles.deliveryTotalBottlesBadge, { backgroundColor: "rgba(245, 158, 11, 0.12)", borderColor: "rgba(245, 158, 11, 0.25)" }]}>
+                        <Wine size={11} color="#d97706" strokeWidth={2.4} />
+                        <Text style={[styles.deliveryTotalBottlesText, { color: "#d97706" }]}>
+                          {totalPulloutBottles} btl
+                        </Text>
+                      </View>
+                    )}
                   </View>
                 </View>
 
@@ -1256,46 +1291,58 @@ export default function HomeScreen() {
                   showsHorizontalScrollIndicator={false}
                   contentContainerStyle={{ gap: 12, paddingRight: 8 }}
                 >
-                  {pulloutTasks.map((task) => (
-                    <TouchableOpacity
-                      key={task.id}
-                      style={[
-                        styles.deliveryCardCompact,
-                        {
-                          backgroundColor: theme.card,
-                          borderColor: theme.border,
-                        },
-                      ]}
-                      onPress={() =>
-                        router.push({
-                          pathname: "/pullout/[id]",
-                          params: { id: task.id },
-                        })
-                      }
-                      activeOpacity={0.85}
-                    >
-                      <View style={styles.deliveryLine1}>
-                        <View style={styles.deliveryLine1Left}>
-                          <View style={[styles.deliveryCardIconCircle, { backgroundColor: "#f59e0b18" }]}>
-                            <ClipboardList size={14} color="#f59e0b" strokeWidth={2.4} />
+                  {pulloutTasks.map((task) => {
+                    const taskQty = task.items.reduce((acc, i) => acc + (i.requestedQty || 0), 0);
+                    return (
+                      <TouchableOpacity
+                        key={task.id}
+                        style={[
+                          styles.deliveryCardCompact,
+                          {
+                            backgroundColor: theme.card,
+                            borderColor: theme.border,
+                          },
+                        ]}
+                        onPress={() =>
+                          router.push({
+                            pathname: "/pullout/[id]",
+                            params: { id: task.id },
+                          })
+                        }
+                        activeOpacity={0.85}
+                      >
+                        <View style={styles.deliveryLine1}>
+                          <View style={styles.deliveryLine1Left}>
+                            <View style={[styles.deliveryCardIconCircle, { backgroundColor: "#f59e0b18" }]}>
+                              <ClipboardList size={14} color="#f59e0b" strokeWidth={2.4} />
+                            </View>
+                            <Text style={[styles.deliveryCardTitle, { color: theme.text }]} numberOfLines={1}>
+                              Pull Stock
+                            </Text>
                           </View>
-                          <Text style={[styles.deliveryCardTitle, { color: theme.text }]} numberOfLines={1}>
-                            Pull Stock
-                          </Text>
+                          <View style={[styles.deliveryStatusBadge, { backgroundColor: "rgba(245, 158, 11, 0.12)", borderColor: "rgba(245, 158, 11, 0.3)" }]}>
+                            <Text style={[styles.deliveryStatusBadgeText, { color: "#d97706" }]}>PULLOUT</Text>
+                          </View>
                         </View>
-                        <ChevronRight size={14} color="#94a3b8" />
-                      </View>
 
-                      <View style={styles.deliveryLine2}>
-                        <Text style={[styles.deliveryCardSubtitle, { color: theme.textSecondary }]} numberOfLines={1}>
-                          REQ: {task.id.slice(0, 4).toUpperCase()} · {task.items.reduce((acc, i) => acc + (i.requestedQty || 0), 0)} btl
-                        </Text>
-                        <View style={[styles.deliveryStatusBadge, { backgroundColor: "rgba(245, 158, 11, 0.12)", borderColor: "rgba(245, 158, 11, 0.3)" }]}>
-                          <Text style={[styles.deliveryStatusBadgeText, { color: "#d97706" }]}>PULLOUT</Text>
+                        <View style={styles.deliveryLine2}>
+                          <Text style={[styles.deliveryCardSubtitle, { color: theme.textSecondary }]} numberOfLines={1}>
+                            REQ: {task.id.slice(0, 4).toUpperCase()}
+                          </Text>
+                          <View style={styles.deliveryCardQtyContainer}>
+                            <Wine size={13} color="#d97706" strokeWidth={2.2} />
+                            <Text style={[styles.deliveryCardBigQty, { color: "#d97706" }]}>
+                              {taskQty}
+                            </Text>
+                            <Text style={[styles.deliveryCardQtyUnit, { color: "#d97706" }]}>
+                              btl
+                            </Text>
+                            <ChevronRight size={13} color="#94a3b8" style={{ marginLeft: 2 }} />
+                          </View>
                         </View>
-                      </View>
-                    </TouchableOpacity>
-                  ))}
+                      </TouchableOpacity>
+                    );
+                  })}
                 </ScrollView>
               </View>
             )}
@@ -1310,6 +1357,14 @@ export default function HomeScreen() {
                         {outboundRequests.length + incomingDeliveries.length}
                       </Text>
                     </View>
+                    {totalIncomingBottles > 0 && (
+                      <View style={styles.deliveryTotalBottlesBadge}>
+                        <Wine size={11} color="#059669" strokeWidth={2.4} />
+                        <Text style={styles.deliveryTotalBottlesText}>
+                          {totalIncomingBottles} btl incoming
+                        </Text>
+                      </View>
+                    )}
                   </View>
                   <TouchableOpacity
                     style={[
@@ -1373,15 +1428,24 @@ export default function HomeScreen() {
                               Transfer from {targetStoreName}
                             </Text>
                           </View>
-                          <ChevronRight size={14} color="#94a3b8" />
+                          <View style={styles.deliveryStatusBadge}>
+                            <Text style={styles.deliveryStatusBadgeText}>IN TRANSIT</Text>
+                          </View>
                         </View>
 
                         <View style={styles.deliveryLine2}>
                           <Text style={[styles.deliveryCardSubtitle, { color: theme.textSecondary }]} numberOfLines={1}>
-                            REQ: {req.id.slice(0, 4).toUpperCase()} · {totalQty} {totalQty === 1 ? "bottle" : "bottles"}
+                            REQ: {req.id.slice(0, 4).toUpperCase()}
                           </Text>
-                          <View style={styles.deliveryStatusBadge}>
-                            <Text style={styles.deliveryStatusBadgeText}>IN TRANSIT</Text>
+                          <View style={styles.deliveryCardQtyContainer}>
+                            <Wine size={13} color={theme.primary} strokeWidth={2.2} />
+                            <Text style={[styles.deliveryCardBigQty, { color: theme.primary }]}>
+                              {totalQty}
+                            </Text>
+                            <Text style={[styles.deliveryCardQtyUnit, { color: theme.primary }]}>
+                              btl
+                            </Text>
+                            <ChevronRight size={13} color="#94a3b8" style={{ marginLeft: 2 }} />
                           </View>
                         </View>
                       </TouchableOpacity>
@@ -1415,15 +1479,24 @@ export default function HomeScreen() {
                             Admin Delivery
                           </Text>
                         </View>
-                        <ChevronRight size={14} color="#94a3b8" />
+                        <View style={[styles.deliveryStatusBadge, { backgroundColor: "#8b5cf618", borderColor: "#8b5cf640" }]}>
+                          <Text style={[styles.deliveryStatusBadgeText, { color: "#a78bfa" }]}>DIRECT</Text>
+                        </View>
                       </View>
 
                       <View style={styles.deliveryLine2}>
                         <Text style={[styles.deliveryCardSubtitle, { color: theme.textSecondary }]} numberOfLines={1}>
-                          DEL: {del.id.slice(0, 4).toUpperCase()} · {del.totalBottles} {del.totalBottles === 1 ? "bottle" : "bottles"}
+                          DEL: {del.id.slice(0, 4).toUpperCase()}
                         </Text>
-                        <View style={[styles.deliveryStatusBadge, { backgroundColor: "#8b5cf618", borderColor: "#8b5cf640" }]}>
-                          <Text style={[styles.deliveryStatusBadgeText, { color: "#a78bfa" }]}>DIRECT</Text>
+                        <View style={styles.deliveryCardQtyContainer}>
+                          <Wine size={13} color="#8b5cf6" strokeWidth={2.2} />
+                          <Text style={[styles.deliveryCardBigQty, { color: "#8b5cf6" }]}>
+                            {del.totalBottles}
+                          </Text>
+                          <Text style={[styles.deliveryCardQtyUnit, { color: "#8b5cf6" }]}>
+                            btl
+                          </Text>
+                          <ChevronRight size={13} color="#94a3b8" style={{ marginLeft: 2 }} />
                         </View>
                       </View>
                     </TouchableOpacity>
@@ -2622,12 +2695,26 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 12,
     justifyContent: "center",
-    minHeight: 62,
+    minHeight: 68,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
     shadowRadius: 4,
     elevation: 2,
+  },
+  topCardBigStatRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: 2,
+  },
+  topCardHeroNumber: {
+    fontSize: 18,
+    fontWeight: "900",
+    letterSpacing: -0.5,
+  },
+  topCardHeroUnit: {
+    fontSize: 10.5,
+    fontWeight: "800",
   },
   topCardRow1: {
     flexDirection: "row",
@@ -2788,7 +2875,36 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.04,
     shadowRadius: 4,
     elevation: 2,
-    minHeight: 62,
+    minHeight: 68,
+  },
+  alertCardRow2: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    paddingLeft: 30,
+  },
+  alertHeroNumber: {
+    fontSize: 22,
+    fontWeight: "900",
+    letterSpacing: -0.5,
+  },
+  alertHeroUnit: {
+    fontSize: 10.5,
+    fontWeight: "800",
+  },
+  alertSkuBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+    borderRadius: 7,
+    borderWidth: 1,
+  },
+  alertSkuBadgeText: {
+    fontSize: 10.5,
+    fontWeight: "800",
   },
   inventoryStatBanner: {
     width: "100%",
@@ -2962,13 +3078,46 @@ const styles = StyleSheet.create({
   },
   deliveryCountPill: {
     backgroundColor: "rgba(16, 185, 129, 0.15)",
+    minWidth: 24,
+    height: 22,
     paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 8,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
   },
   deliveryCountPillText: {
     color: "#059669",
+    fontSize: 12,
+    fontWeight: "900",
+  },
+  deliveryTotalBottlesBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "rgba(16, 185, 129, 0.12)",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "rgba(16, 185, 129, 0.25)",
+  },
+  deliveryTotalBottlesText: {
     fontSize: 11,
+    fontWeight: "800",
+    color: "#059669",
+  },
+  deliveryCardQtyContainer: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: 2,
+  },
+  deliveryCardBigQty: {
+    fontSize: 17,
+    fontWeight: "900",
+    letterSpacing: -0.4,
+  },
+  deliveryCardQtyUnit: {
+    fontSize: 10.5,
     fontWeight: "800",
   },
   tasksRow: {
