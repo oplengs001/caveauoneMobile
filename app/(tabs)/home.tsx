@@ -126,47 +126,39 @@ export default function HomeScreen() {
       return;
     }
 
-    if (!refreshing) {
-      const cached = metricsCache.current;
-      if (
-        cached &&
-        cached.storeId === storeId &&
-        Date.now() - cached.fetchedAt < METRICS_TTL_MS
-      ) {
-        setDashboardMetrics({
-          stockout: cached.data.stockout || { wines: 0, bottles: 0 },
-          parAlert: cached.data.parAlert || { wines: 0, bottles: 0 },
-          underSafety: cached.data.underSafety || { wines: 0, bottles: 0 },
-          pendingRequests: cached.data.pendingRequests || { count: 0, bottles: 0 },
-        });
-        setLoadingMetrics(false);
-        return;
+    // Seed state immediately from cache if available (stale-while-revalidate)
+    const cached = metricsCache.current;
+    if (cached && cached.storeId === storeId) {
+      setDashboardMetrics({
+        stockout: cached.data.stockout || { wines: 0, bottles: 0 },
+        parAlert: cached.data.parAlert || { wines: 0, bottles: 0 },
+        underSafety: cached.data.underSafety || { wines: 0, bottles: 0 },
+        pendingRequests: cached.data.pendingRequests || { count: 0, bottles: 0 },
+      });
+      setLoadingMetrics(false);
+    } else {
+      const storageKey = `dashboard_metrics_${storeId}`;
+      try {
+        const raw = await AsyncStorage.getItem(storageKey);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed?.data) {
+            setDashboardMetrics({
+              stockout: parsed.data.stockout || { wines: 0, bottles: 0 },
+              parAlert: parsed.data.parAlert || { wines: 0, bottles: 0 },
+              underSafety: parsed.data.underSafety || { wines: 0, bottles: 0 },
+              pendingRequests: parsed.data.pendingRequests || { count: 0, bottles: 0 },
+            });
+            setLoadingMetrics(false);
+          }
+        }
+      } catch (e) {
+        console.warn("Invalid storage cache", e);
       }
     }
 
     try {
-      setLoadingMetrics(true);
       const storageKey = `dashboard_metrics_${storeId}`;
-      if (!refreshing && !metricsCache.current) {
-        const raw = await AsyncStorage.getItem(storageKey);
-        if (raw) {
-          try {
-            const parsed = JSON.parse(raw);
-            if (Date.now() - parsed.ts < METRICS_TTL_MS) {
-              setDashboardMetrics({
-                stockout: parsed.data.stockout || { wines: 0, bottles: 0 },
-                parAlert: parsed.data.parAlert || { wines: 0, bottles: 0 },
-                underSafety: parsed.data.underSafety || { wines: 0, bottles: 0 },
-                pendingRequests: parsed.data.pendingRequests || { count: 0, bottles: 0 },
-              });
-              setLoadingMetrics(false);
-            }
-          } catch (e) {
-            console.warn("Invalid storage cache", e);
-          }
-        }
-      }
-
       // Fetch ACTIVE pending requests to exclude wines already being re-ordered
       const [pendingData, settingsData] = await Promise.all([
         apiFetch(`/wine-requests?storeId=${storeId}&status=pending,converted,approved,in_progress,outbound,receiving`),
@@ -216,17 +208,16 @@ export default function HomeScreen() {
       });
 
       metricsCache.current = { data: metrics, storeId, fetchedAt: Date.now() };
-      await AsyncStorage.setItem(storageKey, JSON.stringify({ data: metrics, ts: Date.now() }));
+      AsyncStorage.setItem(storageKey, JSON.stringify({ data: metrics, ts: Date.now() })).catch(() => {});
       setDashboardMetrics(metrics);
     } catch (err) {
       console.error("Failed to fetch dashboard metrics:", err);
     } finally {
       setLoadingMetrics(false);
     }
-  }, [profile, refreshing]);
+  }, [profile]);
 
   const outboundCache = useRef<{ data: any; storeId: string; fetchedAt: number } | null>(null);
-  const OUTBOUND_TTL_MS = 2 * 60 * 1000;
 
   const fetchOutboundRequests = useCallback(async () => {
     const isStoreUser = profile?.role === "store" || profile?.role === "store_manager" || profile?.role === "store_staff";
@@ -235,24 +226,17 @@ export default function HomeScreen() {
       return;
     }
 
-    if (!refreshing) {
-      const cached = outboundCache.current;
-      if (
-        cached &&
-        cached.storeId === profile.locationId &&
-        Date.now() - cached.fetchedAt < OUTBOUND_TTL_MS
-      ) {
-        setOutboundRequests(cached.data.requests);
-        setIncomingDeliveries(cached.data.deliveries);
-        setPulloutTasks(cached.data.pullouts);
-        setLocations(cached.data.locMap);
-        setLoadingRequests(false);
-        return;
-      }
+    // Seed state immediately from cache if available (stale-while-revalidate)
+    const cached = outboundCache.current;
+    if (cached && cached.storeId === profile.locationId) {
+      setOutboundRequests(cached.data.requests);
+      setIncomingDeliveries(cached.data.deliveries);
+      setPulloutTasks(cached.data.pullouts);
+      setLocations(cached.data.locMap);
+      setLoadingRequests(false);
     }
 
     try {
-      setLoadingRequests(true);
       const [reqData, delData, pulloutData, storesData] = await Promise.all([
         apiFetch(`/wine-requests?storeId=${profile.locationId}&status=outbound,receiving`),
         apiFetch(`/deliveries?storeId=${profile.locationId}&status=dispatched,receiving`),
@@ -285,7 +269,7 @@ export default function HomeScreen() {
     } finally {
       setLoadingRequests(false);
     }
-  }, [profile, refreshing]);
+  }, [profile]);
 
   const fetchSalesMetrics = useCallback(async () => {
     const storeId = profile?.locationId;
@@ -519,8 +503,12 @@ export default function HomeScreen() {
     }
   }, [profile]);
 
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
+  const isRefreshingDashboard = useRef(false);
+
+  const refreshDashboard = useCallback(async (showPullIndicator = false) => {
+    if (isRefreshingDashboard.current && !showPullIndicator) return;
+    isRefreshingDashboard.current = true;
+    if (showPullIndicator) setRefreshing(true);
     try {
       const isStoreRole = profile?.role === "store" || profile?.role === "store_manager" || profile?.role === "store_staff";
       if (isStoreRole) {
@@ -531,31 +519,24 @@ export default function HomeScreen() {
         await Promise.all(promises);
       }
     } catch (e) {
-      console.error("Failed to refresh:", e);
+      console.error("Failed to refresh dashboard:", e);
     } finally {
-      setRefreshing(false);
+      isRefreshingDashboard.current = false;
+      if (showPullIndicator) setRefreshing(false);
     }
   }, [profile, fetchMetrics, fetchOutboundRequests, fetchSalesMetrics, fetchTodayCloseStatus]);
+
+  const onRefresh = useCallback(() => {
+    return refreshDashboard(true);
+  }, [refreshDashboard]);
 
   useFocusEffect(
     useCallback(() => {
       if (!loading) {
-        AsyncStorage.getItem("forceDashboardRefresh").then((flag) => {
-          if (flag === "true") {
-            AsyncStorage.removeItem("forceDashboardRefresh");
-            onRefresh();
-          } else {
-            const isStoreRole = profile?.role === "store" || profile?.role === "store_manager" || profile?.role === "store_staff";
-            if (isStoreRole) {
-              fetchMetrics();
-              fetchOutboundRequests();
-              fetchSalesMetrics();
-              fetchTodayCloseStatus();
-            }
-          }
-        });
+        AsyncStorage.removeItem("forceDashboardRefresh").catch(() => {});
+        refreshDashboard(false);
       }
-    }, [loading, profile, fetchMetrics, fetchOutboundRequests, fetchSalesMetrics, fetchTodayCloseStatus, onRefresh]),
+    }, [loading, refreshDashboard]),
   );
 
   useEffect(() => {

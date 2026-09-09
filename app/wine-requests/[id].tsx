@@ -1,17 +1,17 @@
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
+import { useResponsivePadding } from "@/hooks/useResponsivePadding";
 import { apiFetch } from "@/lib/api";
+import {
+  getWineRequestFromCache,
+  setWineRequestInCache,
+} from "@/lib/queries/wineRequests";
 import { logActivity } from "@/lib/utils/activityLogger";
 import { formatDate } from "@/lib/utils/format";
 import { InventoryBottle, PulloutRequest, WineRequest } from "@/types";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import {
-  getWineRequestFromCache,
-  setWineRequestInCache,
-} from "@/lib/queries/wineRequests";
-import { useResponsivePadding } from "@/hooks/useResponsivePadding";
 import {
   ArrowLeft,
   Ban,
@@ -60,7 +60,7 @@ export default function WineRequestDetail() {
     if (initialData) {
       try {
         return JSON.parse(initialData);
-      } catch {}
+      } catch { }
     }
     return null;
   });
@@ -321,8 +321,8 @@ export default function WineRequestDetail() {
             const bottleArr = Array.isArray(bottleRecords)
               ? bottleRecords
               : Array.isArray(bottleRecords?.bottles)
-              ? bottleRecords.bottles
-              : [];
+                ? bottleRecords.bottles
+                : [];
 
             if (bottleArr.length > 0) {
               const alreadyReceivedIds = new Set<string>();
@@ -728,9 +728,8 @@ export default function WineRequestDetail() {
         action: newStatus === "ingress_complete" ? "WINE_REQUEST_INGRESS_COMPLETE" : "BOTTLE_RECEIVED",
         entity: "wine_requests",
         entityId: request.id,
-        summary: `Batch received bottle ${expectedBottle.readableId || expectedBottle.bottleId} (${expectedBottle.wineName}) for wine request ${request.id}${
-          newStatus === "ingress_complete" ? " — all items received" : ""
-        }`,
+        summary: `Batch received bottle ${expectedBottle.readableId || expectedBottle.bottleId} (${expectedBottle.wineName}) for wine request ${request.id}${newStatus === "ingress_complete" ? " — all items received" : ""
+          }`,
         details: {
           bottleId: expectedBottle.bottleId,
           wineName: expectedBottle.wineName,
@@ -1323,8 +1322,8 @@ export default function WineRequestDetail() {
                             backgroundColor: isVerified
                               ? "rgba(16,185,129,0.15)"
                               : isSkipped
-                              ? "rgba(239,68,68,0.15)"
-                              : theme.background,
+                                ? "rgba(239,68,68,0.15)"
+                                : theme.background,
                           },
                         ]}
                       >
@@ -1991,18 +1990,18 @@ export default function WineRequestDetail() {
                       {(request.status === "converted" ||
                         request.status === "receiving" ||
                         request.status === "ingress_complete") && (
-                        <View
-                          style={[
-                            styles.progressContainer,
-                            isItemFulfilled && { backgroundColor: "#d1fae5" },
-                          ]}
-                        >
-                          <Text style={styles.progressText}>
-                            {wine.ingressedQty || 0} / {expectedQty}
-                          </Text>
-                          <Text style={styles.progressLabel}>RCVD</Text>
-                        </View>
-                      )}
+                          <View
+                            style={[
+                              styles.progressContainer,
+                              isItemFulfilled && { backgroundColor: "#d1fae5" },
+                            ]}
+                          >
+                            <Text style={styles.progressText}>
+                              {wine.ingressedQty || 0} / {expectedQty}
+                            </Text>
+                            <Text style={styles.progressLabel}>RCVD</Text>
+                          </View>
+                        )}
                     </View>
                   </View>
                 );
