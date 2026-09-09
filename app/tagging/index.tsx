@@ -1,5 +1,7 @@
 import BottlePickerModal, { BottleWithLocation } from "@/components/BottlePickerModal";
 import LabelScanModal from "@/components/LabelScanModal";
+import CustomerPickerModal from "../../components/CustomerPickerModal";
+import VatBreakdownCard, { formatCurrency } from "../../components/VatBreakdownCard";
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { apiFetch } from "@/lib/api";
@@ -25,7 +27,7 @@ import {
   X,
   Zap
 } from "lucide-react-native";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -39,7 +41,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import CustomerPickerModal from "../../components/CustomerPickerModal";
 import { Customer, InventoryBottle, Location, MasterWine } from "../../types";
 
 type TaggingState = "entry" | "scanning_qr" | "displaying" | "updating" | "success";
@@ -54,16 +55,19 @@ const STORAGE_CATEGORIES = [
 
 const VAT_RATE = 0.12;
 
-import VatBreakdownCard, { formatCurrency } from "../../components/VatBreakdownCard";
-
 // ── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function TaggingScreen() {
   const { profile } = useAuth();
-  const { horizontalPadding } = useResponsivePadding(24);
+  const { horizontalPadding, isLandscape, width } = useResponsivePadding(24);
   const isStoreUser = profile?.role === "store" || profile?.role === "store_manager" || profile?.role === "store_staff";
   const theme = isStoreUser ? Colors.store : profile?.role === "admin" ? Colors.admin : Colors.warehouse;
   const isStore = isStoreUser || profile?.role === "admin";
+
+  const leftColumnWidth = useMemo(() => {
+    if (!isLandscape) return "100%";
+    return Math.min(Math.max(width * 0.44, 380), 520);
+  }, [isLandscape, width]);
 
   const {
     bottleId: initialBottleId,
@@ -709,1097 +713,827 @@ export default function TaggingScreen() {
       <Stack.Screen options={{ headerShown: false }} />
 
       {/* ── Success ── */}
+      {/* ── Success ── */}
       {state === "success" && (
-        <View style={[styles.successContainer, { paddingHorizontal: horizontalPadding }]}>
-          <View style={styles.successCircle}>
-            <CheckCircle2 size={80} color="#10b981" strokeWidth={3} />
-          </View>
-          <Text style={styles.successTitle}>
-            {successAction === "sold"
-              ? "Bottle Sold!"
-              : successAction === "received"
-                ? "Bottle Received!"
-                : isBulkMode
-                  ? `${bulkBottleIds!.length} Bottles Tagged!`
-                  : "Location Tagged!"}
-          </Text>
-          <Text style={styles.successDesc}>
-            {successAction === "sold"
-              ? "The bottle has been marked as sold and removed from active inventory."
-              : successAction === "received"
-                ? "The bottle has been successfully added to your store's inventory."
-                : isBulkMode
-                  ? `All ${bulkBottleIds!.length} bottles have been assigned to the same storage location.`
-                  : "The bottle has been assigned to its new storage location."}
-          </Text>
+        <ScrollView
+          contentContainerStyle={[
+            styles.successContainer,
+            {
+              paddingHorizontal: isLandscape ? Math.max(horizontalPadding, 32) : horizontalPadding,
+              paddingVertical: isLandscape ? 24 : 40,
+            },
+          ]}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={{ width: "100%", maxWidth: 540, alignItems: "center" }}>
+            <View style={[styles.successCircle, isLandscape && { width: 100, height: 100, borderRadius: 50, marginBottom: 20 }]}>
+              <CheckCircle2 size={isLandscape ? 56 : 80} color="#10b981" strokeWidth={3} />
+            </View>
+            <Text style={[styles.successTitle, isLandscape && { fontSize: 26, marginBottom: 8 }]}>
+              {successAction === "sold"
+                ? "Bottle Sold!"
+                : successAction === "received"
+                  ? "Bottle Received!"
+                  : isBulkMode
+                    ? `${bulkBottleIds!.length} Bottles Tagged!`
+                    : "Location Tagged!"}
+            </Text>
+            <Text style={[styles.successDesc, isLandscape && { fontSize: 14, lineHeight: 20, marginBottom: 20 }]}>
+              {successAction === "sold"
+                ? "The bottle has been marked as sold and removed from active inventory."
+                : successAction === "received"
+                  ? "The bottle has been successfully added to your store's inventory."
+                  : isBulkMode
+                    ? `All ${bulkBottleIds!.length} bottles have been assigned to the same storage location.`
+                    : "The bottle has been assigned to its new storage location."}
+            </Text>
 
-          <View
-            style={[
-              styles.successCard,
-              { backgroundColor: theme.card, borderColor: theme.border },
-            ]}
-          >
-            <Text
+            <View
               style={[
-                styles.wineName,
-                { color: theme.text, textAlign: "center" },
+                styles.successCard,
+                { backgroundColor: theme.card, borderColor: theme.border },
+                isLandscape && { padding: 18, borderRadius: 18 },
               ]}
             >
-              {isBulkMode ? wineName : wine?.name}
-            </Text>
-            <Text
+              <Text
+                style={[
+                  styles.wineName,
+                  { color: theme.text, textAlign: "center" },
+                ]}
+              >
+                {isBulkMode ? wineName : wine?.name}
+              </Text>
+              <Text
+                style={[
+                  styles.wineVintage,
+                  {
+                    color: theme.textSecondary,
+                    textAlign: "center",
+                    marginTop: 8,
+                  },
+                ]}
+              >
+                {isBulkMode
+                  ? [wineVintage, wineProducer, wineFormat]
+                    .filter(Boolean)
+                    .join(" • ")
+                  : `${wine?.vintage} • ${wine?.producer} • ${wine?.format}`}
+              </Text>
+              {successAction === "sold" && numericBase > 0 && (
+                <View
+                  style={[
+                    styles.saleSummaryRow,
+                    { borderTopColor: theme.border },
+                  ]}
+                >
+                  <View style={styles.saleSummaryItem}>
+                    <Text
+                      style={[
+                        styles.saleSummaryLabel,
+                        { color: theme.textSecondary },
+                      ]}
+                    >
+                      BASE
+                    </Text>
+                    <Text
+                      style={[styles.saleSummaryValue, { color: theme.text }]}
+                    >
+                      {formatCurrency(numericBase)}
+                    </Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.saleSummaryDivider,
+                      { backgroundColor: theme.border },
+                    ]}
+                  />
+                  <View style={styles.saleSummaryItem}>
+                    <Text
+                      style={[
+                        styles.saleSummaryLabel,
+                        { color: theme.textSecondary },
+                      ]}
+                    >
+                      VAT 12%
+                    </Text>
+                    <Text
+                      style={[
+                        styles.saleSummaryValue,
+                        { color: theme.textSecondary },
+                      ]}
+                    >
+                      {formatCurrency(vatAmount)}
+                    </Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.saleSummaryDivider,
+                      { backgroundColor: theme.border },
+                    ]}
+                  />
+                  <View style={styles.saleSummaryItem}>
+                    <Text
+                      style={[styles.saleSummaryLabel, { color: theme.primary }]}
+                    >
+                      TOTAL
+                    </Text>
+                    <Text
+                      style={[styles.saleSummaryValue, { color: theme.primary }]}
+                    >
+                      {formatCurrency(totalWithVat)}
+                    </Text>
+                  </View>
+                </View>
+              )}
+
+              {successAction === "tagged" && selectedLocationId && (
+                <View
+                  style={[
+                    styles.saleSummaryRow,
+                    { borderTopColor: theme.border, marginTop: 16 },
+                  ]}
+                >
+                  <View style={styles.saleSummaryItem}>
+                    <Text
+                      style={[
+                        styles.saleSummaryLabel,
+                        { color: theme.textSecondary },
+                      ]}
+                    >
+                      STORAGE LOCATION
+                    </Text>
+                    <Text
+                      style={[styles.saleSummaryValue, { color: theme.primary }]}
+                    >
+                      {locations.find((l) => l.id === selectedLocationId)?.name ||
+                        selectedLocationId}
+                    </Text>
+                  </View>
+                </View>
+              )}
+            </View>
+
+            <TouchableOpacity
               style={[
-                styles.wineVintage,
-                {
-                  color: theme.textSecondary,
-                  textAlign: "center",
-                  marginTop: 8,
-                },
+                styles.mainButton,
+                { backgroundColor: theme.primary, marginTop: isLandscape ? 24 : 40, width: "100%" },
               ]}
+              onPress={() => {
+                if (source === "wine-request" && fromRequestId) {
+                  router.replace({
+                    pathname: `/wine-requests/${fromRequestId}` as any,
+                    params: { openScanner: "true" },
+                  });
+                } else if (source === "onboarding" && fromOnboardingId) {
+                  router.replace({
+                    pathname: `/onboarding/${fromOnboardingId}` as any,
+                    params: { openScanner: "true" },
+                  });
+                } else {
+                  resetSellState();
+                }
+              }}
             >
-              {isBulkMode
-                ? [wineVintage, wineProducer, wineFormat]
-                  .filter(Boolean)
-                  .join(" • ")
-                : `${wine?.vintage} • ${wine?.producer} • ${wine?.format}`}
-            </Text>
-            {successAction === "sold" && numericBase > 0 && (
-              <View
-                style={[
-                  styles.saleSummaryRow,
-                  { borderTopColor: theme.border },
-                ]}
-              >
-                <View style={styles.saleSummaryItem}>
-                  <Text
-                    style={[
-                      styles.saleSummaryLabel,
-                      { color: theme.textSecondary },
-                    ]}
-                  >
-                    BASE
-                  </Text>
-                  <Text
-                    style={[styles.saleSummaryValue, { color: theme.text }]}
-                  >
-                    {formatCurrency(numericBase)}
-                  </Text>
-                </View>
-                <View
-                  style={[
-                    styles.saleSummaryDivider,
-                    { backgroundColor: theme.border },
-                  ]}
-                />
-                <View style={styles.saleSummaryItem}>
-                  <Text
-                    style={[
-                      styles.saleSummaryLabel,
-                      { color: theme.textSecondary },
-                    ]}
-                  >
-                    VAT 12%
-                  </Text>
-                  <Text
-                    style={[
-                      styles.saleSummaryValue,
-                      { color: theme.textSecondary },
-                    ]}
-                  >
-                    {formatCurrency(vatAmount)}
-                  </Text>
-                </View>
-                <View
-                  style={[
-                    styles.saleSummaryDivider,
-                    { backgroundColor: theme.border },
-                  ]}
-                />
-                <View style={styles.saleSummaryItem}>
-                  <Text
-                    style={[styles.saleSummaryLabel, { color: theme.primary }]}
-                  >
-                    TOTAL
-                  </Text>
-                  <Text
-                    style={[styles.saleSummaryValue, { color: theme.primary }]}
-                  >
-                    {formatCurrency(totalWithVat)}
-                  </Text>
-                </View>
-              </View>
-            )}
+              <ScanQrCode size={24} color="#fff" />
+              <Text style={styles.mainButtonText}>Scan Another Bottle</Text>
+            </TouchableOpacity>
 
-            {successAction === "tagged" && selectedLocationId && (
-              <View
-                style={[
-                  styles.saleSummaryRow,
-                  { borderTopColor: theme.border, marginTop: 16 },
-                ]}
-              >
-                <View style={styles.saleSummaryItem}>
-                  <Text
-                    style={[
-                      styles.saleSummaryLabel,
-                      { color: theme.textSecondary },
-                    ]}
-                  >
-                    STORAGE LOCATION
-                  </Text>
-                  <Text
-                    style={[styles.saleSummaryValue, { color: theme.primary }]}
-                  >
-                    {locations.find((l) => l.id === selectedLocationId)?.name ||
-                      selectedLocationId}
-                  </Text>
-                </View>
-              </View>
-            )}
+            <TouchableOpacity
+              style={[styles.secondaryButton, { width: "100%" }]}
+              onPress={() => {
+                if (source === "wine-request" && fromRequestId) {
+                  router.replace(`/wine-requests/${fromRequestId}` as any);
+                } else if (source === "onboarding" && fromOnboardingId) {
+                  router.replace(`/onboarding/${fromOnboardingId}` as any);
+                } else {
+                  router.back();
+                }
+              }}
+            >
+              <Text style={styles.secondaryButtonText}>Finish & Return</Text>
+            </TouchableOpacity>
           </View>
-
-          <TouchableOpacity
-            style={[
-              styles.mainButton,
-              { backgroundColor: theme.primary, marginTop: 40 },
-            ]}
-            onPress={() => {
-              if (source === "wine-request" && fromRequestId) {
-                router.replace({
-                  pathname: `/wine-requests/${fromRequestId}` as any,
-                  params: { openScanner: "true" },
-                });
-              } else if (source === "onboarding" && fromOnboardingId) {
-                router.replace({
-                  pathname: `/onboarding/${fromOnboardingId}` as any,
-                  params: { openScanner: "true" },
-                });
-              } else {
-                resetSellState();
-              }
-            }}
-          >
-            <ScanQrCode size={24} color="#fff" />
-            <Text style={styles.mainButtonText}>Scan Another Bottle</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.secondaryButton}
-            onPress={() => {
-              if (source === "wine-request" && fromRequestId) {
-                router.replace(`/wine-requests/${fromRequestId}` as any);
-              } else if (source === "onboarding" && fromOnboardingId) {
-                router.replace(`/onboarding/${fromOnboardingId}` as any);
-              } else {
-                router.back();
-              }
-            }}
-          >
-            <Text style={styles.secondaryButtonText}>Finish & Return</Text>
-          </TouchableOpacity>
-        </View>
+        </ScrollView>
       )}
 
       {/* ── Entry Options ── */}
       {state === "entry" && (
-        <View style={{ flex: 1, paddingVertical: 24, paddingHorizontal: horizontalPadding }}>
-          <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 24 }}>
-            <TouchableOpacity
-              onPress={() => router.back()}
-              style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: theme.card, borderWidth: 1, borderColor: theme.border, alignItems: "center", justifyContent: "center", marginRight: 12 }}
-            >
-              <ChevronLeft size={22} color={theme.text} strokeWidth={2.5} />
-            </TouchableOpacity>
-            <View>
-              <Text style={{ fontSize: 26, fontWeight: "900", color: theme.text }}>Move or Tag</Text>
-              <Text style={{ fontSize: 14, color: theme.textSecondary }}>Find the bottle you want to move.</Text>
-            </View>
-          </View>
-
-          <View style={{ gap: 16, marginBottom: 32 }}>
-            <TouchableOpacity
-              style={{ flexDirection: "row", alignItems: "center", padding: 20, borderWidth: 1, borderColor: theme.border, borderRadius: 16, backgroundColor: theme.card }}
-              onPress={() => setState("scanning_qr")}
-            >
-              <View style={{ width: 56, height: 56, borderRadius: 16, backgroundColor: theme.primary + "20", alignItems: "center", justifyContent: "center" }}>
-                <ScanQrCode size={24} color={theme.primary} />
-              </View>
-              <View style={{ flex: 1, marginLeft: 16 }}>
-                <Text style={{ fontSize: 18, fontWeight: "800", color: theme.text }}>Scan QR Code</Text>
-                <Text style={{ fontSize: 14, color: theme.textSecondary }}>Fastest if bottle has sticker.</Text>
-              </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={{ flexDirection: "row", alignItems: "center", padding: 20, borderWidth: 1, borderColor: theme.border, borderRadius: 16, backgroundColor: theme.card }}
-              onPress={() => setIsLabelModalOpen(true)}
-            >
-              <View style={{ width: 56, height: 56, borderRadius: 16, backgroundColor: theme.primary + "20", alignItems: "center", justifyContent: "center" }}>
-                <Camera size={24} color={theme.primary} />
-              </View>
-              <View style={{ flex: 1, marginLeft: 16 }}>
-                <Text style={{ fontSize: 18, fontWeight: "800", color: theme.text }}>Scan Label (AI)</Text>
-                <Text style={{ fontSize: 14, color: theme.textSecondary }}>Verify physical wine label.</Text>
-              </View>
-            </TouchableOpacity>
-          </View>
-
-          <Text style={{ fontSize: 14, fontWeight: "800", color: theme.textSecondary, marginBottom: 12, textTransform: "uppercase" }}>Search Wine</Text>
-          <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12, borderRadius: 16, borderWidth: 1, borderColor: theme.border, backgroundColor: theme.card, marginBottom: 16 }}>
-            <Search size={20} color={theme.textSecondary} />
-            <TextInput
-              style={{ flex: 1, fontSize: 16, marginLeft: 12, color: theme.text }}
-              placeholder="Search by name, SKU..."
-              placeholderTextColor={theme.textSecondary}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-            />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchQuery("")}>
-                <X size={20} color={theme.textSecondary} />
-              </TouchableOpacity>
-            )}
-          </View>
-
-          <ScrollView style={{ flex: 1 }}>
-            {filteredWines.map((w) => (
-              <TouchableOpacity
-                key={w.id}
-                style={{ flexDirection: "row", alignItems: "center", paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: theme.border }}
-                onPress={() => handleSelectWine(w.id)}
-              >
-                <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: "rgba(0,0,0,0.05)", alignItems: "center", justifyContent: "center" }}>
-                  <Wine size={20} color={theme.primary} />
-                </View>
-                <View style={{ flex: 1, marginLeft: 16 }}>
-                  <Text style={{ fontSize: 16, fontWeight: "800", color: theme.text }}>{w.name}</Text>
-                  <Text style={{ fontSize: 14, color: theme.textSecondary }}>{w.vintage} • {w.producer}</Text>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-
-          <LabelScanModal
-            visible={isLabelModalOpen}
-            onClose={() => setIsLabelModalOpen(false)}
-            onBottleSelected={(id) => loadBottleData(id)}
-            theme={theme}
-          />
-          <BottlePickerModal
-            visible={isBottlePickerModalOpen}
-            onClose={() => setIsBottlePickerModalOpen(false)}
-            onBottleSelected={(id) => {
-              setIsBottlePickerModalOpen(false);
-              loadBottleData(id);
-            }}
-            bottles={bottlesList}
-            theme={theme}
-            wineName={selectedWineForPicker?.name}
-            wineVintage={selectedWineForPicker?.vintage}
-            wineProducer={selectedWineForPicker?.producer}
-          />
-        </View>
-      )}
-
-      {/* ── QR Scanner ── */}
-      {state === "scanning_qr" && (
-        <View style={styles.scannerContainer}>
-          <CameraView
-            style={styles.camera}
-            facing="back"
-            onBarcodeScanned={handleBarcodeScanned}
-            barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
-          >
-            <View style={styles.overlay}>
-              <View style={styles.scanTargetContainer}>
-                <View style={styles.scanTarget} />
-                <View style={[styles.corner, styles.topLeft]} />
-                <View style={[styles.corner, styles.topRight]} />
-                <View style={[styles.corner, styles.bottomLeft]} />
-                <View style={[styles.corner, styles.bottomRight]} />
-                <ScanQrCode
-                  size={40}
-                  color="rgba(16, 185, 129, 0.5)"
-                  style={styles.centerIcon}
-                />
-              </View>
-              <Text style={styles.instructionText}>
-                CENTER QR CODE IN FRAME
-              </Text>
-              <TouchableOpacity
-                onPress={() => setState("entry")}
-                style={styles.closeButton}
-              >
-                <X size={28} color="#fff" />
-              </TouchableOpacity>
-            </View>
-          </CameraView>
-        </View>
-      )}
-
-      {/* ── Displaying / Updating ── */}
-      {(state === "displaying" || state === "updating") && (
-        <View
-          style={[
-            styles.detailsContainer,
-            { backgroundColor: theme.background, paddingHorizontal: horizontalPadding },
-          ]}
-        >
-          {/* Header */}
-          <View
-            style={[
-              styles.header,
-              {
-                borderBottomColor: theme.border,
-                borderBottomWidth: isStore ? 1 : 0,
-              },
-            ]}
-          >
-            <TouchableOpacity
-              onPress={() => {
-                isProcessing.current = false;
-                setState("entry");
-              }}
-              style={[
-                styles.backButton,
-                {
-                  backgroundColor: isStore ? theme.card : "transparent",
-                  padding: isStore ? 10 : 0,
-                  borderRadius: 12,
-                  borderWidth: isStore ? 1 : 0,
-                  borderColor: theme.border,
-                },
-              ]}
-            >
-              <RefreshCw
-                size={20}
-                color={isStore ? theme.primary : "#fff"}
-                strokeWidth={2.5}
-              />
-              <Text
-                style={[
-                  styles.backText,
-                  { color: isStore ? theme.primary : "#fff" },
-                ]}
-              >
-                RESCAN
-              </Text>
-            </TouchableOpacity>
-            <Text style={[styles.title, { color: theme.text }]}>
-              {mode === "sell" ? "Sell Bottle" : "Tag Location"}
-            </Text>
-          </View>
-
-          {/* Wine info card */}
-          <View
-            style={[
-              styles.card,
-              { backgroundColor: theme.card, borderColor: theme.border },
-            ]}
-          >
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 8,
-                marginBottom: 8,
-              }}
-            >
-              <Box size={14} color={theme.secondary} />
-              <Text style={[styles.skuLabel, { color: theme.textSecondary }]}>
-                {isBulkMode
-                  ? `BULK TAGGING (${bulkBottleIds?.length} BOTTLES)`
-                  : `BOTTLE ID: ${bottle?.id.toUpperCase()}`}
-              </Text>
-              {wineCategory === "fun" && mode === "sell" && (
-                <View
-                  style={[
-                    styles.fastMovingChip,
-                    { backgroundColor: "#f59e0b18", borderColor: "#f59e0b40" },
-                  ]}
-                >
-                  <Zap size={10} color="#f59e0b" />
-                  <Text style={styles.fastMovingChipText}>FUN WINE</Text>
-                </View>
-              )}
-            </View>
-            <Text
-              style={[
-                styles.wineName,
-                { color: theme.text, paddingRight: mode === "sell" ? 80 : 0 },
-              ]}
-            >
-              {isBulkMode ? wineName : wine?.name || "Processing..."}
-            </Text>
-            <View
-              style={[
-                styles.wineMetaRow,
-                { paddingRight: mode === "sell" ? 80 : 0 },
-              ]}
-            >
-              <Text
-                style={[styles.wineVintage, { color: theme.textSecondary }]}
-              >
-                {isBulkMode ? wineVintage : wine?.vintage}
-              </Text>
-              <View
-                style={[styles.metaDot, { backgroundColor: theme.border }]}
-              />
-              <Text
-                style={[styles.wineProducer, { color: theme.textSecondary }]}
-              >
-                {isBulkMode ? wineProducer : (wine?.producer || "Independent Producer")}
-              </Text>
-              {(isBulkMode ? wineFormat : wine?.format) && (
-                <>
-                  <View
-                    style={[styles.metaDot, { backgroundColor: theme.border }]}
-                  />
-                  <Text
-                    style={[styles.wineFormat, { color: theme.textSecondary }]}
-                  >
-                    {isBulkMode ? wineFormat : wine?.format}
+        isLandscape ? (
+          <View style={{ flex: 1, backgroundColor: theme.background }}>
+            {/* Landscape Header */}
+            <View style={[styles.landscapeHeader, { backgroundColor: theme.background }]}>
+              <View style={styles.landscapeHeaderLeft}>
+                <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+                  <ChevronLeft size={22} color={theme.text} strokeWidth={2.5} />
+                </TouchableOpacity>
+                <View>
+                  <Text style={[styles.landscapeTitle, { color: theme.text }]}>Move or Tag</Text>
+                  <Text style={[styles.landscapeSubtitle, { color: theme.textSecondary }]}>
+                    Find or scan bottle to proceed
                   </Text>
-                </>
-              )}
-            </View>
-
-            {/* Positioned at the bottom right */}
-            {/* FEATURE TOGGLE: Hide unit cost for now */}
-            {false && mode === "sell" && wine?.price ? (
-              <View
-                style={[
-                  styles.refPriceChip,
-                  {
-                    position: "absolute",
-                    right: 16,
-                    bottom: 16,
-                    backgroundColor: theme.primary + "15",
-                    borderColor: theme.primary + "40",
-                    marginLeft: 0, // Reset from style definition
-                  },
-                ]}
-              ></View>
-            ) : null}
-          </View>
-
-          {/* ── Status-based content ── */}
-          {bottle?.status === "consumed" ? (
-            <View style={styles.incomingWarningContainer}>
-              <AlertTriangle size={48} color="#f59e0b" strokeWidth={1.5} />
-              <Text style={styles.incomingWarningTitle}>
-                Bottle Already {mode === "sell" ? "Sold" : "Consumed"}
-              </Text>
-              <Text style={styles.incomingWarningText}>
-                This bottle is already marked as &apos;consumed&apos; and cannot be
-                processed again.
-              </Text>
-              <TouchableOpacity
-                style={[
-                  styles.onboardingButton,
-                  { backgroundColor: theme.primary },
-                ]}
-                onPress={resetSellState}
-              >
-                <Text style={styles.onboardingButtonText}>
-                  SCAN ANOTHER BOTTLE
-                </Text>
-              </TouchableOpacity>
-            </View>
-          ) : bottle?.status === "incoming" ? (
-            <View style={styles.incomingWarningContainer}>
-              <AlertTriangle size={48} color="#f59e0b" strokeWidth={1.5} />
-              <Text style={styles.incomingWarningTitle}>
-                Verification Required
-              </Text>
-              <Text style={styles.incomingWarningText}>
-                This bottle is currently marked as incoming. You need to verify
-                the sticker first before it can be tagged.
-              </Text>
-              <TouchableOpacity
-                style={[
-                  styles.onboardingButton,
-                  { backgroundColor: theme.primary },
-                ]}
-                onPress={() =>
-                  isStore
-                    ? ((isProcessing.current = false),
-                      setState("entry"),
-                      setIsIncoming(false))
-                    : router.push("/onboarding")
-                }
-              >
-                <Text style={styles.onboardingButtonText}>
-                  {isStore ? "RESCAN BOTTLE" : "VIEW ONBOARDING TASKS"}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          ) : isStore && isIncoming && bottle?.status !== "outbound" ? (
-            <View style={styles.incomingWarningContainer}>
-              <AlertTriangle size={48} color="#f59e0b" strokeWidth={1.5} />
-              <Text style={styles.incomingWarningTitle}>Transfer Required</Text>
-              <Text style={styles.incomingWarningText}>
-                This bottle must be dispatched from its current location before
-                it can be received here.
-              </Text>
-              <TouchableOpacity
-                style={[
-                  styles.onboardingButton,
-                  { backgroundColor: theme.primary },
-                ]}
-                onPress={() => {
-                  isProcessing.current = false;
-                  setState("entry");
-                  setIsIncoming(false);
-                }}
-              >
-                <Text style={styles.onboardingButtonText}>RESCAN BOTTLE</Text>
-              </TouchableOpacity>
-            </View>
-          ) : isIncoming ? (
-            <View style={{ flex: 1, justifyContent: "center" }}>
-              <View
-                style={[
-                  styles.infoBanner,
-                  {
-                    flexDirection: "column",
-                    alignItems: "center",
-                    backgroundColor: "rgba(16, 185, 129, 0.05)",
-                    borderColor: "rgba(16, 185, 129, 0.2)",
-                    padding: 32,
-                    borderRadius: 24,
-                  },
-                ]}
-              >
-                <View
-                  style={{
-                    width: 64,
-                    height: 64,
-                    borderRadius: 32,
-                    backgroundColor: "rgba(16, 185, 129, 0.1)",
-                    justifyContent: "center",
-                    alignItems: "center",
-                    marginBottom: 16,
-                  }}
-                >
-                  <CheckCircle2 size={32} color="#10b981" />
                 </View>
-                <Text
-                  style={[
-                    styles.infoBannerTitle,
-                    { color: "#10b981", fontSize: 20, textAlign: "center" },
-                  ]}
-                >
-                  Ready to Receive
-                </Text>
-                <Text
-                  style={[
-                    styles.infoBannerText,
-                    { textAlign: "center", fontSize: 15, marginTop: 8 },
-                  ]}
-                >
-                  This bottle is inbound and ready. Tap the receive button below
-                  to finalize its transfer into your store inventory.
-                </Text>
+              </View>
+
+              <View style={styles.landscapeHeaderRight}>
+                <View style={[styles.landscapeStatusBadge, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                  <View style={[styles.statusDot, { backgroundColor: theme.primary }]} />
+                  <Text style={[styles.landscapeStatusBadgeText, { color: theme.text }]}>ENTRY MODE</Text>
+                </View>
               </View>
             </View>
-          ) : mode === "sell" ? (
-            /* ── Sell mode ── */
-            <ScrollView showsVerticalScrollIndicator={false}>
-              <View style={{ paddingBottom: 160 }}>
-                {/* Price input section */}
-                <View style={styles.sellSection}>
-                  <View style={styles.sellSectionHeader}>
-                    <Tag size={15} color={theme.primary} />
-                    <Text
-                      style={[styles.sellSectionTitle, { color: theme.text }]}
-                    >
-                      Sale Price
-                    </Text>
-                    <View style={{ flex: 1 }} />
-                    {wineCategory === "fun" ? (
-                      <Text
-                        style={[styles.autoFilledHint, { color: "#f59e0b" }]}
-                      >
-                        ✦ Auto-filled
-                      </Text>
-                    ) : (
-                      <View style={{ flexDirection: "row", backgroundColor: theme.primary + "1A", borderRadius: 8, padding: 2 }}>
-                        <TouchableOpacity
-                          onPress={() => setStoreVatMode("excluded")}
-                          style={{
-                            paddingHorizontal: 10,
-                            paddingVertical: 4,
-                            borderRadius: 6,
-                            backgroundColor: storeVatMode === "excluded" ? theme.card : "transparent",
-                            shadowColor: storeVatMode === "excluded" ? "#000" : "transparent",
-                            shadowOffset: { width: 0, height: 1 },
-                            shadowOpacity: 0.1,
-                            shadowRadius: 1,
-                            elevation: storeVatMode === "excluded" ? 1 : 0,
-                          }}
-                        >
-                          <Text style={{ fontSize: 10, fontWeight: "800", color: storeVatMode === "excluded" ? theme.primary : theme.primary + "80" }}>EX VAT</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          onPress={() => setStoreVatMode("included")}
-                          style={{
-                            paddingHorizontal: 10,
-                            paddingVertical: 4,
-                            borderRadius: 6,
-                            backgroundColor: storeVatMode === "included" ? theme.card : "transparent",
-                            shadowColor: storeVatMode === "included" ? "#000" : "transparent",
-                            shadowOffset: { width: 0, height: 1 },
-                            shadowOpacity: 0.1,
-                            shadowRadius: 1,
-                            elevation: storeVatMode === "included" ? 1 : 0,
-                          }}
-                        >
-                          <Text style={{ fontSize: 10, fontWeight: "800", color: storeVatMode === "included" ? theme.primary : theme.primary + "80" }}>INC VAT</Text>
-                        </TouchableOpacity>
-                      </View>
-                    )}
-                  </View>
-                  <View
-                    style={[
-                      styles.priceInputWrapper,
-                      {
-                        backgroundColor: theme.card,
-                        borderColor: priceError
-                          ? "#ef4444"
-                          : salePrice
-                            ? theme.primary + "60"
-                            : theme.border,
-                      },
-                    ]}
+
+            {/* Dual Pane Layout */}
+            <View style={styles.landscapeMainWrapper}>
+              {/* Left Column: Quick Actions & Search Input */}
+              <View style={[styles.landscapeLeftColumn, { width: leftColumnWidth }]}>
+                <Text style={[styles.sectionTitle, { marginBottom: 4 }]}>Quick Entry</Text>
+                <View style={{ gap: 10 }}>
+                  <TouchableOpacity
+                    style={[styles.landscapeEntryCard, { backgroundColor: theme.card, borderColor: theme.border }]}
+                    onPress={() => setState("scanning_qr")}
                   >
-                    <Text
-                      style={[
-                        styles.currencySymbol,
-                        { color: theme.textSecondary },
-                      ]}
-                    >
-                      ₱
-                    </Text>
-                    <TextInput
-                      style={[styles.priceInput, { color: theme.text }]}
-                      placeholder="0.00"
-                      placeholderTextColor={theme.textSecondary}
-                      keyboardType="decimal-pad"
-                      value={salePrice}
-                      onChangeText={(text) => {
-                        setSalePrice(text);
-                        if (priceError) setPriceError(null);
-                      }}
-                    />
-                  </View>
-                  {priceError ? (
-                    <Text style={{ color: "#ef4444", fontSize: 12, fontWeight: "600", marginTop: 8, paddingHorizontal: 4 }}>
-                      {priceError}
-                    </Text>
-                  ) : wineCategory !== "fun" ? (
-                    <Text
-                      style={[styles.priceHint, { color: theme.textSecondary }]}
-                    >
-                      {storeVatMode === "included" ? "Enter the gross price. VAT will be extracted automatically." : "Enter the agreed sale price for this bottle."}
-                    </Text>
-                  ) : null}
+                    <View style={[styles.entryIconWrapper, { backgroundColor: theme.primary + "18" }]}>
+                      <ScanQrCode size={22} color={theme.primary} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.entryTitle, { color: theme.text }]}>Scan QR Code</Text>
+                      <Text style={[styles.entrySubtitle, { color: theme.textSecondary }]}>
+                        Fastest if bottle has sticker
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.landscapeEntryCard, { backgroundColor: theme.card, borderColor: theme.border }]}
+                    onPress={() => setIsLabelModalOpen(true)}
+                  >
+                    <View style={[styles.entryIconWrapper, { backgroundColor: theme.primary + "18" }]}>
+                      <Camera size={22} color={theme.primary} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.entryTitle, { color: theme.text }]}>Scan Label (AI)</Text>
+                      <Text style={[styles.entrySubtitle, { color: theme.textSecondary }]}>
+                        Verify physical wine label
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
                 </View>
 
-                {/* VAT Breakdown Card */}
-                <VatBreakdownCard
-                  basePrice={salePrice}
-                  theme={theme}
-                  isFastMoving={wineCategory === "fun"}
-                  vatMode={storeVatMode}
-                />
-
-                {/* Customer */}
-                <View style={styles.sellSection}>
-                  <View style={styles.sellSectionHeader}>
-                    <User size={15} color={theme.textSecondary} />
-                    <Text
-                      style={[styles.sellSectionTitle, { color: theme.text }]}
-                    >
-                      Customer
-                      <Text
-                        style={[
-                          styles.optionalLabel,
-                          { color: theme.textSecondary },
-                        ]}
-                      >
-                        {" "}
-                        (optional)
-                      </Text>
-                    </Text>
-                  </View>
-
-                  {selectedCustomer ? (
-                    <View
-                      style={[
-                        styles.buyerInput,
-                        {
-                          flexDirection: "row",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          backgroundColor: theme.primary + "1A",
-                          borderColor: theme.primary + "40",
-                        },
-                      ]}
-                    >
-                      <View style={{ flexDirection: "row", alignItems: "center", flex: 1, gap: 10 }}>
-                        <User size={16} color={theme.primary} />
-                        <Text style={{ fontSize: 16, fontWeight: "700", color: theme.primary }} numberOfLines={1}>
-                          {selectedCustomer.name}
-                        </Text>
-                      </View>
-                      <TouchableOpacity onPress={() => setSelectedCustomer(null)} style={{ padding: 4 }}>
-                        <X size={20} color={theme.primary} />
-                      </TouchableOpacity>
-                    </View>
-                  ) : (
-                    <TouchableOpacity
-                      onPress={() => setIsCustomerModalOpen(true)}
-                      style={[
-                        styles.buyerInput,
-                        {
-                          flexDirection: "row",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          backgroundColor: theme.card,
-                          borderColor: theme.border,
-                        },
-                      ]}
-                    >
-                      <Text style={{ fontSize: 15, color: theme.textSecondary, fontWeight: "600" }}>
-                        Select or add customer...
-                      </Text>
-                      <Plus size={20} color={theme.textSecondary} />
+                <Text style={[styles.sectionTitle, { marginTop: 14, marginBottom: 6 }]}>Filter Catalog</Text>
+                <View style={[styles.landscapeSearchBar, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                  <Search size={18} color={theme.textSecondary} />
+                  <TextInput
+                    style={{ flex: 1, fontSize: 14, marginLeft: 10, color: theme.text }}
+                    placeholder="Search by name, SKU..."
+                    placeholderTextColor={theme.textSecondary}
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                  />
+                  {searchQuery.length > 0 && (
+                    <TouchableOpacity onPress={() => setSearchQuery("")}>
+                      <X size={18} color={theme.textSecondary} />
                     </TouchableOpacity>
                   )}
                 </View>
               </View>
-            </ScrollView>
-          ) : (
-            /* ── Tag location mode ── */
-            <>
-              {isStore && (
-                <View
-                  style={[
-                    styles.infoBanner,
-                    {
-                      backgroundColor: "rgba(99, 102, 241, 0.05)",
-                      borderColor: "rgba(99, 102, 241, 0.2)",
-                    },
-                  ]}
-                >
-                  <Wine size={24} color="#6366f1" />
-                  <View style={{ flex: 1 }}>
-                    <Text
-                      style={[styles.infoBannerTitle, { color: "#6366f1" }]}
+
+              {/* Right Column: Filtered Master Wines List */}
+              <View style={styles.landscapeRightColumn}>
+                <View style={styles.landscapeRightHeader}>
+                  <Text style={[styles.sectionTitle, { fontSize: 13 }]}>
+                    Catalog Wines ({filteredWines.length})
+                  </Text>
+                  <Text style={{ fontSize: 11, fontWeight: "700", color: theme.textSecondary }}>
+                    Tap to select bottle
+                  </Text>
+                </View>
+
+                <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 16, gap: 8 }}>
+                  {filteredWines.map((w) => (
+                    <TouchableOpacity
+                      key={w.id}
+                      style={[styles.landscapeWineRow, { backgroundColor: theme.card, borderColor: theme.border }]}
+                      onPress={() => handleSelectWine(w.id)}
                     >
-                      Store Actions
-                    </Text>
-                    <Text style={styles.infoBannerText}>
-                      This item is active in your inventory. Select a physical
-                      bin below.
-                    </Text>
+                      <View style={[styles.wineIconWrapper, { backgroundColor: theme.background }]}>
+                        <Wine size={18} color={theme.primary} />
+                      </View>
+                      <View style={{ flex: 1, paddingRight: 8 }}>
+                        <Text style={{ fontSize: 14, fontWeight: "800", color: theme.text }} numberOfLines={1}>
+                          {w.name}
+                        </Text>
+                        <Text style={{ fontSize: 11, color: theme.textSecondary, marginTop: 2 }}>
+                          {[w.vintage, w.producer, w.format].filter(Boolean).join(" • ")}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            </View>
+
+            <LabelScanModal
+              visible={isLabelModalOpen}
+              onClose={() => setIsLabelModalOpen(false)}
+              onBottleSelected={(id) => loadBottleData(id)}
+              theme={theme}
+            />
+            <BottlePickerModal
+              visible={isBottlePickerModalOpen}
+              onClose={() => setIsBottlePickerModalOpen(false)}
+              onBottleSelected={(id) => {
+                setIsBottlePickerModalOpen(false);
+                loadBottleData(id);
+              }}
+              bottles={bottlesList}
+              theme={theme}
+              wineName={selectedWineForPicker?.name}
+              wineVintage={selectedWineForPicker?.vintage}
+              wineProducer={selectedWineForPicker?.producer}
+            />
+          </View>
+        ) : (
+          <View style={{ flex: 1, paddingVertical: 24, paddingHorizontal: horizontalPadding }}>
+            <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 24 }}>
+              <TouchableOpacity
+                onPress={() => router.back()}
+                style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: theme.card, borderWidth: 1, borderColor: theme.border, alignItems: "center", justifyContent: "center", marginRight: 12 }}
+              >
+                <ChevronLeft size={22} color={theme.text} strokeWidth={2.5} />
+              </TouchableOpacity>
+              <View>
+                <Text style={{ fontSize: 26, fontWeight: "900", color: theme.text }}>Move or Tag</Text>
+                <Text style={{ fontSize: 14, color: theme.textSecondary }}>Find the bottle you want to move.</Text>
+              </View>
+            </View>
+
+            <View style={{ gap: 16, marginBottom: 32 }}>
+              <TouchableOpacity
+                style={{ flexDirection: "row", alignItems: "center", padding: 20, borderWidth: 1, borderColor: theme.border, borderRadius: 16, backgroundColor: theme.card }}
+                onPress={() => setState("scanning_qr")}
+              >
+                <View style={{ width: 56, height: 56, borderRadius: 16, backgroundColor: theme.primary + "20", alignItems: "center", justifyContent: "center" }}>
+                  <ScanQrCode size={24} color={theme.primary} />
+                </View>
+                <View style={{ flex: 1, marginLeft: 16 }}>
+                  <Text style={{ fontSize: 18, fontWeight: "800", color: theme.text }}>Scan QR Code</Text>
+                  <Text style={{ fontSize: 14, color: theme.textSecondary }}>Fastest if bottle has sticker.</Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={{ flexDirection: "row", alignItems: "center", padding: 20, borderWidth: 1, borderColor: theme.border, borderRadius: 16, backgroundColor: theme.card }}
+                onPress={() => setIsLabelModalOpen(true)}
+              >
+                <View style={{ width: 56, height: 56, borderRadius: 16, backgroundColor: theme.primary + "20", alignItems: "center", justifyContent: "center" }}>
+                  <Camera size={24} color={theme.primary} />
+                </View>
+                <View style={{ flex: 1, marginLeft: 16 }}>
+                  <Text style={{ fontSize: 18, fontWeight: "800", color: theme.text }}>Scan Label (AI)</Text>
+                  <Text style={{ fontSize: 14, color: theme.textSecondary }}>Verify physical wine label.</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={{ fontSize: 14, fontWeight: "800", color: theme.textSecondary, marginBottom: 12, textTransform: "uppercase" }}>Search Wine</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12, borderRadius: 16, borderWidth: 1, borderColor: theme.border, backgroundColor: theme.card, marginBottom: 16 }}>
+              <Search size={20} color={theme.textSecondary} />
+              <TextInput
+                style={{ flex: 1, fontSize: 16, marginLeft: 12, color: theme.text }}
+                placeholder="Search by name, SKU..."
+                placeholderTextColor={theme.textSecondary}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+              />
+              {searchQuery.length > 0 && (
+                <TouchableOpacity onPress={() => setSearchQuery("")}>
+                  <X size={20} color={theme.textSecondary} />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <ScrollView style={{ flex: 1 }}>
+              {filteredWines.map((w) => (
+                <TouchableOpacity
+                  key={w.id}
+                  style={{ flexDirection: "row", alignItems: "center", paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: theme.border }}
+                  onPress={() => handleSelectWine(w.id)}
+                >
+                  <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: "rgba(0,0,0,0.05)", alignItems: "center", justifyContent: "center" }}>
+                    <Wine size={20} color={theme.primary} />
+                  </View>
+                  <View style={{ flex: 1, marginLeft: 16 }}>
+                    <Text style={{ fontSize: 16, fontWeight: "800", color: theme.text }}>{w.name}</Text>
+                    <Text style={{ fontSize: 14, color: theme.textSecondary }}>{w.vintage} • {w.producer}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            <LabelScanModal
+              visible={isLabelModalOpen}
+              onClose={() => setIsLabelModalOpen(false)}
+              onBottleSelected={(id) => loadBottleData(id)}
+              theme={theme}
+            />
+            <BottlePickerModal
+              visible={isBottlePickerModalOpen}
+              onClose={() => setIsBottlePickerModalOpen(false)}
+              onBottleSelected={(id) => {
+                setIsBottlePickerModalOpen(false);
+                loadBottleData(id);
+              }}
+              bottles={bottlesList}
+              theme={theme}
+              wineName={selectedWineForPicker?.name}
+              wineVintage={selectedWineForPicker?.vintage}
+              wineProducer={selectedWineForPicker?.producer}
+            />
+          </View>
+        )
+      )}
+
+      {/* ── QR Scanner ── */}
+      {state === "scanning_qr" && (
+        isLandscape ? (
+          <View style={{ flex: 1, backgroundColor: theme.background }}>
+            {/* Landscape Header */}
+            <View style={[styles.landscapeHeader, { backgroundColor: theme.background }]}>
+              <View style={styles.landscapeHeaderLeft}>
+                <TouchableOpacity onPress={() => setState("entry")} style={styles.backButton}>
+                  <ChevronLeft size={22} color={theme.text} strokeWidth={2.5} />
+                </TouchableOpacity>
+                <View>
+                  <Text style={[styles.landscapeTitle, { color: theme.text }]}>Scan Bottle QR</Text>
+                  <Text style={[styles.landscapeSubtitle, { color: theme.textSecondary }]}>
+                    Align QR barcode in camera view
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.landscapeHeaderRight}>
+                <TouchableOpacity
+                  onPress={() => setState("entry")}
+                  style={[styles.cancelScanButtonLandscape, { paddingHorizontal: 12, paddingVertical: 6 }]}
+                >
+                  <Text style={styles.cancelScanTextLandscape}>Cancel</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Dual Pane Layout */}
+            <View style={styles.landscapeMainWrapper}>
+              {/* Left Column: Embedded Camera */}
+              <View style={[styles.landscapeLeftColumn, { width: leftColumnWidth }]}>
+                <View style={styles.landscapeScannerCard}>
+                  <CameraView
+                    style={StyleSheet.absoluteFill}
+                    facing="back"
+                    onBarcodeScanned={handleBarcodeScanned}
+                    barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
+                  />
+                  <View style={styles.scannerOverlay}>
+                    <View style={styles.scanTargetLandscape}>
+                      <ScanQrCode size={36} color="rgba(16, 185, 129, 0.5)" />
+                    </View>
+                    <Text style={styles.scanTextSmall}>Center QR Code in Frame</Text>
+                    <TouchableOpacity
+                      onPress={() => setState("entry")}
+                      style={styles.cancelScanButtonLandscape}
+                    >
+                      <Text style={styles.cancelScanTextLandscape}>Stop Scanner</Text>
+                    </TouchableOpacity>
                   </View>
                 </View>
-              )}
-              <View style={styles.sectionHeader}>
-                <View
-                  style={{
-                    flex: 1,
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 10,
-                  }}
-                >
-                  <Map size={18} color="#64748b" />
-                  <Text style={styles.sectionTitle}>Storage Location</Text>
-                </View>
-                <TouchableOpacity
-                  onPress={() => setIsAddModalOpen(true)}
-                  style={[
-                    styles.addLocationButton,
-                    { borderColor: theme.border },
-                  ]}
-                >
-                  <Plus size={14} color={theme.primary} strokeWidth={3} />
-                  <Text
-                    style={[styles.addLocationText, { color: theme.primary }]}
-                  >
-                    NEW
-                  </Text>
-                </TouchableOpacity>
               </View>
 
-              <View
-                style={[
-                  styles.locationToggleContainer,
-                  { backgroundColor: theme.card, borderColor: theme.border },
-                ]}
-              >
-                <TouchableOpacity
-                  style={[
-                    styles.locationToggleTab,
-                    locationInputMode === "browse" && {
-                      backgroundColor: theme.primary,
-                    },
-                  ]}
-                  onPress={() => setLocationInputMode("browse")}
-                >
-                  <Search
-                    size={14}
-                    color={
-                      locationInputMode === "browse"
-                        ? "#fff"
-                        : theme.textSecondary
-                    }
-                  />
-                  <Text
-                    style={[
-                      styles.locationToggleText,
-                      {
-                        color:
-                          locationInputMode === "browse"
-                            ? "#fff"
-                            : theme.textSecondary,
-                      },
-                    ]}
-                  >
-                    Browse
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.locationToggleTab,
-                    locationInputMode === "scan" && {
-                      backgroundColor: theme.primary,
-                    },
-                  ]}
-                  onPress={() => setLocationInputMode("scan")}
-                >
-                  <ScanQrCode
-                    size={14}
-                    color={
-                      locationInputMode === "scan"
-                        ? "#fff"
-                        : theme.textSecondary
-                    }
-                  />
-                  <Text
-                    style={[
-                      styles.locationToggleText,
-                      {
-                        color:
-                          locationInputMode === "scan"
-                            ? "#fff"
-                            : theme.textSecondary,
-                      },
-                    ]}
-                  >
-                    Scan QR
-                  </Text>
-                </TouchableOpacity>
-              </View>
-
-              {locationInputMode === "scan" ? (
-                <View style={styles.scanLocationContainer}>
-                  <CameraView
-                    style={styles.scanLocationCamera}
-                    facing="back"
-                    onBarcodeScanned={({ data }) => {
-                      if (isPrompting.current) return;
-                      const found = locations.find((l) => l.id === data);
-                      if (found) {
-                        if (selectedLocationId === data) return;
-                        isPrompting.current = true;
-                        Alert.alert(
-                          "Confirm Location",
-                          `Set location to ${found.name} (${found.type})?`,
-                          [
-                            {
-                              text: "Cancel",
-                              style: "cancel",
-                              onPress: () => {
-                                isPrompting.current = false;
-                              },
-                            },
-                            {
-                              text: "Confirm",
-                              onPress: () => {
-                                setSelectedLocationId(data);
-                                showSnackbar(`Location ${found.name} selected`);
-                                isPrompting.current = false;
-                                handleConfirmTagging(data);
-                              },
-                            },
-                          ],
-                          {
-                            onDismiss: () => {
-                              isPrompting.current = false;
-                            },
-                          },
-                        );
-                      } else {
-                        const now = Date.now();
-                        if (now - lastInvalidScanTime.current > 2000) {
-                          lastInvalidScanTime.current = now;
-                          showSnackbar("Location not found");
-                        }
-                      }
-                    }}
-                  />
-                  <Text
-                    style={[
-                      styles.scanLocationHint,
-                      { color: theme.textSecondary },
-                    ]}
-                  >
-                    Scan a unit&apos;s QR code to set location
+              {/* Right Column: Search Catalog while Scanner is Active */}
+              <View style={styles.landscapeRightColumn}>
+                <View style={styles.landscapeRightHeader}>
+                  <Text style={[styles.sectionTitle, { fontSize: 13 }]}>Manual Lookup Catalog</Text>
+                  <Text style={{ fontSize: 11, fontWeight: "700", color: theme.textSecondary }}>
+                    {filteredWines.length} wines
                   </Text>
                 </View>
-              ) : (
-                <ScrollView
-                  contentContainerStyle={styles.locationList}
-                  showsVerticalScrollIndicator={false}
-                >
-                  {locations.length === 0 ? (
-                    <View style={styles.emptyContainer}>
-                      <AlertTriangle size={48} color="#334155" />
-                      <Text style={styles.emptyText}>
-                        No storage locations configured.
-                      </Text>
-                    </View>
-                  ) : (
-                    sortedLocationTypes.map((type) => (
-                      <View key={type} style={styles.locationGroup}>
-                        <Text
-                          style={[
-                            styles.locationGroupTitle,
-                            { color: theme.text },
-                          ]}
-                        >
-                          {type}s{" "}
-                          <Text style={styles.locationGroupCount}>
-                            ({groupedLocations[type].length})
-                          </Text>
+
+                <View style={[styles.landscapeSearchBar, { backgroundColor: theme.card, borderColor: theme.border, marginBottom: 10 }]}>
+                  <Search size={18} color={theme.textSecondary} />
+                  <TextInput
+                    style={{ flex: 1, fontSize: 13, marginLeft: 10, color: theme.text }}
+                    placeholder="Search wine name or SKU..."
+                    placeholderTextColor={theme.textSecondary}
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                  />
+                  {searchQuery.length > 0 && (
+                    <TouchableOpacity onPress={() => setSearchQuery("")}>
+                      <X size={18} color={theme.textSecondary} />
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 16, gap: 8 }}>
+                  {filteredWines.map((w) => (
+                    <TouchableOpacity
+                      key={w.id}
+                      style={[styles.landscapeWineRow, { backgroundColor: theme.card, borderColor: theme.border }]}
+                      onPress={() => handleSelectWine(w.id)}
+                    >
+                      <View style={[styles.wineIconWrapper, { backgroundColor: theme.background }]}>
+                        <Wine size={18} color={theme.primary} />
+                      </View>
+                      <View style={{ flex: 1, paddingRight: 8 }}>
+                        <Text style={{ fontSize: 13, fontWeight: "800", color: theme.text }} numberOfLines={1}>
+                          {w.name}
                         </Text>
-                        <View style={styles.locationGroupGrid}>
-                          {groupedLocations[type].map((item) => (
-                            <TouchableOpacity
-                              key={item.id}
-                              style={[
-                                styles.locationItem,
-                                {
-                                  backgroundColor: theme.card,
-                                  borderColor: theme.border,
-                                  width: "48%",
-                                  flex: 0,
-                                  marginBottom: 0,
-                                },
-                                selectedLocationId === item.id && [
-                                  styles.locationItemSelected,
-                                  {
-                                    backgroundColor: theme.accent,
-                                    borderColor: theme.accent,
-                                  },
-                                ],
-                              ]}
-                              onPress={() => setSelectedLocationId(item.id)}
-                            >
-                              <View
-                                style={[
-                                  styles.locationIconContainer,
-                                  {
-                                    backgroundColor:
-                                      selectedLocationId === item.id
-                                        ? "rgba(255,255,255,0.2)"
-                                        : theme.background,
-                                  },
-                                ]}
-                              >
-                                <Text
-                                  style={[
-                                    styles.locationPrefix,
-                                    {
-                                      color:
-                                        selectedLocationId === item.id
-                                          ? "#fff"
-                                          : theme.primary,
-                                    },
-                                  ]}
-                                >
-                                  {(item as any).prefix ||
-                                    (item.type === "Locker"
-                                      ? "L"
-                                      : item.type.charAt(0))}
-                                </Text>
-                              </View>
-                              <Text
-                                style={[
-                                  styles.locationName,
-                                  { color: theme.text },
-                                  selectedLocationId === item.id &&
-                                  styles.locationNameSelected,
-                                ]}
-                              >
-                                {item.name}
-                              </Text>
-                            </TouchableOpacity>
-                          ))}
+                        <Text style={{ fontSize: 11, color: theme.textSecondary, marginTop: 2 }}>
+                          {[w.vintage, w.producer].filter(Boolean).join(" • ")}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.scannerContainer}>
+            <CameraView
+              style={styles.camera}
+              facing="back"
+              onBarcodeScanned={handleBarcodeScanned}
+              barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
+            >
+              <View style={styles.overlay}>
+                <View style={styles.scanTargetContainer}>
+                  <View style={styles.scanTarget} />
+                  <View style={[styles.corner, styles.topLeft]} />
+                  <View style={[styles.corner, styles.topRight]} />
+                  <View style={[styles.corner, styles.bottomLeft]} />
+                  <View style={[styles.corner, styles.bottomRight]} />
+                  <ScanQrCode
+                    size={40}
+                    color="rgba(16, 185, 129, 0.5)"
+                    style={styles.centerIcon}
+                  />
+                </View>
+                <Text style={styles.instructionText}>
+                  CENTER QR CODE IN FRAME
+                </Text>
+                <TouchableOpacity
+                  onPress={() => setState("entry")}
+                  style={styles.closeButton}
+                >
+                  <X size={28} color="#fff" />
+                </TouchableOpacity>
+              </View>
+            </CameraView>
+          </View>
+        )
+      )}
+
+      {/* ── Displaying / Updating ── */}
+      {(state === "displaying" || state === "updating") && (
+        isLandscape ? (
+          <View style={{ flex: 1, backgroundColor: theme.background }}>
+            {/* Landscape Header */}
+            <View style={[styles.landscapeHeader, { backgroundColor: theme.background }]}>
+              <View style={styles.landscapeHeaderLeft}>
+                <TouchableOpacity
+                  onPress={() => {
+                    isProcessing.current = false;
+                    setState("entry");
+                  }}
+                  style={styles.backButton}
+                >
+                  <RefreshCw size={18} color={theme.primary} strokeWidth={2.5} />
+                  <Text style={[styles.backText, { color: theme.primary }]}>RESCAN</Text>
+                </TouchableOpacity>
+                <View>
+                  <Text style={[styles.landscapeTitle, { color: theme.text }]}>
+                    {mode === "sell" ? "Sell Bottle" : isBulkMode ? "Bulk Tagging" : "Tag Location"}
+                  </Text>
+                  <Text style={[styles.landscapeSubtitle, { color: theme.textSecondary }]}>
+                    {isBulkMode
+                      ? `${bulkBottleIds?.length} BOTTLES • ${wineName || wine?.name || ""}`
+                      : `BOTTLE ID: ${bottle?.id.toUpperCase() || "..."}`}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.landscapeHeaderRight}>
+                <View style={[styles.landscapeStatusBadge, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                  <View
+                    style={[
+                      styles.statusDot,
+                      {
+                        backgroundColor:
+                          mode === "sell"
+                            ? "#f59e0b"
+                            : bottle?.status === "shelved"
+                            ? "#10b981"
+                            : bottle?.status === "received"
+                            ? "#3b82f6"
+                            : "#8b5cf6",
+                      },
+                    ]}
+                  />
+                  <Text style={[styles.landscapeStatusBadgeText, { color: theme.text }]}>
+                    {mode === "sell" ? "SELL MODE" : (bottle?.status || "INVENTORY").toUpperCase()}
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Split Dual-Pane */}
+            <View style={styles.landscapeMainWrapper}>
+              {mode === "sell" ? (
+                /* ── Sell Mode Landscape Split ── */
+                <>
+                  {/* Left Column: Wine Details + Price & Customer Inputs */}
+                  <View style={[styles.landscapeLeftColumn, { width: leftColumnWidth }]}>
+                    <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 12 }}>
+                      {/* Wine info card */}
+                      <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border, marginBottom: 0, padding: 16 }]}>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                          <Box size={14} color={theme.secondary} />
+                          <Text style={[styles.skuLabel, { color: theme.textSecondary }]}>
+                            BOTTLE ID: {bottle?.id.toUpperCase()}
+                          </Text>
+                          {wineCategory === "fun" && (
+                            <View style={[styles.fastMovingChip, { backgroundColor: "#f59e0b18", borderColor: "#f59e0b40" }]}>
+                              <Zap size={10} color="#f59e0b" />
+                              <Text style={styles.fastMovingChipText}>FUN WINE</Text>
+                            </View>
+                          )}
+                        </View>
+                        <Text style={[styles.wineName, { color: theme.text, fontSize: 16 }]} numberOfLines={2}>
+                          {wine?.name || "Processing..."}
+                        </Text>
+                        <View style={styles.wineMetaRow}>
+                          <Text style={[styles.wineVintage, { color: theme.textSecondary, fontSize: 13 }]}>{wine?.vintage}</Text>
+                          <View style={[styles.metaDot, { backgroundColor: theme.border }]} />
+                          <Text style={[styles.wineProducer, { color: theme.textSecondary, fontSize: 12 }]}>{wine?.producer || "Independent Producer"}</Text>
+                          {wine?.format && (
+                            <>
+                              <View style={[styles.metaDot, { backgroundColor: theme.border }]} />
+                              <Text style={[styles.wineFormat, { color: theme.textSecondary, fontSize: 12 }]}>{wine?.format}</Text>
+                            </>
+                          )}
                         </View>
                       </View>
-                    ))
-                  )}
-                </ScrollView>
-              )}
-            </>
-          )}
 
-          {/* ── Footer ── */}
-          <View style={[styles.footer, { backgroundColor: theme.background }]}>
-            {bottle?.status !== "incoming" &&
-              bottle?.status !== "consumed" &&
-              !(isStore && isIncoming && bottle?.status !== "outbound") && (
-                <>
-                  {mode === "sell" ? (
-                    isStore && (
-                      <>
-                        {/* Inline price summary strip above button */}
-                        {numericBase > 0 && (
+                      {/* Price input section */}
+                      <View style={[styles.landscapeCardSection, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                        <View style={styles.sellSectionHeader}>
+                          <Tag size={15} color={theme.primary} />
+                          <Text style={[styles.sellSectionTitle, { color: theme.text, fontSize: 13 }]}>Sale Price</Text>
+                          <View style={{ flex: 1 }} />
+                          {wineCategory === "fun" ? (
+                            <Text style={[styles.autoFilledHint, { color: "#f59e0b" }]}>✦ Auto-filled</Text>
+                          ) : (
+                            <View style={{ flexDirection: "row", backgroundColor: theme.primary + "1A", borderRadius: 8, padding: 2 }}>
+                              <TouchableOpacity
+                                onPress={() => setStoreVatMode("excluded")}
+                                style={{
+                                  paddingHorizontal: 8,
+                                  paddingVertical: 3,
+                                  borderRadius: 6,
+                                  backgroundColor: storeVatMode === "excluded" ? theme.card : "transparent",
+                                }}
+                              >
+                                <Text style={{ fontSize: 10, fontWeight: "800", color: storeVatMode === "excluded" ? theme.primary : theme.primary + "80" }}>EX VAT</Text>
+                              </TouchableOpacity>
+                              <TouchableOpacity
+                                onPress={() => setStoreVatMode("included")}
+                                style={{
+                                  paddingHorizontal: 8,
+                                  paddingVertical: 3,
+                                  borderRadius: 6,
+                                  backgroundColor: storeVatMode === "included" ? theme.card : "transparent",
+                                }}
+                              >
+                                <Text style={{ fontSize: 10, fontWeight: "800", color: storeVatMode === "included" ? theme.primary : theme.primary + "80" }}>INC VAT</Text>
+                              </TouchableOpacity>
+                            </View>
+                          )}
+                        </View>
+                        <View
+                          style={[
+                            styles.priceInputWrapper,
+                            {
+                              backgroundColor: theme.background,
+                              borderColor: priceError
+                                ? "#ef4444"
+                                : salePrice
+                                ? theme.primary + "60"
+                                : theme.border,
+                              height: 52,
+                            },
+                          ]}
+                        >
+                          <Text style={[styles.currencySymbol, { color: theme.textSecondary, fontSize: 18 }]}>₱</Text>
+                          <TextInput
+                            style={[styles.priceInput, { color: theme.text, fontSize: 22 }]}
+                            placeholder="0.00"
+                            placeholderTextColor={theme.textSecondary}
+                            keyboardType="decimal-pad"
+                            value={salePrice}
+                            onChangeText={(text) => {
+                              setSalePrice(text);
+                              if (priceError) setPriceError(null);
+                            }}
+                          />
+                        </View>
+                        {priceError ? (
+                          <Text style={{ color: "#ef4444", fontSize: 11, fontWeight: "600", marginTop: 6 }}>
+                            {priceError}
+                          </Text>
+                        ) : null}
+                      </View>
+
+                      {/* Customer Selector */}
+                      <View style={[styles.landscapeCardSection, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                        <View style={styles.sellSectionHeader}>
+                          <User size={15} color={theme.textSecondary} />
+                          <Text style={[styles.sellSectionTitle, { color: theme.text, fontSize: 13 }]}>
+                            Customer <Text style={{ color: theme.textSecondary, fontSize: 11 }}>(optional)</Text>
+                          </Text>
+                        </View>
+                        {selectedCustomer ? (
                           <View
                             style={[
-                              styles.footerPriceSummary,
+                              styles.buyerInput,
                               {
-                                backgroundColor: theme.card,
-                                borderColor: theme.border,
+                                flexDirection: "row",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                backgroundColor: theme.primary + "1A",
+                                borderColor: theme.primary + "40",
+                                height: 48,
                               },
                             ]}
                           >
-                            <Text
-                              style={[
-                                styles.footerPriceLabel,
-                                { color: theme.textSecondary },
-                              ]}
-                            >
-                              Total incl. VAT
-                            </Text>
-                            <Text
-                              style={[
-                                styles.footerPriceValue,
-                                { color: theme.primary },
-                              ]}
-                            >
-                              {formatCurrency(totalWithVat)}
-                            </Text>
+                            <View style={{ flexDirection: "row", alignItems: "center", flex: 1, gap: 8 }}>
+                              <User size={14} color={theme.primary} />
+                              <Text style={{ fontSize: 14, fontWeight: "700", color: theme.primary }} numberOfLines={1}>
+                                {selectedCustomer.name}
+                              </Text>
+                            </View>
+                            <TouchableOpacity onPress={() => setSelectedCustomer(null)} style={{ padding: 4 }}>
+                              <X size={18} color={theme.primary} />
+                            </TouchableOpacity>
                           </View>
+                        ) : (
+                          <TouchableOpacity
+                            onPress={() => setIsCustomerModalOpen(true)}
+                            style={[
+                              styles.buyerInput,
+                              {
+                                flexDirection: "row",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                backgroundColor: theme.background,
+                                borderColor: theme.border,
+                                height: 48,
+                              },
+                            ]}
+                          >
+                            <Text style={{ fontSize: 13, color: theme.textSecondary, fontWeight: "600" }}>
+                              Select or add customer...
+                            </Text>
+                            <Plus size={18} color={theme.textSecondary} />
+                          </TouchableOpacity>
                         )}
+                      </View>
+                    </ScrollView>
+                  </View>
+
+                  {/* Right Column: VAT Breakdown & Finalize Sale Action */}
+                  <View style={styles.landscapeRightColumn}>
+                    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ gap: 12, paddingBottom: 12 }}>
+                      <VatBreakdownCard
+                        basePrice={salePrice}
+                        theme={theme}
+                        isFastMoving={wineCategory === "fun"}
+                        vatMode={storeVatMode}
+                      />
+
+                      {/* Total and Action */}
+                      <View style={[styles.landscapeCardSection, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                          <Text style={{ fontSize: 12, fontWeight: "800", color: theme.textSecondary, textTransform: "uppercase" }}>
+                            Total incl. VAT
+                          </Text>
+                          <Text style={{ fontSize: 24, fontWeight: "900", color: theme.primary }}>
+                            {formatCurrency(totalWithVat)}
+                          </Text>
+                        </View>
+
                         <TouchableOpacity
                           style={[
                             styles.confirmButton,
-                            { backgroundColor: theme.primary },
+                            { backgroundColor: theme.primary, height: 56, borderRadius: 16 },
                             state === "updating" && styles.buttonDisabled,
                           ]}
                           onPress={handleMarkAsSold}
@@ -1809,75 +1543,1187 @@ export default function TaggingScreen() {
                             <ActivityIndicator color="#fff" size="small" />
                           ) : (
                             <>
-                              <Wine size={24} color="#fff" strokeWidth={2.5} />
-                              <Text style={styles.confirmButtonText}>
+                              <Wine size={20} color="#fff" strokeWidth={2.5} />
+                              <Text style={[styles.confirmButtonText, { fontSize: 14 }]}>
                                 Mark as Sold
                               </Text>
                             </>
                           )}
                         </TouchableOpacity>
-                      </>
-                    )
-                  ) : isIncoming ? (
-                    <TouchableOpacity
-                      style={[
-                        styles.confirmButton,
-                        { backgroundColor: "#059669" },
-                        state === "updating" && styles.buttonDisabled,
-                      ]}
-                      onPress={handleReceiveStock}
-                      disabled={state === "updating"}
-                    >
-                      {state === "updating" ? (
-                        <ActivityIndicator color="#fff" size="small" />
-                      ) : (
-                        <>
-                          <CheckCircle2
-                            size={24}
-                            color="#fff"
-                            strokeWidth={2.5}
-                          />
-                          <Text style={styles.confirmButtonText}>
-                            RECEIVE INTO STORE
+                      </View>
+                    </ScrollView>
+                  </View>
+                </>
+              ) : (
+                /* ── Location Tagging Mode Landscape Split ── */
+                <>
+                  {/* Left Column: Wine Details + Location Selector / Camera */}
+                  <View style={[styles.landscapeLeftColumn, { width: leftColumnWidth }]}>
+                    <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
+                      {/* Wine info card */}
+                      <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border, marginBottom: 0, padding: 14 }]}>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                          <Box size={14} color={theme.secondary} />
+                          <Text style={[styles.skuLabel, { color: theme.textSecondary, fontSize: 9 }]}>
+                            {isBulkMode
+                              ? `BULK TAGGING (${bulkBottleIds?.length} BOTTLES)`
+                              : `BOTTLE ID: ${bottle?.id.toUpperCase()}`}
                           </Text>
-                        </>
-                      )}
-                    </TouchableOpacity>
-                  ) : (
-                    <TouchableOpacity
-                      style={[
-                        styles.confirmButton,
-                        {
-                          backgroundColor: isStore
-                            ? theme.secondary
-                            : "#10b981",
-                        },
-                        (!selectedLocationId || state === "updating") &&
-                        styles.buttonDisabled,
-                      ]}
-                      onPress={handleConfirmTagging}
-                      disabled={!selectedLocationId || state === "updating"}
-                    >
-                      {state === "updating" ? (
-                        <ActivityIndicator color="#fff" size="small" />
-                      ) : (
-                        <>
-                          <CheckCircle2
-                            size={24}
-                            color="#fff"
-                            strokeWidth={2.5}
-                          />
-                          <Text style={styles.confirmButtonText}>
-                            {isStore ? "UPDATE LOCATION" : "FINALIZE SHELVING"}
+                        </View>
+                        <Text style={[styles.wineName, { color: theme.text, fontSize: 15 }]} numberOfLines={2}>
+                          {isBulkMode ? wineName : wine?.name || "Processing..."}
+                        </Text>
+                        <View style={styles.wineMetaRow}>
+                          <Text style={[styles.wineVintage, { color: theme.textSecondary, fontSize: 12 }]}>
+                            {isBulkMode ? wineVintage : wine?.vintage}
                           </Text>
-                        </>
+                          <View style={[styles.metaDot, { backgroundColor: theme.border }]} />
+                          <Text style={[styles.wineProducer, { color: theme.textSecondary, fontSize: 11 }]}>
+                            {isBulkMode ? wineProducer : (wine?.producer || "Independent Producer")}
+                          </Text>
+                          {(isBulkMode ? wineFormat : wine?.format) && (
+                            <>
+                              <View style={[styles.metaDot, { backgroundColor: theme.border }]} />
+                              <Text style={[styles.wineFormat, { color: theme.textSecondary, fontSize: 11 }]}>
+                                {isBulkMode ? wineFormat : wine?.format}
+                              </Text>
+                            </>
+                          )}
+                        </View>
+                      </View>
+
+                      {/* Selected Location Card */}
+                      <View
+                        style={[
+                          styles.landscapeCardSection,
+                          {
+                            backgroundColor: selectedLocationId ? "rgba(99, 102, 241, 0.08)" : theme.card,
+                            borderColor: selectedLocationId ? theme.primary : theme.border,
+                            padding: 12,
+                          },
+                        ]}
+                      >
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                          <Map size={16} color={selectedLocationId ? theme.primary : theme.textSecondary} />
+                          <View style={{ flex: 1 }}>
+                            <Text style={{ fontSize: 10, fontWeight: "800", color: theme.textSecondary, textTransform: "uppercase" }}>
+                              Assigned Bin / Shelf
+                            </Text>
+                            <Text style={{ fontSize: 16, fontWeight: "900", color: selectedLocationId ? theme.primary : theme.text }}>
+                              {locations.find((l) => l.id === selectedLocationId)?.name || "Not Selected (Tap on right)"}
+                            </Text>
+                          </View>
+                          {selectedLocationId && (
+                            <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: "#10b981", alignItems: "center", justifyContent: "center" }}>
+                              <CheckCircle2 size={16} color="#fff" strokeWidth={3} />
+                            </View>
+                          )}
+                        </View>
+                      </View>
+
+                      {/* Toggle Input Mode */}
+                      <View style={[styles.locationToggleContainer, { backgroundColor: theme.card, borderColor: theme.border, marginBottom: 0 }]}>
+                        <TouchableOpacity
+                          style={[
+                            styles.locationToggleTab,
+                            locationInputMode === "browse" && { backgroundColor: theme.primary },
+                          ]}
+                          onPress={() => setLocationInputMode("browse")}
+                        >
+                          <Search size={14} color={locationInputMode === "browse" ? "#fff" : theme.textSecondary} />
+                          <Text style={[styles.locationToggleText, { color: locationInputMode === "browse" ? "#fff" : theme.textSecondary }]}>
+                            Browse
+                          </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={[
+                            styles.locationToggleTab,
+                            locationInputMode === "scan" && { backgroundColor: theme.primary },
+                          ]}
+                          onPress={() => setLocationInputMode("scan")}
+                        >
+                          <ScanQrCode size={14} color={locationInputMode === "scan" ? "#fff" : theme.textSecondary} />
+                          <Text style={[styles.locationToggleText, { color: locationInputMode === "scan" ? "#fff" : theme.textSecondary }]}>
+                            Scan QR
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+
+                      {locationInputMode === "scan" && (
+                        <View style={[styles.landscapeScannerCard, { height: 210, borderRadius: 14 }]}>
+                          <CameraView
+                            style={StyleSheet.absoluteFill}
+                            facing="back"
+                            barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
+                            onBarcodeScanned={({ data }) => {
+                              if (isPrompting.current) return;
+                              const found = locations.find((l) => l.id === data);
+                              if (found) {
+                                if (selectedLocationId === data) return;
+                                isPrompting.current = true;
+                                Alert.alert(
+                                  "Confirm Location",
+                                  `Set location to ${found.name} (${found.type})?`,
+                                  [
+                                    { text: "Cancel", style: "cancel", onPress: () => { isPrompting.current = false; } },
+                                    {
+                                      text: "Confirm",
+                                      onPress: () => {
+                                        setSelectedLocationId(data);
+                                        showSnackbar(`Location ${found.name} selected`);
+                                        isPrompting.current = false;
+                                        handleConfirmTagging(data);
+                                      },
+                                    },
+                                  ],
+                                  { onDismiss: () => { isPrompting.current = false; } },
+                                );
+                              } else {
+                                const now = Date.now();
+                                if (now - lastInvalidScanTime.current > 2000) {
+                                  lastInvalidScanTime.current = now;
+                                  showSnackbar("Location not found");
+                                }
+                              }
+                            }}
+                          />
+                          <View style={styles.scannerOverlay}>
+                            <View style={[styles.scanTargetLandscape, { width: 120, height: 120, marginBottom: 8 }]}>
+                              <ScanQrCode size={24} color="rgba(16, 185, 129, 0.6)" />
+                            </View>
+                            <Text style={[styles.scanTextSmall, { fontSize: 10, textAlign: "center", marginBottom: 0 }]}>
+                              Scan Unit QR Code
+                            </Text>
+                          </View>
+                        </View>
                       )}
-                    </TouchableOpacity>
-                  )}
+                    </ScrollView>
+                  </View>
+
+                  {/* Right Column: Location Groups Grid & Action Bar */}
+                  <View style={styles.landscapeRightColumn}>
+                    <View style={styles.landscapeRightHeader}>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                        <Map size={16} color={theme.primary} />
+                        <Text style={[styles.sectionTitle, { fontSize: 13 }]}>
+                          Available Storage Locations ({locations.length})
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        onPress={() => setIsAddModalOpen(true)}
+                        style={[styles.addLocationButton, { borderColor: theme.border, paddingVertical: 4, paddingHorizontal: 10 }]}
+                      >
+                        <Plus size={12} color={theme.primary} strokeWidth={3} />
+                        <Text style={[styles.addLocationText, { color: theme.primary, fontSize: 10 }]}>NEW UNIT</Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 16, gap: 14 }}>
+                      {locations.length === 0 ? (
+                        <View style={styles.emptyContainer}>
+                          <AlertTriangle size={36} color="#334155" />
+                          <Text style={styles.emptyText}>No storage locations configured.</Text>
+                        </View>
+                      ) : (
+                        sortedLocationTypes.map((type) => (
+                          <View key={type} style={styles.locationGroup}>
+                            <Text style={[styles.locationGroupTitle, { color: theme.text, fontSize: 13, marginBottom: 8 }]}>
+                              {type}s <Text style={styles.locationGroupCount}>({groupedLocations[type].length})</Text>
+                            </Text>
+                            <View style={[styles.locationGroupGrid, { gap: 8 }]}>
+                              {groupedLocations[type].map((item) => {
+                                const isSelected = selectedLocationId === item.id;
+                                return (
+                                  <TouchableOpacity
+                                    key={item.id}
+                                    style={[
+                                      styles.locationItem,
+                                      {
+                                        backgroundColor: theme.card,
+                                        borderColor: isSelected ? theme.primary : theme.border,
+                                        width: "31.5%",
+                                        flex: 0,
+                                        marginBottom: 0,
+                                        padding: 12,
+                                        borderRadius: 14,
+                                        borderWidth: isSelected ? 2 : 1,
+                                      },
+                                    ]}
+                                    onPress={() => setSelectedLocationId(item.id)}
+                                  >
+                                    <View
+                                      style={[
+                                        styles.locationIconContainer,
+                                        {
+                                          backgroundColor: isSelected ? theme.primary + "20" : theme.background,
+                                          width: 36,
+                                          height: 36,
+                                          borderRadius: 10,
+                                          marginBottom: 2,
+                                        },
+                                      ]}
+                                    >
+                                      <Text
+                                        style={[
+                                          styles.locationPrefix,
+                                          {
+                                            color: isSelected ? theme.primary : theme.textSecondary,
+                                            fontSize: 15,
+                                          },
+                                        ]}
+                                      >
+                                        {(item as any).prefix || (item.type === "Locker" ? "L" : item.type.charAt(0))}
+                                      </Text>
+                                    </View>
+                                    <Text
+                                      style={[
+                                        styles.locationName,
+                                        {
+                                          color: isSelected ? theme.primary : theme.text,
+                                          fontSize: 14,
+                                        },
+                                      ]}
+                                      numberOfLines={1}
+                                    >
+                                      {item.name}
+                                    </Text>
+                                  </TouchableOpacity>
+                                );
+                              })}
+                            </View>
+                          </View>
+                        ))
+                      )}
+                    </ScrollView>
+
+                    {/* Bottom Action Button */}
+                    <View style={{ paddingTop: 8, borderTopWidth: 1, borderTopColor: "rgba(150,150,150,0.15)" }}>
+                      {isIncoming ? (
+                        <TouchableOpacity
+                          style={[
+                            styles.confirmButton,
+                            { backgroundColor: "#059669", height: 50, borderRadius: 14 },
+                            state === "updating" && styles.buttonDisabled,
+                          ]}
+                          onPress={handleReceiveStock}
+                          disabled={state === "updating"}
+                        >
+                          {state === "updating" ? (
+                            <ActivityIndicator color="#fff" size="small" />
+                          ) : (
+                            <>
+                              <CheckCircle2 size={18} color="#fff" strokeWidth={2.5} />
+                              <Text style={[styles.confirmButtonText, { fontSize: 13 }]}>
+                                RECEIVE INTO STORE
+                              </Text>
+                            </>
+                          )}
+                        </TouchableOpacity>
+                      ) : (
+                        <TouchableOpacity
+                          style={[
+                            styles.confirmButton,
+                            {
+                              backgroundColor: isStore ? theme.secondary : "#10b981",
+                              height: 50,
+                              borderRadius: 14,
+                            },
+                            (!selectedLocationId || state === "updating") && styles.buttonDisabled,
+                          ]}
+                          onPress={() => handleConfirmTagging()}
+                          disabled={!selectedLocationId || state === "updating"}
+                        >
+                          {state === "updating" ? (
+                            <ActivityIndicator color="#fff" size="small" />
+                          ) : (
+                            <>
+                              <CheckCircle2 size={18} color="#fff" strokeWidth={2.5} />
+                              <Text style={[styles.confirmButtonText, { fontSize: 13 }]}>
+                                {isStore ? "UPDATE LOCATION" : "FINALIZE SHELVING"}
+                              </Text>
+                            </>
+                          )}
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  </View>
                 </>
               )}
+            </View>
           </View>
-        </View>
+        ) : (
+          <View
+            style={[
+              styles.detailsContainer,
+              { backgroundColor: theme.background, paddingHorizontal: horizontalPadding },
+            ]}
+          >
+            {/* Header */}
+            <View
+              style={[
+                styles.header,
+                {
+                  borderBottomColor: theme.border,
+                  borderBottomWidth: isStore ? 1 : 0,
+                },
+              ]}
+            >
+              <TouchableOpacity
+                onPress={() => {
+                  isProcessing.current = false;
+                  setState("entry");
+                }}
+                style={[
+                  styles.backButton,
+                  {
+                    backgroundColor: isStore ? theme.card : "transparent",
+                    padding: isStore ? 10 : 0,
+                    borderRadius: 12,
+                    borderWidth: isStore ? 1 : 0,
+                    borderColor: theme.border,
+                  },
+                ]}
+              >
+                <RefreshCw
+                  size={20}
+                  color={isStore ? theme.primary : "#fff"}
+                  strokeWidth={2.5}
+                />
+                <Text
+                  style={[
+                    styles.backText,
+                    { color: isStore ? theme.primary : "#fff" },
+                  ]}
+                >
+                  RESCAN
+                </Text>
+              </TouchableOpacity>
+              <Text style={[styles.title, { color: theme.text }]}>
+                {mode === "sell" ? "Sell Bottle" : "Tag Location"}
+              </Text>
+            </View>
+
+            {/* Wine info card */}
+            <View
+              style={[
+                styles.card,
+                { backgroundColor: theme.card, borderColor: theme.border },
+              ]}
+            >
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 8,
+                  marginBottom: 8,
+                }}
+              >
+                <Box size={14} color={theme.secondary} />
+                <Text style={[styles.skuLabel, { color: theme.textSecondary }]}>
+                  {isBulkMode
+                    ? `BULK TAGGING (${bulkBottleIds?.length} BOTTLES)`
+                    : `BOTTLE ID: ${bottle?.id.toUpperCase()}`}
+                </Text>
+                {wineCategory === "fun" && mode === "sell" && (
+                  <View
+                    style={[
+                      styles.fastMovingChip,
+                      { backgroundColor: "#f59e0b18", borderColor: "#f59e0b40" },
+                    ]}
+                  >
+                    <Zap size={10} color="#f59e0b" />
+                    <Text style={styles.fastMovingChipText}>FUN WINE</Text>
+                  </View>
+                )}
+              </View>
+              <Text
+                style={[
+                  styles.wineName,
+                  { color: theme.text, paddingRight: mode === "sell" ? 80 : 0 },
+                ]}
+              >
+                {isBulkMode ? wineName : wine?.name || "Processing..."}
+              </Text>
+              <View
+                style={[
+                  styles.wineMetaRow,
+                  { paddingRight: mode === "sell" ? 80 : 0 },
+                ]}
+              >
+                <Text
+                  style={[styles.wineVintage, { color: theme.textSecondary }]}
+                >
+                  {isBulkMode ? wineVintage : wine?.vintage}
+                </Text>
+                <View
+                  style={[styles.metaDot, { backgroundColor: theme.border }]}
+                />
+                <Text
+                  style={[styles.wineProducer, { color: theme.textSecondary }]}
+                >
+                  {isBulkMode ? wineProducer : (wine?.producer || "Independent Producer")}
+                </Text>
+                {(isBulkMode ? wineFormat : wine?.format) && (
+                  <>
+                    <View
+                      style={[styles.metaDot, { backgroundColor: theme.border }]}
+                    />
+                    <Text
+                      style={[styles.wineFormat, { color: theme.textSecondary }]}
+                    >
+                      {isBulkMode ? wineFormat : wine?.format}
+                    </Text>
+                  </>
+                )}
+              </View>
+
+              {/* Positioned at the bottom right */}
+              {/* FEATURE TOGGLE: Hide unit cost for now */}
+              {false && mode === "sell" && wine?.price ? (
+                <View
+                  style={[
+                    styles.refPriceChip,
+                    {
+                      position: "absolute",
+                      right: 16,
+                      bottom: 16,
+                      backgroundColor: theme.primary + "15",
+                      borderColor: theme.primary + "40",
+                      marginLeft: 0, // Reset from style definition
+                    },
+                  ]}
+                ></View>
+              ) : null}
+            </View>
+
+            {/* ── Status-based content ── */}
+            {bottle?.status === "consumed" ? (
+              <View style={styles.incomingWarningContainer}>
+                <AlertTriangle size={48} color="#f59e0b" strokeWidth={1.5} />
+                <Text style={styles.incomingWarningTitle}>
+                  Bottle Already {mode === "sell" ? "Sold" : "Consumed"}
+                </Text>
+                <Text style={styles.incomingWarningText}>
+                  This bottle is already marked as &apos;consumed&apos; and cannot be
+                  processed again.
+                </Text>
+                <TouchableOpacity
+                  style={[
+                    styles.onboardingButton,
+                    { backgroundColor: theme.primary },
+                  ]}
+                  onPress={resetSellState}
+                >
+                  <Text style={styles.onboardingButtonText}>
+                    SCAN ANOTHER BOTTLE
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : bottle?.status === "incoming" ? (
+              <View style={styles.incomingWarningContainer}>
+                <AlertTriangle size={48} color="#f59e0b" strokeWidth={1.5} />
+                <Text style={styles.incomingWarningTitle}>
+                  Verification Required
+                </Text>
+                <Text style={styles.incomingWarningText}>
+                  This bottle is currently marked as incoming. You need to verify
+                  the sticker first before it can be tagged.
+                </Text>
+                <TouchableOpacity
+                  style={[
+                    styles.onboardingButton,
+                    { backgroundColor: theme.primary },
+                  ]}
+                  onPress={() =>
+                    isStore
+                      ? ((isProcessing.current = false),
+                        setState("entry"),
+                        setIsIncoming(false))
+                      : router.push("/onboarding")
+                  }
+                >
+                  <Text style={styles.onboardingButtonText}>
+                    {isStore ? "RESCAN BOTTLE" : "VIEW ONBOARDING TASKS"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : isStore && isIncoming && bottle?.status !== "outbound" ? (
+              <View style={styles.incomingWarningContainer}>
+                <AlertTriangle size={48} color="#f59e0b" strokeWidth={1.5} />
+                <Text style={styles.incomingWarningTitle}>Transfer Required</Text>
+                <Text style={styles.incomingWarningText}>
+                  This bottle must be dispatched from its current location before
+                  it can be received here.
+                </Text>
+                <TouchableOpacity
+                  style={[
+                    styles.onboardingButton,
+                    { backgroundColor: theme.primary },
+                  ]}
+                  onPress={() => {
+                    isProcessing.current = false;
+                    setState("entry");
+                    setIsIncoming(false);
+                  }}
+                >
+                  <Text style={styles.onboardingButtonText}>RESCAN BOTTLE</Text>
+                </TouchableOpacity>
+              </View>
+            ) : isIncoming ? (
+              <View style={{ flex: 1, justifyContent: "center" }}>
+                <View
+                  style={[
+                    styles.infoBanner,
+                    {
+                      flexDirection: "column",
+                      alignItems: "center",
+                      backgroundColor: "rgba(16, 185, 129, 0.05)",
+                      borderColor: "rgba(16, 185, 129, 0.2)",
+                      padding: 32,
+                      borderRadius: 24,
+                    },
+                  ]}
+                >
+                  <View
+                    style={{
+                      width: 64,
+                      height: 64,
+                      borderRadius: 32,
+                      backgroundColor: "rgba(16, 185, 129, 0.1)",
+                      justifyContent: "center",
+                      alignItems: "center",
+                      marginBottom: 16,
+                    }}
+                  >
+                    <CheckCircle2 size={32} color="#10b981" />
+                  </View>
+                  <Text
+                    style={[
+                      styles.infoBannerTitle,
+                      { color: "#10b981", fontSize: 20, textAlign: "center" },
+                    ]}
+                  >
+                    Ready to Receive
+                  </Text>
+                  <Text
+                    style={[
+                      styles.infoBannerText,
+                      { textAlign: "center", fontSize: 15, marginTop: 8 },
+                    ]}
+                  >
+                    This bottle is inbound and ready. Tap the receive button below
+                    to finalize its transfer into your store inventory.
+                  </Text>
+                </View>
+              </View>
+            ) : mode === "sell" ? (
+              /* ── Sell mode ── */
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <View style={{ paddingBottom: 160 }}>
+                  {/* Price input section */}
+                  <View style={styles.sellSection}>
+                    <View style={styles.sellSectionHeader}>
+                      <Tag size={15} color={theme.primary} />
+                      <Text
+                        style={[styles.sellSectionTitle, { color: theme.text }]}
+                      >
+                        Sale Price
+                      </Text>
+                      <View style={{ flex: 1 }} />
+                      {wineCategory === "fun" ? (
+                        <Text
+                          style={[styles.autoFilledHint, { color: "#f59e0b" }]}
+                        >
+                          ✦ Auto-filled
+                        </Text>
+                      ) : (
+                        <View style={{ flexDirection: "row", backgroundColor: theme.primary + "1A", borderRadius: 8, padding: 2 }}>
+                          <TouchableOpacity
+                            onPress={() => setStoreVatMode("excluded")}
+                            style={{
+                              paddingHorizontal: 10,
+                              paddingVertical: 4,
+                              borderRadius: 6,
+                              backgroundColor: storeVatMode === "excluded" ? theme.card : "transparent",
+                              shadowColor: storeVatMode === "excluded" ? "#000" : "transparent",
+                              shadowOffset: { width: 0, height: 1 },
+                              shadowOpacity: 0.1,
+                              shadowRadius: 1,
+                              elevation: storeVatMode === "excluded" ? 1 : 0,
+                            }}
+                          >
+                            <Text style={{ fontSize: 10, fontWeight: "800", color: storeVatMode === "excluded" ? theme.primary : theme.primary + "80" }}>EX VAT</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            onPress={() => setStoreVatMode("included")}
+                            style={{
+                              paddingHorizontal: 10,
+                              paddingVertical: 4,
+                              borderRadius: 6,
+                              backgroundColor: storeVatMode === "included" ? theme.card : "transparent",
+                              shadowColor: storeVatMode === "included" ? "#000" : "transparent",
+                              shadowOffset: { width: 0, height: 1 },
+                              shadowOpacity: 0.1,
+                              shadowRadius: 1,
+                              elevation: storeVatMode === "included" ? 1 : 0,
+                            }}
+                          >
+                            <Text style={{ fontSize: 10, fontWeight: "800", color: storeVatMode === "included" ? theme.primary : theme.primary + "80" }}>INC VAT</Text>
+                          </TouchableOpacity>
+                        </View>
+                      )}
+                    </View>
+                    <View
+                      style={[
+                        styles.priceInputWrapper,
+                        {
+                          backgroundColor: theme.card,
+                          borderColor: priceError
+                            ? "#ef4444"
+                            : salePrice
+                              ? theme.primary + "60"
+                              : theme.border,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.currencySymbol,
+                          { color: theme.textSecondary },
+                        ]}
+                      >
+                        ₱
+                      </Text>
+                      <TextInput
+                        style={[styles.priceInput, { color: theme.text }]}
+                        placeholder="0.00"
+                        placeholderTextColor={theme.textSecondary}
+                        keyboardType="decimal-pad"
+                        value={salePrice}
+                        onChangeText={(text) => {
+                          setSalePrice(text);
+                          if (priceError) setPriceError(null);
+                        }}
+                      />
+                    </View>
+                    {priceError ? (
+                      <Text style={{ color: "#ef4444", fontSize: 12, fontWeight: "600", marginTop: 8, paddingHorizontal: 4 }}>
+                        {priceError}
+                      </Text>
+                    ) : wineCategory !== "fun" ? (
+                      <Text
+                        style={[styles.priceHint, { color: theme.textSecondary }]}
+                      >
+                        {storeVatMode === "included" ? "Enter the gross price. VAT will be extracted automatically." : "Enter the agreed sale price for this bottle."}
+                      </Text>
+                    ) : null}
+                  </View>
+
+                  {/* VAT Breakdown Card */}
+                  <VatBreakdownCard
+                    basePrice={salePrice}
+                    theme={theme}
+                    isFastMoving={wineCategory === "fun"}
+                    vatMode={storeVatMode}
+                  />
+
+                  {/* Customer */}
+                  <View style={styles.sellSection}>
+                    <View style={styles.sellSectionHeader}>
+                      <User size={15} color={theme.textSecondary} />
+                      <Text
+                        style={[styles.sellSectionTitle, { color: theme.text }]}
+                      >
+                        Customer
+                        <Text
+                          style={[
+                            styles.optionalLabel,
+                            { color: theme.textSecondary },
+                          ]}
+                        >
+                          {" "}
+                          (optional)
+                        </Text>
+                      </Text>
+                    </View>
+
+                    {selectedCustomer ? (
+                      <View
+                        style={[
+                          styles.buyerInput,
+                          {
+                            flexDirection: "row",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            backgroundColor: theme.primary + "1A",
+                            borderColor: theme.primary + "40",
+                          },
+                        ]}
+                      >
+                        <View style={{ flexDirection: "row", alignItems: "center", flex: 1, gap: 10 }}>
+                          <User size={16} color={theme.primary} />
+                          <Text style={{ fontSize: 16, fontWeight: "700", color: theme.primary }} numberOfLines={1}>
+                            {selectedCustomer.name}
+                          </Text>
+                        </View>
+                        <TouchableOpacity onPress={() => setSelectedCustomer(null)} style={{ padding: 4 }}>
+                          <X size={20} color={theme.primary} />
+                        </TouchableOpacity>
+                      </View>
+                    ) : (
+                      <TouchableOpacity
+                        onPress={() => setIsCustomerModalOpen(true)}
+                        style={[
+                          styles.buyerInput,
+                          {
+                            flexDirection: "row",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            backgroundColor: theme.card,
+                            borderColor: theme.border,
+                          },
+                        ]}
+                      >
+                        <Text style={{ fontSize: 15, color: theme.textSecondary, fontWeight: "600" }}>
+                          Select or add customer...
+                        </Text>
+                        <Plus size={20} color={theme.textSecondary} />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
+              </ScrollView>
+            ) : (
+              /* ── Tag location mode ── */
+              <>
+                {isStore && (
+                  <View
+                    style={[
+                      styles.infoBanner,
+                      {
+                        backgroundColor: "rgba(99, 102, 241, 0.05)",
+                        borderColor: "rgba(99, 102, 241, 0.2)",
+                      },
+                    ]}
+                  >
+                    <Wine size={24} color="#6366f1" />
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={[styles.infoBannerTitle, { color: "#6366f1" }]}
+                      >
+                        Store Actions
+                      </Text>
+                      <Text style={styles.infoBannerText}>
+                        This item is active in your inventory. Select a physical
+                        bin below.
+                      </Text>
+                    </View>
+                  </View>
+                )}
+                <View style={styles.sectionHeader}>
+                  <View
+                    style={{
+                      flex: 1,
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 10,
+                    }}
+                  >
+                    <Map size={18} color="#64748b" />
+                    <Text style={styles.sectionTitle}>Storage Location</Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => setIsAddModalOpen(true)}
+                    style={[
+                      styles.addLocationButton,
+                      { borderColor: theme.border },
+                    ]}
+                  >
+                    <Plus size={14} color={theme.primary} strokeWidth={3} />
+                    <Text
+                      style={[styles.addLocationText, { color: theme.primary }]}
+                    >
+                      NEW
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                <View
+                  style={[
+                    styles.locationToggleContainer,
+                    { backgroundColor: theme.card, borderColor: theme.border },
+                  ]}
+                >
+                  <TouchableOpacity
+                    style={[
+                      styles.locationToggleTab,
+                      locationInputMode === "browse" && {
+                        backgroundColor: theme.primary,
+                      },
+                    ]}
+                    onPress={() => setLocationInputMode("browse")}
+                  >
+                    <Search
+                      size={14}
+                      color={
+                        locationInputMode === "browse"
+                          ? "#fff"
+                          : theme.textSecondary
+                      }
+                    />
+                    <Text
+                      style={[
+                        styles.locationToggleText,
+                        {
+                          color:
+                            locationInputMode === "browse"
+                              ? "#fff"
+                              : theme.textSecondary,
+                        },
+                      ]}
+                    >
+                      Browse
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.locationToggleTab,
+                      locationInputMode === "scan" && {
+                        backgroundColor: theme.primary,
+                      },
+                    ]}
+                    onPress={() => setLocationInputMode("scan")}
+                  >
+                    <ScanQrCode
+                      size={14}
+                      color={
+                        locationInputMode === "scan"
+                          ? "#fff"
+                          : theme.textSecondary
+                      }
+                    />
+                    <Text
+                      style={[
+                        styles.locationToggleText,
+                        {
+                          color:
+                            locationInputMode === "scan"
+                              ? "#fff"
+                              : theme.textSecondary,
+                        },
+                      ]}
+                    >
+                      Scan QR
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {locationInputMode === "scan" ? (
+                  <View style={styles.scanLocationContainer}>
+                    <View style={styles.scanLocationCamera}>
+                      <CameraView
+                        style={StyleSheet.absoluteFill}
+                        facing="back"
+                        barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
+                        onBarcodeScanned={({ data }) => {
+                          if (isPrompting.current) return;
+                          const found = locations.find((l) => l.id === data);
+                          if (found) {
+                            if (selectedLocationId === data) return;
+                            isPrompting.current = true;
+                            Alert.alert(
+                              "Confirm Location",
+                              `Set location to ${found.name} (${found.type})?`,
+                              [
+                                {
+                                  text: "Cancel",
+                                  style: "cancel",
+                                  onPress: () => {
+                                    isPrompting.current = false;
+                                  },
+                                },
+                                {
+                                  text: "Confirm",
+                                  onPress: () => {
+                                    setSelectedLocationId(data);
+                                    showSnackbar(`Location ${found.name} selected`);
+                                    isPrompting.current = false;
+                                    handleConfirmTagging(data);
+                                  },
+                                },
+                              ],
+                              {
+                                onDismiss: () => {
+                                  isPrompting.current = false;
+                                },
+                              },
+                            );
+                          } else {
+                            const now = Date.now();
+                            if (now - lastInvalidScanTime.current > 2000) {
+                              lastInvalidScanTime.current = now;
+                              showSnackbar("Location not found");
+                            }
+                          }
+                        }}
+                      />
+                      <View style={styles.scannerOverlay}>
+                        <View
+                          style={[
+                            styles.scanTarget,
+                            {
+                              width: 200,
+                              height: 200,
+                              alignItems: "center",
+                              justifyContent: "center",
+                              marginBottom: 16,
+                            },
+                          ]}
+                        >
+                          <ScanQrCode
+                            size={40}
+                            color="rgba(16, 185, 129, 0.6)"
+                          />
+                        </View>
+                        <Text
+                          style={[
+                            styles.scanTextSmall,
+                            { fontSize: 12, textAlign: "center", marginBottom: 0 },
+                          ]}
+                        >
+                          Scan Unit QR Code
+                        </Text>
+                      </View>
+                    </View>
+                    <Text
+                      style={[
+                        styles.scanLocationHint,
+                        { color: theme.textSecondary, textAlign: "center" },
+                      ]}
+                    >
+                      Scan a unit&apos;s QR code to set location
+                    </Text>
+                  </View>
+                ) : (
+                  <ScrollView
+                    contentContainerStyle={styles.locationList}
+                    showsVerticalScrollIndicator={false}
+                  >
+                    {locations.length === 0 ? (
+                      <View style={styles.emptyContainer}>
+                        <AlertTriangle size={48} color="#334155" />
+                        <Text style={styles.emptyText}>
+                          No storage locations configured.
+                        </Text>
+                      </View>
+                    ) : (
+                      sortedLocationTypes.map((type) => (
+                        <View key={type} style={styles.locationGroup}>
+                          <Text
+                            style={[
+                              styles.locationGroupTitle,
+                              { color: theme.text },
+                            ]}
+                          >
+                            {type}s{" "}
+                            <Text style={styles.locationGroupCount}>
+                              ({groupedLocations[type].length})
+                            </Text>
+                          </Text>
+                          <View style={styles.locationGroupGrid}>
+                            {groupedLocations[type].map((item) => (
+                              <TouchableOpacity
+                                key={item.id}
+                                style={[
+                                  styles.locationItem,
+                                  {
+                                    backgroundColor: theme.card,
+                                    borderColor: theme.border,
+                                    width: "48%",
+                                    flex: 0,
+                                    marginBottom: 0,
+                                  },
+                                  selectedLocationId === item.id && [
+                                    styles.locationItemSelected,
+                                    {
+                                      backgroundColor: theme.accent,
+                                      borderColor: theme.accent,
+                                    },
+                                  ],
+                                ]}
+                                onPress={() => setSelectedLocationId(item.id)}
+                              >
+                                <View
+                                  style={[
+                                    styles.locationIconContainer,
+                                    {
+                                      backgroundColor:
+                                        selectedLocationId === item.id
+                                          ? "rgba(255,255,255,0.2)"
+                                          : theme.background,
+                                    },
+                                  ]}
+                                >
+                                  <Text
+                                    style={[
+                                      styles.locationPrefix,
+                                      {
+                                        color:
+                                          selectedLocationId === item.id
+                                            ? "#fff"
+                                            : theme.primary,
+                                      },
+                                    ]}
+                                  >
+                                    {(item as any).prefix ||
+                                      (item.type === "Locker"
+                                        ? "L"
+                                        : item.type.charAt(0))}
+                                  </Text>
+                                </View>
+                                <Text
+                                  style={[
+                                    styles.locationName,
+                                    { color: theme.text },
+                                    selectedLocationId === item.id &&
+                                    styles.locationNameSelected,
+                                  ]}
+                                >
+                                  {item.name}
+                                </Text>
+                              </TouchableOpacity>
+                            ))}
+                          </View>
+                        </View>
+                      ))
+                    )}
+                  </ScrollView>
+                )}
+              </>
+            )}
+
+            {/* ── Footer ── */}
+            <View style={[styles.footer, { backgroundColor: theme.background }]}>
+              {bottle?.status !== "incoming" &&
+                bottle?.status !== "consumed" &&
+                !(isStore && isIncoming && bottle?.status !== "outbound") && (
+                  <>
+                    {mode === "sell" ? (
+                      isStore && (
+                        <>
+                          {/* Inline price summary strip above button */}
+                          {numericBase > 0 && (
+                            <View
+                              style={[
+                                styles.footerPriceSummary,
+                                {
+                                  backgroundColor: theme.card,
+                                  borderColor: theme.border,
+                                },
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.footerPriceLabel,
+                                  { color: theme.textSecondary },
+                                ]}
+                              >
+                                Total incl. VAT
+                              </Text>
+                              <Text
+                                style={[
+                                  styles.footerPriceValue,
+                                  { color: theme.primary },
+                                ]}
+                              >
+                                {formatCurrency(totalWithVat)}
+                              </Text>
+                            </View>
+                          )}
+                          <TouchableOpacity
+                            style={[
+                              styles.confirmButton,
+                              { backgroundColor: theme.primary },
+                              state === "updating" && styles.buttonDisabled,
+                            ]}
+                            onPress={handleMarkAsSold}
+                            disabled={state === "updating"}
+                          >
+                            {state === "updating" ? (
+                              <ActivityIndicator color="#fff" size="small" />
+                            ) : (
+                              <>
+                                <Wine size={24} color="#fff" strokeWidth={2.5} />
+                                <Text style={styles.confirmButtonText}>
+                                  Mark as Sold
+                                </Text>
+                              </>
+                            )}
+                          </TouchableOpacity>
+                        </>
+                      )
+                    ) : isIncoming ? (
+                      <TouchableOpacity
+                        style={[
+                          styles.confirmButton,
+                          { backgroundColor: "#059669" },
+                          state === "updating" && styles.buttonDisabled,
+                        ]}
+                        onPress={handleReceiveStock}
+                        disabled={state === "updating"}
+                      >
+                        {state === "updating" ? (
+                          <ActivityIndicator color="#fff" size="small" />
+                        ) : (
+                          <>
+                            <CheckCircle2
+                              size={24}
+                              color="#fff"
+                              strokeWidth={2.5}
+                            />
+                            <Text style={styles.confirmButtonText}>
+                              RECEIVE INTO STORE
+                            </Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
+                    ) : (
+                      <TouchableOpacity
+                        style={[
+                          styles.confirmButton,
+                          {
+                            backgroundColor: isStore
+                              ? theme.secondary
+                              : "#10b981",
+                          },
+                          (!selectedLocationId || state === "updating") &&
+                          styles.buttonDisabled,
+                        ]}
+                        onPress={handleConfirmTagging}
+                        disabled={!selectedLocationId || state === "updating"}
+                      >
+                        {state === "updating" ? (
+                          <ActivityIndicator color="#fff" size="small" />
+                        ) : (
+                          <>
+                            <CheckCircle2
+                              size={24}
+                              color="#fff"
+                              strokeWidth={2.5}
+                            />
+                            <Text style={styles.confirmButtonText}>
+                              {isStore ? "UPDATE LOCATION" : "FINALIZE SHELVING"}
+                            </Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
+                    )}
+                  </>
+                )}
+            </View>
+          </View>
+        )
       )}
 
       {/* ── Add Location Modal ── */}
@@ -2408,7 +3254,7 @@ const styles = StyleSheet.create({
 
   // Success
   successContainer: {
-    flex: 1,
+    flexGrow: 1,
     padding: 40,
     alignItems: "center",
     justifyContent: "center",
@@ -2724,5 +3570,196 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     justifyContent: "space-between",
     gap: 12,
+  },
+  // Landscape Styles
+  landscapeHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(150, 150, 150, 0.15)",
+  },
+  landscapeHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  landscapeTitle: {
+    fontSize: 18,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: -0.3,
+  },
+  landscapeSubtitle: {
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  landscapeHeaderRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  landscapeStatusBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  landscapeStatusBadgeText: {
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+  },
+  landscapeMainWrapper: {
+    flex: 1,
+    flexDirection: "row",
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 8,
+    gap: 14,
+  },
+  landscapeLeftColumn: {
+    height: "100%",
+    flexDirection: "column",
+    gap: 8,
+  },
+  landscapeRightColumn: {
+    flex: 1,
+    height: "100%",
+    flexDirection: "column",
+  },
+  landscapeRightHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+    paddingHorizontal: 4,
+  },
+  landscapeCardSection: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 14,
+  },
+  landscapeEntryCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 12,
+  },
+  entryIconWrapper: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  entryTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  entrySubtitle: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  landscapeSearchBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  landscapeWineRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 10,
+  },
+  wineIconWrapper: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  landscapeScannerCard: {
+    flex: 1,
+    borderRadius: 18,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "#334155",
+    backgroundColor: "#000",
+  },
+  scannerOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(15, 23, 42, 0.45)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  scanTargetLandscape: {
+    width: 160,
+    height: 160,
+    borderWidth: 2,
+    borderColor: "#10b981",
+    borderRadius: 20,
+    marginBottom: 12,
+    backgroundColor: "rgba(16, 185, 129, 0.05)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  scanTextSmall: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 1.5,
+    marginBottom: 12,
+    textAlign: "center",
+  },
+  cancelScanButtonLandscape: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.25)",
+  },
+  cancelScanTextLandscape: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+  },
+  landscapeActionButton: {
+    height: 48,
+    borderRadius: 14,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 8,
+  },
+  landscapeActionButtonText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
 });
