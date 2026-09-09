@@ -117,6 +117,8 @@ export interface WineRequestItem {
   pulledQty?: number;
   ingressedQty?: number;
   price?: number;
+  itemStatus?: "available" | "discontinued" | "awaiting_restock" | null;
+  itemNote?: string;
 }
 
 export interface WineRequest {

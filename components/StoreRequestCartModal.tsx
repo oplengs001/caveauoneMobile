@@ -1,8 +1,9 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
   Modal,
+  Platform,
   StyleSheet,
   Text,
   TextInput,
@@ -12,6 +13,7 @@ import {
 import {
   CheckCircle2,
   Circle,
+  DollarSign,
   Minus,
   Plus,
   ShoppingCart,
@@ -54,6 +56,8 @@ interface StoreRequestCartModalProps {
   onSubmit: () => Promise<void>;
   submitting: boolean;
   isLandscape?: boolean;
+  showAmounts?: boolean;
+  onToggleShowAmounts?: () => void;
 }
 
 const theme = Colors.store;
@@ -88,7 +92,20 @@ export default function StoreRequestCartModal({
   onSubmit,
   submitting,
   isLandscape = false,
+  showAmounts: externalShowAmounts,
+  onToggleShowAmounts,
 }: StoreRequestCartModalProps) {
+  const [internalShowAmounts, setInternalShowAmounts] = useState(false);
+  const showAmounts = externalShowAmounts !== undefined ? externalShowAmounts : internalShowAmounts;
+
+  const handleToggleAmounts = () => {
+    if (onToggleShowAmounts) {
+      onToggleShowAmounts();
+    } else {
+      setInternalShowAmounts((prev) => !prev);
+    }
+  };
+
   const items = Object.values(cart);
   const selectedItems = items.filter((item) => item.selected);
   const selectedBottles = selectedItems.reduce((sum, item) => sum + item.qty, 0);
@@ -115,41 +132,47 @@ export default function StoreRequestCartModal({
         <View
           style={[
             styles.sheet,
-            { maxHeight: isLandscape ? "92%" : "88%" },
-            isLandscape && { maxWidth: 680, width: "100%", borderRadius: 20, alignSelf: "center" },
+            { maxHeight: isLandscape ? "94%" : "90%" },
+            isLandscape && { maxWidth: 700, width: "100%", borderRadius: 20, alignSelf: "center" },
           ]}
         >
           {!isLandscape && <View style={styles.sheetHandle} />}
 
-          {/* Header */}
+          {/* Compact Header */}
           <View style={styles.header}>
             <View style={{ flex: 1 }}>
               <View style={styles.titleRow}>
-                <ShoppingCart size={20} color={theme.primary} />
+                <ShoppingCart size={17} color={theme.primary} />
                 <Text style={styles.title}>Wine Request Cart</Text>
+                {items.length > 0 && (
+                  <View style={styles.headerCountBadge}>
+                    <Text style={styles.headerCountBadgeText}>{items.length}</Text>
+                  </View>
+                )}
               </View>
               <Text style={styles.subtitle}>
-                {selectedItems.length} of {items.length} wines selected ({selectedBottles} bottles)
+                {selectedItems.length} of {items.length} wines selected ({selectedBottles}{" "}
+                {selectedBottles === 1 ? "bottle" : "bottles"})
               </Text>
             </View>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <X size={22} color={theme.textSecondary} />
+            <TouchableOpacity onPress={onClose} style={styles.closeBtn} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+              <X size={18} color={theme.textSecondary} />
             </TouchableOpacity>
           </View>
 
-          {/* Toolbar */}
+          {/* Compact Toolbar */}
           {items.length > 0 && (
             <View style={styles.toolbar}>
               <TouchableOpacity
-                style={styles.toolbarBtn}
+                style={[styles.toolbarBtn, allSelected && styles.toolbarBtnActive]}
                 onPress={() => onSelectAll(!allSelected)}
               >
                 {allSelected ? (
-                  <CheckCircle2 size={16} color={theme.primary} />
+                  <CheckCircle2 size={13} color={theme.primary} />
                 ) : (
-                  <Circle size={16} color={theme.textSecondary} />
+                  <Circle size={13} color={theme.textSecondary} />
                 )}
-                <Text style={styles.toolbarBtnText}>
+                <Text style={[styles.toolbarBtnText, allSelected && { color: theme.primary }]}>
                   {allSelected ? "Deselect All" : "Select All"}
                 </Text>
               </TouchableOpacity>
@@ -159,19 +182,35 @@ export default function StoreRequestCartModal({
                   style={[styles.toolbarBtn, styles.toolbarBtnHighlight]}
                   onPress={onAddAllDeficits}
                 >
-                  <Zap size={14} color="#ea580c" />
-                  <Text style={[styles.toolbarBtnText, { color: "#ea580c" }]}>
-                    Add Deficits ({availableDeficitCount})
+                  <Zap size={12} color={theme.primary} />
+                  <Text style={[styles.toolbarBtnText, { color: theme.primary }]}>
+                    + Deficits ({availableDeficitCount})
                   </Text>
                 </TouchableOpacity>
               )}
 
+              {/* Toggle Price / Amount */}
               <TouchableOpacity
-                style={[styles.toolbarBtn, { marginLeft: "auto" }]}
+                style={[styles.toolbarBtn, showAmounts && styles.toolbarBtnActive]}
+                onPress={handleToggleAmounts}
+                hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+              >
+                <DollarSign
+                  size={12}
+                  color={showAmounts ? theme.primary : theme.textSecondary}
+                  strokeWidth={2.4}
+                />
+                <Text style={[styles.toolbarBtnText, showAmounts && { color: theme.primary }]}>
+                  {showAmounts ? "Amounts" : "Hidden"}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.toolbarBtn, styles.toolbarBtnClear]}
                 onPress={onClearCart}
               >
-                <Trash2 size={14} color="#ef4444" />
-                <Text style={[styles.toolbarBtnText, { color: "#ef4444" }]}>Clear</Text>
+                <Trash2 size={12} color={theme.danger} />
+                <Text style={[styles.toolbarBtnText, { color: theme.danger }]}>Clear</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -180,7 +219,7 @@ export default function StoreRequestCartModal({
           {items.length === 0 ? (
             <View style={styles.emptyContainer}>
               <View style={styles.emptyIconCircle}>
-                <ShoppingCart size={36} color={theme.textSecondary} />
+                <ShoppingCart size={28} color={theme.textSecondary} />
               </View>
               <Text style={styles.emptyTitle}>Your request cart is empty</Text>
               <Text style={styles.emptySubtitle}>
@@ -192,7 +231,7 @@ export default function StoreRequestCartModal({
                   style={styles.emptyDeficitBtn}
                   onPress={onAddAllDeficits}
                 >
-                  <Zap size={16} color="#fff" />
+                  <Zap size={14} color="#fff" />
                   <Text style={styles.emptyDeficitBtnText}>
                     Stage All {availableDeficitCount} Deficit Wines
                   </Text>
@@ -204,11 +243,12 @@ export default function StoreRequestCartModal({
               data={items}
               keyExtractor={(item) => item.entry.masterWine.id}
               showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 16, paddingTop: 4 }}
+              contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 12, paddingTop: 4 }}
               renderItem={({ item }) => {
                 const wine = item.entry.masterWine;
                 const price = wine.price || 0;
                 const deficit = item.entry.requestedQty;
+                const category = item.entry.setting?.wineCategory || wine.wineCategory;
 
                 return (
                   <View
@@ -217,65 +257,98 @@ export default function StoreRequestCartModal({
                       item.selected && styles.cartRowSelected,
                     ]}
                   >
-                    {/* Selection Checkbox */}
+                    {/* Compact Selection Checkbox */}
                     <TouchableOpacity
                       onPress={() => onToggleSelect(wine.id)}
                       style={styles.checkboxTouch}
                       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     >
                       {item.selected ? (
-                        <CheckCircle2 size={24} color={theme.primary} />
+                        <CheckCircle2 size={20} color={theme.primary} />
                       ) : (
-                        <Circle size={24} color="#cbd5e1" />
+                        <Circle size={20} color="#cbd5e1" />
                       )}
                     </TouchableOpacity>
 
                     {/* Wine Info */}
-                    <View style={{ flex: 1, paddingHorizontal: 8 }}>
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                        {item.entry.setting?.wineCategory === "fun" && (
-                          <Text style={styles.catEmojiText}>😁</Text>
-                        )}
-                        {item.entry.setting?.wineCategory === "fine" && (
-                          <Text style={styles.catEmojiText}>💎</Text>
-                        )}
-                        {item.entry.setting?.wineCategory === "reserve" && (
-                          <Text style={styles.catEmojiText}>👻</Text>
-                        )}
+                    <View style={styles.wineInfoCol}>
+                      {/* Producer & Category */}
+                      <View style={styles.producerRow}>
+                        {category ? (
+                          <View style={styles.catPill}>
+                            <Text style={styles.catPillText}>
+                              {category === "fun"
+                                ? "FUN"
+                                : category === "fine"
+                                  ? "FINE"
+                                  : "RESERVE"}
+                            </Text>
+                          </View>
+                        ) : null}
                         <Text style={styles.wineProducer} numberOfLines={1}>
                           {getProducerAllCaps(wine.producer)}
                         </Text>
                       </View>
-                      <Text style={styles.wineName} numberOfLines={2}>
+
+                      {/* Wine Details */}
+                      <Text style={styles.wineName} numberOfLines={1}>
                         {getWineDetailsLine(wine)}
                       </Text>
-                      {wine.sku ? (
-                        <Text style={styles.wineMeta}>SKU: {wine.sku}</Text>
-                      ) : null}
 
+                      {/* Unified Compact Meta Strip */}
                       <View style={styles.stockStatusRow}>
                         <Text style={styles.stockLabel}>
-                          Store: {item.entry.stockCount} / Target:{" "}
-                          {item.entry.setting?.safetyStock ?? 0}
+                          {item.entry.stockCount}/{item.entry.setting?.safetyStock ?? 0} tgt
                         </Text>
                         {deficit > 0 && (
                           <View style={styles.deficitBadge}>
-                            <TrendingDown size={11} color="#ea580c" />
-                            <Text style={styles.deficitBadgeText}>Need -{deficit}</Text>
+                            <TrendingDown size={9} color={theme.danger} strokeWidth={2.5} />
+                            <Text style={styles.deficitBadgeText}>-{deficit} def</Text>
                           </View>
                         )}
+                        {wine.sku ? (
+                          <Text style={styles.wineMeta} numberOfLines={1}>
+                            · SKU: {wine.sku}
+                          </Text>
+                        ) : null}
                       </View>
                     </View>
 
-                    {/* Stepper & Line Total */}
+                    {/* Stepper, Price & Quick Delete */}
                     <View style={styles.rightControls}>
+                      <View style={styles.priceRow}>
+                        {showAmounts && price > 0 && (
+                          <Text style={styles.linePrice}>
+                            ₱{(price * item.qty).toLocaleString()}
+                          </Text>
+                        )}
+                        <TouchableOpacity
+                          style={styles.deleteBtn}
+                          onPress={() => onRemoveItem(wine.id)}
+                          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                        >
+                          <Trash2 size={13} color="#94a3b8" />
+                        </TouchableOpacity>
+                      </View>
+
+                      {/* Compact Stepper */}
                       <View style={styles.stepperWrap}>
                         <TouchableOpacity
                           style={styles.stepperBtn}
-                          onPress={() => onUpdateQty(wine.id, -1)}
-                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          onPress={() => {
+                            if (item.qty <= 1) {
+                              onRemoveItem(wine.id);
+                            } else {
+                              onUpdateQty(wine.id, -1);
+                            }
+                          }}
+                          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                         >
-                          <Minus size={16} color={theme.text} strokeWidth={2.5} />
+                          {item.qty <= 1 ? (
+                            <Trash2 size={12} color={theme.danger} />
+                          ) : (
+                            <Minus size={12} color={theme.text} strokeWidth={2.5} />
+                          )}
                         </TouchableOpacity>
                         <TextInput
                           style={styles.stepperInput}
@@ -290,26 +363,11 @@ export default function StoreRequestCartModal({
                         <TouchableOpacity
                           style={styles.stepperBtn}
                           onPress={() => onUpdateQty(wine.id, 1)}
-                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                         >
-                          <Plus size={16} color={theme.text} strokeWidth={2.5} />
+                          <Plus size={12} color={theme.text} strokeWidth={2.5} />
                         </TouchableOpacity>
                       </View>
-
-                      {price > 0 && (
-                        <Text style={styles.linePrice}>
-                          ₱{(price * item.qty).toLocaleString()}
-                        </Text>
-                      )}
-
-                      {/* Remove Button */}
-                      <TouchableOpacity
-                        style={styles.deleteBtn}
-                        onPress={() => onRemoveItem(wine.id)}
-                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                      >
-                        <Trash2 size={18} color="#94a3b8" />
-                      </TouchableOpacity>
                     </View>
                   </View>
                 );
@@ -317,19 +375,24 @@ export default function StoreRequestCartModal({
             />
           )}
 
-          {/* Footer Actions */}
+          {/* Compact Footer Actions */}
           {items.length > 0 && (
             <View style={styles.footer}>
               <View style={styles.footerSummaryRow}>
-                <Text style={styles.footerSummaryText}>
-                  Selected: <Text style={styles.boldText}>{selectedItems.length}</Text> of{" "}
-                  {items.length} wines ·{" "}
-                  <Text style={styles.boldText}>{selectedBottles} bottles</Text>
-                </Text>
-                {totalAmount > 0 && (
-                  <Text style={styles.footerTotalAmount}>
-                    Est. ₱{totalAmount.toLocaleString()}
+                <View>
+                  <Text style={styles.footerSummaryLabel}>TOTAL SELECTED</Text>
+                  <Text style={styles.footerSummaryBottles}>
+                    {selectedBottles} {selectedBottles === 1 ? "bottle" : "bottles"}{" "}
+                    <Text style={styles.footerSummaryWines}>({selectedItems.length} wines)</Text>
                   </Text>
+                </View>
+                {showAmounts && totalAmount > 0 && (
+                  <View style={{ alignItems: "flex-end" }}>
+                    <Text style={styles.footerSummaryLabel}>EST. AMOUNT</Text>
+                    <Text style={styles.footerTotalAmount}>
+                      ₱{totalAmount.toLocaleString()}
+                    </Text>
+                  </View>
                 )}
               </View>
 
@@ -339,7 +402,7 @@ export default function StoreRequestCartModal({
                   onPress={onClose}
                   disabled={submitting}
                 >
-                  <Text style={styles.cancelBtnText}>KEEP BROWSING</Text>
+                  <Text style={styles.cancelBtnText}>Back</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -351,10 +414,10 @@ export default function StoreRequestCartModal({
                   disabled={selectedItems.length === 0 || submitting}
                 >
                   {submitting ? (
-                    <ActivityIndicator color="#fff" />
+                    <ActivityIndicator color="#fff" size="small" />
                   ) : (
                     <Text style={styles.submitBtnText}>
-                      SUBMIT REQUEST ({selectedBottles} BOTTLES)
+                      SUBMIT ({selectedBottles} BOTTLES)
                     </Text>
                   )}
                 </TouchableOpacity>
@@ -370,304 +433,368 @@ export default function StoreRequestCartModal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.55)",
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
     justifyContent: "flex-end",
   },
   sheet: {
     backgroundColor: theme.card || "#ffffff",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
     width: "100%",
     overflow: "hidden",
   },
   sheetHandle: {
-    width: 40,
+    width: 36,
     height: 4,
     backgroundColor: "#cbd5e1",
     borderRadius: 2,
     alignSelf: "center",
-    marginTop: 10,
-    marginBottom: 4,
+    marginTop: 8,
+    marginBottom: 2,
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 10,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#f1f5f9",
+    borderBottomColor: theme.border,
   },
   titleRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
   },
   title: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "800",
-    color: theme.text || "#0f172a",
+    color: theme.text,
+    letterSpacing: -0.2,
+  },
+  headerCountBadge: {
+    backgroundColor: theme.primary + "14",
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 8,
+  },
+  headerCountBadgeText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: theme.primary,
   },
   subtitle: {
-    fontSize: 12,
-    color: theme.textSecondary || "#64748b",
-    marginTop: 3,
+    fontSize: 11,
+    color: theme.textSecondary,
+    fontWeight: "600",
+    marginTop: 1,
   },
   closeBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: "#f1f5f9",
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: theme.background,
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 1,
+    borderColor: theme.border,
   },
   toolbar: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    backgroundColor: "#f8fafc",
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    backgroundColor: theme.background,
     borderBottomWidth: 1,
-    borderBottomColor: "#f1f5f9",
-    gap: 10,
+    borderBottomColor: theme.border,
+    gap: 8,
   },
   toolbarBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 7,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    borderRadius: 10,
-    backgroundColor: "#ffffff",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: theme.card,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
-    minHeight: 40,
+    borderColor: theme.border,
+    height: 30,
+  },
+  toolbarBtnActive: {
+    borderColor: theme.primary + "30",
+    backgroundColor: theme.primary + "0A",
+  },
+  toolbarBtnInactive: {
+    borderColor: theme.border,
+    backgroundColor: theme.background,
   },
   toolbarBtnHighlight: {
-    borderColor: "#fdba74",
-    backgroundColor: "#fff7ed",
+    borderColor: theme.primary + "30",
+    backgroundColor: theme.primary + "0C",
+  },
+  toolbarBtnClear: {
+    marginLeft: "auto",
+    borderColor: theme.danger + "25",
+    backgroundColor: theme.danger + "08",
   },
   toolbarBtnText: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: theme.text || "#1e293b",
+    fontSize: 11.5,
+    fontWeight: "700",
+    color: theme.textSecondary,
   },
   emptyContainer: {
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 48,
-    paddingHorizontal: 24,
+    paddingVertical: 36,
+    paddingHorizontal: 20,
   },
   emptyIconCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: "#f1f5f9",
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: theme.background,
+    borderWidth: 1,
+    borderColor: theme.border,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 16,
+    marginBottom: 12,
   },
   emptyTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "800",
-    color: theme.text || "#0f172a",
-    marginBottom: 6,
+    color: theme.text,
+    marginBottom: 4,
   },
   emptySubtitle: {
-    fontSize: 13,
-    color: theme.textSecondary || "#64748b",
+    fontSize: 12,
+    color: theme.textSecondary,
     textAlign: "center",
-    lineHeight: 18,
-    marginBottom: 20,
+    lineHeight: 16,
+    marginBottom: 16,
   },
   emptyDeficitBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    backgroundColor: "#ea580c",
-    paddingVertical: 14,
-    paddingHorizontal: 22,
-    borderRadius: 16,
-    shadowColor: "#ea580c",
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 3,
+    gap: 6,
+    backgroundColor: theme.primary,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 12,
   },
   emptyDeficitBtnText: {
     color: "#ffffff",
     fontWeight: "800",
-    fontSize: 15,
+    fontSize: 13,
   },
   cartRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-    borderRadius: 16,
-    backgroundColor: "#ffffff",
+    paddingVertical: 9,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    backgroundColor: theme.card,
     borderWidth: 1,
-    borderColor: "#f1f5f9",
-    marginVertical: 5,
+    borderColor: theme.border,
+    marginVertical: 3,
   },
   cartRowSelected: {
-    borderColor: "#fed7aa",
-    backgroundColor: "#fffdfa",
+    borderColor: theme.primary + "35",
+    backgroundColor: theme.primary + "05",
   },
   checkboxTouch: {
-    width: 44,
-    height: 44,
+    width: 32,
+    height: 32,
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 4,
+    marginRight: 2,
+  },
+  wineInfoCol: {
+    flex: 1,
+    paddingHorizontal: 6,
+    justifyContent: "center",
+  },
+  producerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginBottom: 1,
+  },
+  catPill: {
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 4,
+    backgroundColor: theme.accent + "18",
+    borderWidth: 1,
+    borderColor: theme.accent + "30",
+  },
+  catPillText: {
+    fontSize: 8.5,
+    fontWeight: "900",
+    color: theme.accent,
+    letterSpacing: 0.4,
   },
   wineProducer: {
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: "900",
     color: theme.primary,
-    letterSpacing: 0.5,
+    letterSpacing: 0.4,
     textTransform: "uppercase",
   },
-  catEmojiText: {
-    fontSize: 12,
-    opacity: 0.85,
-  },
   wineName: {
-    fontSize: 13,
+    fontSize: 12.5,
     fontWeight: "700",
-    color: theme.text || "#0f172a",
-    marginTop: 2,
-    lineHeight: 17,
-  },
-  wineMeta: {
-    fontSize: 10,
-    color: "#94a3b8",
-    marginTop: 2,
-    fontWeight: "600",
+    color: theme.text,
+    lineHeight: 16,
   },
   stockStatusRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    marginTop: 4,
+    gap: 6,
+    marginTop: 2,
+    flexWrap: "wrap",
   },
   stockLabel: {
-    fontSize: 11,
-    color: "#64748b",
+    fontSize: 10.5,
+    fontWeight: "600",
+    color: theme.textSecondary,
+  },
+  wineMeta: {
+    fontSize: 10,
+    color: theme.textSecondary,
+    fontWeight: "600",
   },
   deficitBadge: {
     flexDirection: "row",
     alignItems: "center",
     gap: 2,
-    paddingHorizontal: 6,
+    paddingHorizontal: 5,
     paddingVertical: 1,
-    borderRadius: 6,
-    backgroundColor: "#ffedd5",
+    borderRadius: 5,
+    backgroundColor: theme.danger + "10",
+    borderColor: theme.danger + "25",
+    borderWidth: 1,
   },
   deficitBadgeText: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: "#ea580c",
+    fontSize: 9.5,
+    fontWeight: "900",
+    color: theme.danger,
   },
   rightControls: {
     alignItems: "flex-end",
+    gap: 4,
+    marginLeft: 6,
+  },
+  priceRow: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
+  },
+  linePrice: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: theme.primary,
+  },
+  deleteBtn: {
+    padding: 3,
   },
   stepperWrap: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#f8fafc",
-    borderRadius: 12,
+    backgroundColor: theme.background,
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: theme.border,
     overflow: "hidden",
-    height: 42,
+    height: 30,
   },
   stepperBtn: {
-    width: 40,
-    height: 42,
+    width: 26,
+    height: 30,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#f1f5f9",
+    backgroundColor: theme.card,
   },
   stepperInput: {
-    width: 46,
-    height: 42,
+    width: 32,
+    height: 30,
     paddingVertical: 0,
-    fontSize: 16,
+    paddingHorizontal: 0,
+    fontSize: 13,
     fontWeight: "900",
-    color: theme.text || "#0f172a",
+    color: theme.text,
     textAlign: "center",
   },
-  linePrice: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: "#64748b",
-  },
-  deleteBtn: {
-    width: 40,
-    height: 40,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 10,
-  },
   footer: {
-    paddingHorizontal: 20,
-    paddingTop: 14,
-    paddingBottom: 26,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: Platform.OS === "ios" ? 22 : 14,
     borderTopWidth: 1,
-    borderTopColor: "#f1f5f9",
-    backgroundColor: "#ffffff",
-    gap: 14,
+    borderTopColor: theme.border,
+    backgroundColor: theme.card,
+    gap: 10,
   },
   footerSummaryRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-  footerSummaryText: {
-    fontSize: 13.5,
-    color: "#64748b",
-  },
-  boldText: {
+  footerSummaryLabel: {
+    fontSize: 9.5,
     fontWeight: "800",
-    color: theme.text || "#0f172a",
+    color: theme.textSecondary,
+    letterSpacing: 0.5,
+  },
+  footerSummaryBottles: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: theme.text,
+    marginTop: 1,
+  },
+  footerSummaryWines: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: theme.textSecondary,
   },
   footerTotalAmount: {
     fontSize: 14,
-    fontWeight: "800",
+    fontWeight: "900",
     color: theme.primary,
+    marginTop: 1,
   },
   footerActions: {
     flexDirection: "row",
-    gap: 12,
+    gap: 10,
   },
   cancelBtn: {
     flex: 1,
-    height: 54,
-    borderRadius: 16,
-    backgroundColor: "#f1f5f9",
+    height: 42,
+    borderRadius: 11,
+    backgroundColor: theme.background,
+    borderWidth: 1,
+    borderColor: theme.border,
     alignItems: "center",
     justifyContent: "center",
   },
   cancelBtnText: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: "#64748b",
+    fontSize: 12.5,
+    fontWeight: "700",
+    color: theme.textSecondary,
   },
   submitBtn: {
     flex: 2,
-    height: 54,
-    borderRadius: 16,
+    height: 42,
+    borderRadius: 11,
     backgroundColor: theme.primary,
     alignItems: "center",
     justifyContent: "center",
   },
   submitBtnText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "900",
     color: "#ffffff",
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
   },
   btnDisabled: {
     opacity: 0.45,

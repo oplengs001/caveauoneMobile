@@ -446,7 +446,27 @@ export default function WineRequestsIndex() {
                       .filter(Boolean)
                       .join(" • ")}
                   </Text>
+                  {wine.itemNote ? (
+                    <Text style={[styles.itemNoteText, { color: theme.primary }]}>
+                      Note: {wine.itemNote}
+                    </Text>
+                  ) : null}
                 </View>
+                {wine.itemStatus === "available" && (
+                  <View style={[styles.itemStatusBadge, { backgroundColor: "#10b98118", borderColor: "#10b98150" }]}>
+                    <Text style={[styles.itemStatusText, { color: "#10b981" }]}>Available</Text>
+                  </View>
+                )}
+                {wine.itemStatus === "awaiting_restock" && (
+                  <View style={[styles.itemStatusBadge, { backgroundColor: "#f59e0b18", borderColor: "#f59e0b50" }]}>
+                    <Text style={[styles.itemStatusText, { color: "#f59e0b" }]}>Awaiting</Text>
+                  </View>
+                )}
+                {wine.itemStatus === "discontinued" && (
+                  <View style={[styles.itemStatusBadge, { backgroundColor: "#ef444418", borderColor: "#ef444450" }]}>
+                    <Text style={[styles.itemStatusText, { color: "#ef4444" }]}>Discontinued</Text>
+                  </View>
+                )}
               </View>
             ))}
 
@@ -912,6 +932,24 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "500",
     marginTop: 1,
+  },
+  itemNoteText: {
+    fontSize: 11,
+    fontStyle: "italic",
+    marginTop: 2,
+    fontWeight: "600",
+  },
+  itemStatusBadge: {
+    paddingHorizontal: 7,
+    paddingVertical: 2.5,
+    borderRadius: 6,
+    borderWidth: 1,
+    alignSelf: "center",
+  },
+  itemStatusText: {
+    fontSize: 9,
+    fontWeight: "800",
+    textTransform: "uppercase",
   },
   expandPill: {
     flexDirection: "row",

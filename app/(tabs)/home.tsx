@@ -17,6 +17,7 @@ import {
   CheckCircle2,
   ChevronRight,
   ClipboardList,
+  Clock,
   FileDown,
   LayoutList,
   LogOut,
@@ -50,6 +51,7 @@ export default function HomeScreen() {
     stockout: { wines: 0, bottles: 0 },
     parAlert: { wines: 0, bottles: 0 },
     underSafety: { wines: 0, bottles: 0 },
+    pendingRequests: { count: 0, bottles: 0 },
   });
   const [loadingMetrics, setLoadingMetrics] = useState(true);
   const [outboundRequests, setOutboundRequests] = useState<WineRequest[]>([]);
@@ -131,7 +133,12 @@ export default function HomeScreen() {
         cached.storeId === storeId &&
         Date.now() - cached.fetchedAt < METRICS_TTL_MS
       ) {
-        setDashboardMetrics(cached.data);
+        setDashboardMetrics({
+          stockout: cached.data.stockout || { wines: 0, bottles: 0 },
+          parAlert: cached.data.parAlert || { wines: 0, bottles: 0 },
+          underSafety: cached.data.underSafety || { wines: 0, bottles: 0 },
+          pendingRequests: cached.data.pendingRequests || { count: 0, bottles: 0 },
+        });
         setLoadingMetrics(false);
         return;
       }
@@ -146,7 +153,12 @@ export default function HomeScreen() {
           try {
             const parsed = JSON.parse(raw);
             if (Date.now() - parsed.ts < METRICS_TTL_MS) {
-              setDashboardMetrics(parsed.data);
+              setDashboardMetrics({
+                stockout: parsed.data.stockout || { wines: 0, bottles: 0 },
+                parAlert: parsed.data.parAlert || { wines: 0, bottles: 0 },
+                underSafety: parsed.data.underSafety || { wines: 0, bottles: 0 },
+                pendingRequests: parsed.data.pendingRequests || { count: 0, bottles: 0 },
+              });
               setLoadingMetrics(false);
             }
           } catch (e) {
@@ -157,15 +169,19 @@ export default function HomeScreen() {
 
       // Fetch ACTIVE pending requests to exclude wines already being re-ordered
       const [pendingData, settingsData] = await Promise.all([
-        apiFetch(`/wine-requests?storeId=${storeId}&status=pending,approved,in_progress,receiving`),
+        apiFetch(`/wine-requests?storeId=${storeId}&status=pending,converted,approved,in_progress,outbound,receiving`),
         apiFetch(`/stock-settings?storeId=${storeId}&discontinued=false`),
       ]);
 
       const pendingWineIds = new Set<string>();
-      const pendingRequests = pendingData.wineRequests || pendingData;
+      const pendingRequests: any[] = Array.isArray(pendingData)
+        ? pendingData
+        : pendingData?.wineRequests || [];
+      let pendingBottlesCount = 0;
       pendingRequests.forEach((req: any) => {
-        req.items?.forEach((item: { masterWineId: string }) => {
+        req.items?.forEach((item: { masterWineId: string; qty?: number }) => {
           if (item.masterWineId) pendingWineIds.add(item.masterWineId);
+          pendingBottlesCount += Number(item.qty || 0);
         });
       });
 
@@ -174,6 +190,10 @@ export default function HomeScreen() {
         stockout: { wines: 0, bottles: 0 },
         parAlert: { wines: 0, bottles: 0 },
         underSafety: { wines: 0, bottles: 0 },
+        pendingRequests: {
+          count: pendingRequests.length,
+          bottles: pendingBottlesCount,
+        },
       };
 
       const validSettings = allSettings.filter(s => !pendingWineIds.has(s.masterWineId));
@@ -679,6 +699,19 @@ export default function HomeScreen() {
     });
   }
 
+  const pendingRequestsCount = Math.max(
+    dashboardMetrics.pendingRequests?.count ?? 0,
+    outboundRequests.length
+  );
+  let effectivePendingBottles = dashboardMetrics.pendingRequests?.bottles ?? 0;
+  if (effectivePendingBottles === 0 && outboundRequests.length > 0) {
+    outboundRequests.forEach((req) => {
+      req.items?.forEach((item) => {
+        effectivePendingBottles += Number(item.qty || 0);
+      });
+    });
+  }
+
   const hasDeliveries =
     !isStoreStaff &&
     (outboundRequests.length > 0 || incomingDeliveries.length > 0);
@@ -1024,6 +1057,58 @@ export default function HomeScreen() {
                       {dashboardMetrics.stockout.bottles + dashboardMetrics.parAlert.bottles + dashboardMetrics.underSafety.bottles} btl
                     </Text>
                     <ChevronRight size={13} color="#ef4444" />
+                  </View>
+                </View>
+              </TouchableOpacity>
+            ) : pendingRequestsCount > 0 ? (
+              <TouchableOpacity
+                style={[
+                  styles.dashboardTopCard,
+                  {
+                    backgroundColor: theme.card,
+                    borderColor: "rgba(245, 158, 11, 0.35)",
+                  },
+                ]}
+                onPress={() => router.push("/wine-requests")}
+                activeOpacity={0.85}
+              >
+                {/* Row 1 */}
+                <View style={styles.topCardRow1}>
+                  <View style={styles.topCardRow1Left}>
+                    <View style={[styles.topCardIconCircle, { backgroundColor: "rgba(245, 158, 11, 0.12)" }]}>
+                      <Clock size={14} color="#d97706" strokeWidth={2.4} />
+                    </View>
+                    <Text style={[styles.topCardTitle, { color: theme.text }]} numberOfLines={1}>
+                      Pending Requests
+                    </Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.deliveryStatusBadge,
+                      {
+                        backgroundColor: "rgba(245, 158, 11, 0.12)",
+                        borderColor: "rgba(245, 158, 11, 0.3)",
+                        paddingVertical: 1,
+                        paddingHorizontal: 5,
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.deliveryStatusBadgeText, { color: "#d97706", fontSize: 9 }]}>
+                      PENDING
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Row 2 */}
+                <View style={styles.topCardRow2}>
+                  <Text style={[styles.topCardSubtitle, { color: theme.textSecondary }]} numberOfLines={1}>
+                    {pendingRequestsCount} request{pendingRequestsCount === 1 ? "" : "s"} in progress
+                  </Text>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
+                    <Text style={[styles.topCardActionText, { color: "#d97706" }]}>
+                      {effectivePendingBottles > 0 ? `${effectivePendingBottles} btl` : "View"}
+                    </Text>
+                    <ChevronRight size={13} color="#d97706" />
                   </View>
                 </View>
               </TouchableOpacity>

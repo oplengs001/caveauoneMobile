@@ -377,7 +377,7 @@ export default function OnboardingDetailScreen() {
       setLastAiResult(aiResult);
 
       // Use scored matching instead of brittle string includes
-      const { match, score, breakdown } = findBestMatch(
+      const { match, score } = findBestMatch(
         task?.items ?? [],
         aiResult,
         selectedFormat,
@@ -895,6 +895,229 @@ export default function OnboardingDetailScreen() {
     );
   };
 
+  const _executeSkipToLocation = async (
+    item: OnboardingItem,
+    bottleIdsToOnboard: string[],
+  ) => {
+    if (!task) return;
+    setIsProcessing(true);
+    try {
+      const locationId = profile?.locationId;
+
+      // 1. Batch mark bottles as received
+      await apiFetch("/bottles/batch", {
+        method: "POST",
+        body: JSON.stringify({
+          bottleIds: bottleIdsToOnboard,
+          data: {
+            status: "received",
+            isTagged: false,
+            storeId: locationId || undefined,
+          },
+        }),
+      });
+
+      // 2. Update task progress
+      const updatedItems = task.items.map((i) => {
+        if (i.id === item.id) {
+          return {
+            ...i,
+            onboardedQty: i.onboardedQty + bottleIdsToOnboard.length,
+          };
+        }
+        return i;
+      });
+
+      const isFullyDone = updatedItems.every((i) => i.onboardedQty === i.qty);
+
+      const updatedTaskData = await apiFetch(`/onboarding/${task.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          items: updatedItems,
+          status: isFullyDone ? "completed" : "warehouse",
+        }),
+      });
+      setTask(updatedTaskData as OnboardingTask);
+
+      // 3. Directly navigate to /tagging with these bottles!
+      if (bottleIdsToOnboard.length > 1) {
+        router.push({
+          pathname: "/tagging",
+          params: {
+            bottleIds: bottleIdsToOnboard.join(","),
+            source: "onboarding",
+            fromOnboardingId: task.id,
+            wineName: item.wineName,
+            wineVintage: String(item.vintage ?? ""),
+            wineProducer: item.producerName ?? "",
+            wineFormat: item.format ?? "",
+          },
+        });
+      } else {
+        router.push({
+          pathname: "/tagging",
+          params: {
+            bottleId: bottleIdsToOnboard[0],
+            source: "onboarding",
+            fromOnboardingId: task.id,
+            wineName: item.wineName,
+            wineVintage: String(item.vintage ?? ""),
+            wineProducer: item.producerName ?? "",
+            wineFormat: item.format ?? "",
+          },
+        });
+      }
+    } catch (err: any) {
+      console.error("Error skipping to location:", err);
+      Alert.alert("Error", "Failed to update bottles: " + (err.message || err));
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const _executeSkipAllToLocation = async (pendingItems: OnboardingItem[]) => {
+    if (!task) return;
+    if (pendingItems.length === 1) {
+      const single = pendingItems[0];
+      const ids = single.bottleIds.slice(single.onboardedQty);
+      return _executeSkipToLocation(single, ids);
+    }
+
+    setIsProcessing(true);
+    try {
+      const locationId = profile?.locationId;
+      const allPendingBottleIds: string[] = [];
+      pendingItems.forEach((i) => {
+        allPendingBottleIds.push(...i.bottleIds.slice(i.onboardedQty));
+      });
+
+      if (allPendingBottleIds.length === 0) return;
+
+      // 1. Batch update all bottles in Firestore via backend
+      await apiFetch("/bottles/batch", {
+        method: "POST",
+        body: JSON.stringify({
+          bottleIds: allPendingBottleIds,
+          data: {
+            status: "received",
+            isTagged: false,
+            storeId: locationId || undefined,
+          },
+        }),
+      });
+
+      // 2. Mark task items as fully onboarded
+      const updatedItems = task.items.map((i) => ({
+        ...i,
+        onboardedQty: i.qty,
+      }));
+
+      const updatedTaskData = await apiFetch(`/onboarding/${task.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          items: updatedItems,
+          status: "completed",
+        }),
+      });
+      setTask(updatedTaskData as OnboardingTask);
+
+      // 3. Directly navigate to /tagging with all bottles!
+      router.push({
+        pathname: "/tagging",
+        params: {
+          bottleIds: allPendingBottleIds.join(","),
+          source: "onboarding",
+          fromOnboardingId: task.id,
+          wineName: `Delivery Intake #${task.id.slice(0, 8).toUpperCase()}`,
+          wineVintage: `${pendingItems.length} Wine Types`,
+          wineProducer: "Mixed Intake",
+          wineFormat: `${allPendingBottleIds.length} Bottles Total`,
+        },
+      });
+    } catch (err: any) {
+      console.error("Error skipping all to location:", err);
+      Alert.alert("Error", "Failed to skip bottles: " + (err.message || err));
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleSkipAll = () => {
+    if (!task) return;
+    const pendingItems = task.items.filter((i) => i.onboardedQty < i.qty);
+    const totalRemaining = pendingItems.reduce(
+      (sum, i) => sum + (i.qty - i.onboardedQty),
+      0,
+    );
+    if (totalRemaining === 0) {
+      Alert.alert("Completed", "All bottles in this intake task have already been onboarded.");
+      return;
+    }
+
+    Alert.alert(
+      "Skip All Bottles",
+      `Skip scanning all remaining ${totalRemaining} bottle(s) across ${pendingItems.length} wine(s) and proceed directly to bottle location tagging?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: `Skip All (${totalRemaining})`,
+          onPress: () => _executeSkipAllToLocation(pendingItems),
+        },
+      ],
+    );
+  };
+
+  const handleSkipItem = (item: OnboardingItem) => {
+    if (!task) return;
+    const remaining = item.qty - item.onboardedQty;
+    if (remaining <= 0) return;
+
+    const pendingItems = task.items.filter((i) => i.onboardedQty < i.qty);
+    const totalRemaining = pendingItems.reduce(
+      (sum, i) => sum + (i.qty - i.onboardedQty),
+      0,
+    );
+    const hasMultiplePendingWines = pendingItems.length > 1;
+
+    const buttons: any[] = [
+      { text: "Cancel", style: "cancel" },
+      remaining > 1
+        ? {
+            text: "Skip 1 Bottle",
+            onPress: () => {
+              const ids = item.bottleIds.slice(
+                item.onboardedQty,
+                item.onboardedQty + 1,
+              );
+              _executeSkipToLocation(item, ids);
+            },
+          }
+        : null,
+      {
+        text:
+          remaining > 1
+            ? `Skip All for This Wine (${remaining})`
+            : "Skip & Tag Location",
+        onPress: () => {
+          const ids = item.bottleIds.slice(item.onboardedQty);
+          _executeSkipToLocation(item, ids);
+        },
+      },
+      hasMultiplePendingWines
+        ? {
+            text: `Skip All Wines (${totalRemaining})`,
+            onPress: () => _executeSkipAllToLocation(pendingItems),
+          }
+        : null,
+    ].filter(Boolean);
+
+    Alert.alert(
+      "Skip Bottles",
+      `Skip scanning for ${item.wineName} and proceed to bottle location?`,
+      buttons,
+    );
+  };
+
 function OnboardingDetailSkeleton() {
   const { horizontalPadding } = useResponsivePadding(24);
   const pulseAnim = useRef(new Animated.Value(0.25)).current;
@@ -987,25 +1210,27 @@ function OnboardingDetailSkeleton() {
 
       {/* HEADER */}
       <View style={[styles.header, { paddingHorizontal: horizontalPadding }]}>
-        <TouchableOpacity
-          onPress={() => {
-            if (currentStep === "overview") {
-              router.back();
-            } else if (isTaskComplete) {
-              router.dismissTo("/onboarding");
-            } else {
-              setCurrentStep("overview");
-            }
-          }}
-          style={styles.backButton}
-        >
-          <ChevronLeft size={28} color="#fff" strokeWidth={2.5} />
-        </TouchableOpacity>
-        <View>
-          <Text style={styles.headerLabel}>Intake Task</Text>
-          <Text style={styles.headerTitle}>
-            #{task.id.slice(0, 8).toUpperCase()}
-          </Text>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 16, flex: 1 }}>
+          <TouchableOpacity
+            onPress={() => {
+              if (currentStep === "overview") {
+                router.back();
+              } else if (isTaskComplete) {
+                router.dismissTo("/onboarding");
+              } else {
+                setCurrentStep("overview");
+              }
+            }}
+            style={styles.backButton}
+          >
+            <ChevronLeft size={28} color="#fff" strokeWidth={2.5} />
+          </TouchableOpacity>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.headerLabel}>Intake Task</Text>
+            <Text style={styles.headerTitle} numberOfLines={1}>
+              #{task.id.slice(0, 8).toUpperCase()}
+            </Text>
+          </View>
         </View>
       </View>
 
@@ -1034,11 +1259,23 @@ function OnboardingDetailSkeleton() {
           </View>
 
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-            <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>Wine Items</Text>
-            {task.items.length > 5 && (
-              <Text style={{ color: "#94a3b8", fontSize: 12, fontStyle: "italic", marginRight: 4 }}>
-                Scroll to see all
-              </Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>Wine Items</Text>
+              {task.items.length > 5 && (
+                <Text style={{ color: "#94a3b8", fontSize: 12, fontStyle: "italic" }}>
+                  Scroll to see all
+                </Text>
+              )}
+            </View>
+            {!isTaskComplete && (
+              <TouchableOpacity
+                onPress={handleSkipAll}
+                style={styles.skipAllHeaderButton}
+                disabled={isProcessing}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.skipAllHeaderButtonText}>Skip All</Text>
+              </TouchableOpacity>
             )}
           </View>
           <ScrollView
@@ -1087,6 +1324,28 @@ function OnboardingDetailSkeleton() {
                           ({item.issues?.length} issue{item.issues!.length > 1 ? "s" : ""})
                         </Text>
                       )}
+                      {!isItemComplete && (
+                        <TouchableOpacity
+                          onPress={() => handleSkipItem(item)}
+                          style={[
+                            styles.skipButton,
+                            {
+                              backgroundColor: "#ef44441A",
+                              borderColor: "#ef444433",
+                            },
+                          ]}
+                          disabled={isProcessing}
+                        >
+                          <Text
+                            style={[
+                              styles.skipButtonText,
+                              { color: "#ef4444" },
+                            ]}
+                          >
+                            Skip
+                          </Text>
+                        </TouchableOpacity>
+                      )}
                     </View>
                   </View>
 
@@ -1125,6 +1384,7 @@ function OnboardingDetailSkeleton() {
           <TouchableOpacity
             style={styles.mainButton}
             onPress={() => setCurrentStep("scan_label")}
+            disabled={isProcessing}
           >
             <Camera size={24} color="#fff" />
             <Text style={styles.mainButtonText}>Scan Bottle Label</Text>
@@ -1133,6 +1393,7 @@ function OnboardingDetailSkeleton() {
           <TouchableOpacity
             style={styles.reportIssueButton}
             onPress={() => setCurrentStep("select_item_for_report")}
+            disabled={isProcessing}
           >
             <AlertCircle size={20} color="#ef4444" />
             <Text style={styles.reportIssueButtonText}>Report an Issue</Text>
@@ -1594,6 +1855,7 @@ function OnboardingDetailSkeleton() {
                   flexDirection: "row",
                   justifyContent: "center",
                   gap: 8,
+                  marginBottom: 16,
                 }}
                 onPress={handleBatchBulkNoQR}
               >
@@ -2086,7 +2348,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 40,
   },
-  header: { flexDirection: "row", alignItems: "center", padding: 24, gap: 16 },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 24,
+    gap: 16,
+  },
   backButton: {
     width: 44,
     height: 44,
@@ -2610,5 +2878,38 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: "700",
     textTransform: "uppercase",
+  },
+
+  skipButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginTop: 4,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  skipButtonText: {
+    fontSize: 10,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  skipAllHeaderButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: "#ef44441A",
+    borderWidth: 1,
+    borderColor: "#ef444433",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  skipAllHeaderButtonText: {
+    color: "#ef4444",
+    fontSize: 11,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
 });

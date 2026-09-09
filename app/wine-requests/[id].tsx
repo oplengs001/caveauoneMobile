@@ -99,6 +99,20 @@ export default function WineRequestDetail() {
     item: any,
     bottlesList?: typeof batchBottles,
   ) => {
+    // If the item is marked as discontinued or awaiting restock and wasn't pulled
+    if (
+      (item.itemStatus === "discontinued" || item.itemStatus === "awaiting_restock") &&
+      (!item.pulledQty || item.pulledQty <= 0)
+    ) {
+      if (bottlesList && bottlesList.length > 0) {
+        const countForWine = bottlesList.filter(
+          (b) => b.masterWineId === item.masterWineId,
+        ).length;
+        if (countForWine > 0) return countForWine;
+      }
+      return 0;
+    }
+
     if (bottlesList && bottlesList.length > 0) {
       const countForWine = bottlesList.filter(
         (b) => b.masterWineId === item.masterWineId,
@@ -387,9 +401,24 @@ export default function WineRequestDetail() {
       }
 
       const masterWineId = bottleData.masterWineId;
-      const itemIndex = request.items.findIndex(
-        (i) => i.masterWineId === masterWineId,
+      // Prefer an item of this wine that is available and expecting intake
+      let itemIndex = request.items.findIndex(
+        (i) =>
+          i.masterWineId === masterWineId &&
+          i.itemStatus !== "discontinued" &&
+          i.itemStatus !== "awaiting_restock" &&
+          (i.ingressedQty || 0) + (i.skippedQty || 0) < getItemExpectedQty(i, batchBottles),
       );
+      if (itemIndex === -1) {
+        itemIndex = request.items.findIndex(
+          (i) =>
+            i.masterWineId === masterWineId &&
+            (i.ingressedQty || 0) + (i.skippedQty || 0) < getItemExpectedQty(i, batchBottles),
+        );
+      }
+      if (itemIndex === -1) {
+        itemIndex = request.items.findIndex((i) => i.masterWineId === masterWineId);
+      }
 
       if (itemIndex === -1) {
         Alert.alert("Not in Request", "This wine is not part of the request.", [
@@ -625,9 +654,17 @@ export default function WineRequestDetail() {
       if (expectedBottle!.readableId) nextVerified.add(expectedBottle!.readableId);
       nextVerified.add(trimmedData);
 
-      const itemIndex = currentReq.items.findIndex(
-        (i) => i.masterWineId === expectedBottle!.masterWineId,
+      let itemIndex = currentReq.items.findIndex(
+        (i) =>
+          i.masterWineId === expectedBottle!.masterWineId &&
+          i.itemStatus !== "discontinued" &&
+          i.itemStatus !== "awaiting_restock",
       );
+      if (itemIndex === -1) {
+        itemIndex = currentReq.items.findIndex(
+          (i) => i.masterWineId === expectedBottle!.masterWineId,
+        );
+      }
 
       let newStatus = currentReq.status;
       let newItems = [...currentReq.items];
@@ -1416,13 +1453,39 @@ export default function WineRequestDetail() {
                       SKU: {wine.sku}
                     </Text>
                   )}
+                  {wine.itemNote ? (
+                    <Text
+                      style={[
+                        styles.itemNoteText,
+                        { color: theme.primary },
+                      ]}
+                    >
+                      Note: {wine.itemNote}
+                    </Text>
+                  ) : null}
                 </View>
 
-                {/* Status indicators for converted requests */}
-                {(request.status === "converted" ||
-                  request.status === "receiving" ||
-                  request.status === "ingress_complete") && (
-                    <View style={{ alignItems: "flex-end", gap: 6 }}>
+                {/* Status indicators & item status pills */}
+                <View style={{ alignItems: "flex-end", gap: 6 }}>
+                  {wine.itemStatus === "available" && (
+                    <View style={[styles.itemStatusPill, { backgroundColor: "#10b98118", borderColor: "#10b98150" }]}>
+                      <Text style={[styles.itemStatusPillText, { color: "#10b981" }]}>Available</Text>
+                    </View>
+                  )}
+                  {wine.itemStatus === "awaiting_restock" && (
+                    <View style={[styles.itemStatusPill, { backgroundColor: "#f59e0b18", borderColor: "#f59e0b50" }]}>
+                      <Text style={[styles.itemStatusPillText, { color: "#f59e0b" }]}>Awaiting Restock</Text>
+                    </View>
+                  )}
+                  {wine.itemStatus === "discontinued" && (
+                    <View style={[styles.itemStatusPill, { backgroundColor: "#ef444418", borderColor: "#ef444450" }]}>
+                      <Text style={[styles.itemStatusPillText, { color: "#ef4444" }]}>Discontinued</Text>
+                    </View>
+                  )}
+
+                  {(request.status === "converted" ||
+                    request.status === "receiving" ||
+                    request.status === "ingress_complete") && (
                       <View
                         style={[
                           styles.progressContainer,
@@ -1434,8 +1497,8 @@ export default function WineRequestDetail() {
                         </Text>
                         <Text style={styles.progressLabel}>RCVD</Text>
                       </View>
-                    </View>
-                  )}
+                    )}
+                </View>
               </View>
             );
           })}
@@ -1622,6 +1685,23 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginTop: 2,
     fontVariant: ["tabular-nums"],
+  },
+  itemNoteText: {
+    fontSize: 11,
+    fontStyle: "italic",
+    marginTop: 3,
+    fontWeight: "600",
+  },
+  itemStatusPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  itemStatusPillText: {
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
   },
   textMuted: {
     opacity: 0.4,

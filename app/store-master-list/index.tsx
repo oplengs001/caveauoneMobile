@@ -15,6 +15,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  DollarSign,
   LayoutGrid,
   LayoutList,
   Minus,
@@ -217,6 +218,27 @@ export default function StoreMasterListScreen() {
 
   const activeFiltersCount =
     (filter !== "all" ? 1 : 0) + (categoryFilter !== "all" ? 1 : 0);
+
+  // Price Visibility Toggle (Hidden by default)
+  const [showPrices, setShowPrices] = useState(false);
+
+  useEffect(() => {
+    AsyncStorage.getItem("@caveau:store_show_prices_v2")
+      .then((val) => {
+        if (val !== null) {
+          setShowPrices(val === "true");
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const toggleShowPrices = useCallback(() => {
+    setShowPrices((prev) => {
+      const next = !prev;
+      AsyncStorage.setItem("@caveau:store_show_prices_v2", String(next)).catch(() => {});
+      return next;
+    });
+  }, []);
 
   // Setting Sheet
   const [selected, setSelected] = useState<WineEntry | null>(null);
@@ -823,11 +845,6 @@ export default function StoreMasterListScreen() {
     const safetyStock = item.setting?.safetyStock || 0;
     const category = item.setting?.wineCategory || item.masterWine.wineCategory;
 
-    const isPortion =
-      Boolean(item.setting?.allowGlass || item.setting?.allowCarafe) ||
-      (item.setting?.glassPrice != null && Number(item.setting.glassPrice) > 0) ||
-      (item.setting?.carafePrice != null && Number(item.setting.carafePrice) > 0);
-
     const cartItem = requestCart[item.masterWine.id];
 
     return (
@@ -870,7 +887,7 @@ export default function StoreMasterListScreen() {
                 {cfg.label}
               </Text>
             </View>
-            {item.setting?.sellingPrice != null && (
+            {showPrices && item.setting?.sellingPrice != null && (
               <Text style={styles.compactPriceText}>
                 ₱
                 {item.setting.sellingPrice.toLocaleString("en-US", {
@@ -882,60 +899,40 @@ export default function StoreMasterListScreen() {
           </View>
         </View>
 
-        {/* Secondary Context Badges Row (Left: Serving Modes | Right: Delivery Status) */}
-        {(isPortion || item.openGlassesCount > 0 || item.activeRequest) && (
+        {/* Inbound Delivery Status (Clean neutral badge) */}
+        {item.activeRequest ? (
           <View style={styles.tileBadgesRow}>
-            {/* Left Zone: Serving Modes */}
-            <View style={styles.tileBadgesLeft}>
-              {isPortion && (
-                <View style={styles.portionTagGlass}>
-                  <MaterialCommunityIcons name="glass-wine" size={11} color={theme.primary} />
-                  <Text style={styles.portionTagTextGlass}>Glass & Carafe</Text>
-                </View>
+            <TouchableOpacity
+              style={styles.tileInboundBadge}
+              onPress={(e) => {
+                e.stopPropagation();
+                router.push(`/wine-requests/${item.activeRequest!.id}`);
+              }}
+              activeOpacity={0.75}
+            >
+              {item.activeRequest.status === "outbound" ||
+                item.activeRequest.status === "converted" ? (
+                <Truck size={11} color={theme.accent} />
+              ) : item.activeRequest.status === "receiving" ? (
+                <CheckCircle2 size={11} color="#15803d" />
+              ) : (
+                <Clock size={11} color={theme.textSecondary} />
               )}
-
-              {item.openGlassesCount > 0 && (
-                <View style={styles.compactGlassBadge}>
-                  <MaterialCommunityIcons name="glass-wine" size={10} color={theme.textSecondary} />
-                  <Text style={styles.compactGlassText}>{item.openGlassesCount}/6 open</Text>
-                </View>
-              )}
-            </View>
-
-            {/* Right Zone: Inbound Delivery Status (Clean neutral badge) */}
-            {item.activeRequest ? (
-              <TouchableOpacity
-                style={styles.tileInboundBadge}
-                onPress={(e) => {
-                  e.stopPropagation();
-                  router.push(`/wine-requests/${item.activeRequest!.id}`);
-                }}
-                activeOpacity={0.75}
-              >
-                {item.activeRequest.status === "outbound" ||
-                  item.activeRequest.status === "converted" ? (
-                  <Truck size={11} color={theme.accent} />
-                ) : item.activeRequest.status === "receiving" ? (
-                  <CheckCircle2 size={11} color="#15803d" />
-                ) : (
-                  <Clock size={11} color={theme.textSecondary} />
-                )}
-                <Text style={styles.tileInboundText}>
-                  {item.activeRequest.status === "pending"
-                    ? "Pending Request"
-                    : item.activeRequest.status === "converted"
-                      ? "Pulling"
-                      : item.activeRequest.status === "outbound"
-                        ? "Outbound"
-                        : item.activeRequest.status === "receiving"
-                          ? "Receiving"
-                          : "Active Request"}
-                </Text>
-                <ChevronRight size={11} color={theme.textSecondary} />
-              </TouchableOpacity>
-            ) : null}
+              <Text style={styles.tileInboundText}>
+                {item.activeRequest.status === "pending"
+                  ? "Pending Request"
+                  : item.activeRequest.status === "converted"
+                    ? "Pulling"
+                    : item.activeRequest.status === "outbound"
+                      ? "Outbound"
+                      : item.activeRequest.status === "receiving"
+                        ? "Receiving"
+                        : "Active Request"}
+              </Text>
+              <ChevronRight size={11} color={theme.textSecondary} />
+            </TouchableOpacity>
           </View>
-        )}
+        ) : null}
 
         {/* Subtle Hairline Divider */}
         <View style={styles.tileDivider} />
@@ -956,6 +953,12 @@ export default function StoreMasterListScreen() {
               )}
             </View>
 
+            {item.requestedQty > 0 && (
+              <View style={styles.compactDeficitBadge}>
+                <TrendingDown size={10} color={theme.danger} strokeWidth={2.5} />
+                <Text style={styles.compactDeficitText}>{item.requestedQty} deficit</Text>
+              </View>
+            )}
           </View>
 
           {/* Dedicated Action Buttons Cluster */}
@@ -1071,11 +1074,6 @@ export default function StoreMasterListScreen() {
     const parLevel = item.setting?.parLevel || 0;
     const category = item.setting?.wineCategory || item.masterWine.wineCategory;
 
-    const isPortion =
-      Boolean(item.setting?.allowGlass || item.setting?.allowCarafe) ||
-      (item.setting?.glassPrice != null && Number(item.setting.glassPrice) > 0) ||
-      (item.setting?.carafePrice != null && Number(item.setting.carafePrice) > 0);
-
     const fillPercentage =
       safetyStock > 0
         ? Math.min(100, (item.stockCount / safetyStock) * 100)
@@ -1117,7 +1115,7 @@ export default function StoreMasterListScreen() {
                 {cfg.label}
               </Text>
             </View>
-            {item.setting?.sellingPrice != null && (
+            {showPrices && item.setting?.sellingPrice != null && (
               <Text style={styles.sellingPrice}>
                 ₱
                 {item.setting.sellingPrice.toLocaleString("en-US", {
@@ -1128,35 +1126,26 @@ export default function StoreMasterListScreen() {
           </View>
         </View>
 
-        <View style={styles.tagsRow}>
-          {category ? (
-            <View style={[styles.indicatorBadge, { backgroundColor: theme.accent + "14", borderColor: theme.accent + "30", borderWidth: 1 }]}>
-              <Text style={[styles.indicatorText, { color: theme.accent }]}>
-                {category === "fun" ? "Fun Wine" : category === "fine" ? "Fine Wine" : "Reserve Wine"}
-              </Text>
-            </View>
-          ) : null}
-          {isPortion ? (
-            <View style={[styles.indicatorBadge, { backgroundColor: theme.primary + "0A", borderColor: theme.primary + "25", borderWidth: 1 }]}>
-              <MaterialCommunityIcons name="glass-wine" size={13} color={theme.primary} />
-              <Text style={[styles.indicatorText, { color: theme.primary }]}>By Glass & Carafe</Text>
-            </View>
-          ) : (
-            <View style={[styles.indicatorBadge, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }]}>
-              <MaterialCommunityIcons name="bottle-wine-outline" size={13} color={theme.textSecondary} />
-              <Text style={[styles.indicatorText, { color: theme.textSecondary }]}>Bottle Only</Text>
-            </View>
-          )}
+        {(category || requestCart[item.masterWine.id]) && (
+          <View style={styles.tagsRow}>
+            {category ? (
+              <View style={[styles.indicatorBadge, { backgroundColor: theme.accent + "14", borderColor: theme.accent + "30", borderWidth: 1 }]}>
+                <Text style={[styles.indicatorText, { color: theme.accent }]}>
+                  {category === "fun" ? "Fun Wine" : category === "fine" ? "Fine Wine" : "Reserve Wine"}
+                </Text>
+              </View>
+            ) : null}
 
-          {requestCart[item.masterWine.id] && (
-            <View style={[styles.indicatorBadge, { backgroundColor: theme.primary + "12", borderColor: theme.primary + "30", borderWidth: 1 }]}>
-              <ShoppingCart size={11} color={theme.primary} />
-              <Text style={[styles.indicatorText, { color: theme.primary, fontWeight: "800" }]}>
-                {requestCart[item.masterWine.id].qty} in Cart
-              </Text>
-            </View>
-          )}
-        </View>
+            {requestCart[item.masterWine.id] && (
+              <View style={[styles.indicatorBadge, { backgroundColor: theme.primary + "12", borderColor: theme.primary + "30", borderWidth: 1 }]}>
+                <ShoppingCart size={11} color={theme.primary} />
+                <Text style={[styles.indicatorText, { color: theme.primary, fontWeight: "800" }]}>
+                  {requestCart[item.masterWine.id].qty} in Cart
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
 
         {isConfigured ? (
           <View style={styles.barContainer}>
@@ -1167,14 +1156,6 @@ export default function StoreMasterListScreen() {
                   {item.stockCount % 1 === 0 ? item.stockCount : item.stockCount.toFixed(2)}
                 </Text>
                 <Text style={styles.stockPrimaryLabel}>IN STORE</Text>
-                {item.openGlassesCount > 0 && (
-                  <View style={styles.openGlassesBadge}>
-                    <MaterialCommunityIcons name="glass-wine" size={11} color={theme.textSecondary} />
-                    <Text style={styles.openGlassesText}>
-                      {item.openGlassesCount}/6 glasses
-                    </Text>
-                  </View>
-                )}
               </View>
 
               {item.requestedQty > 0 && (
@@ -1219,13 +1200,6 @@ export default function StoreMasterListScreen() {
               {item.stockCount % 1 === 0 ? item.stockCount : item.stockCount.toFixed(2)}
             </Text>
             <Text style={styles.stockPrimaryLabel}>IN STORE (UNSET PAR)</Text>
-            {item.openGlassesCount > 0 && (
-              <View style={styles.openGlassesBadge}>
-                <Text style={styles.openGlassesText}>
-                  🍷 {item.openGlassesCount}/6 glasses
-                </Text>
-              </View>
-            )}
           </View>
         )}
 
@@ -1835,6 +1809,20 @@ export default function StoreMasterListScreen() {
             <Text style={styles.viewModeBtnText}>
               {viewMode === "compact" ? "Compact" : "Cards"}
             </Text>
+          </TouchableOpacity>
+
+          {/* Price Visibility Toggle */}
+          <TouchableOpacity
+            style={[styles.priceToggleBtn, showPrices && styles.priceToggleBtnActive]}
+            onPress={toggleShowPrices}
+            activeOpacity={0.7}
+            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+          >
+            <DollarSign
+              size={18}
+              color={showPrices ? theme.primary : theme.textSecondary}
+              strokeWidth={showPrices ? 2.5 : 2}
+            />
           </TouchableOpacity>
 
           <TouchableOpacity onPress={onRefresh} style={styles.refreshBtn}>
@@ -2649,6 +2637,8 @@ export default function StoreMasterListScreen() {
         onSubmit={submitGroupedRequest}
         submitting={submittingCart}
         isLandscape={isLandscape}
+        showAmounts={showPrices}
+        onToggleShowAmounts={toggleShowPrices}
       />
 
       {/* SUCCESS CONFIRMATION MODAL */}
@@ -2731,6 +2721,21 @@ const styles = StyleSheet.create({
     backgroundColor: theme.primary + "10",
     borderWidth: 1,
     borderColor: theme.primary + "25",
+  },
+  priceToggleBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: theme.background,
+    borderWidth: 1,
+    borderColor: theme.border,
+    marginRight: 8,
+  },
+  priceToggleBtnActive: {
+    backgroundColor: theme.primary + "12",
+    borderColor: theme.primary + "30",
   },
   viewModeBtn: {
     flexDirection: "row",
@@ -3179,62 +3184,7 @@ const styles = StyleSheet.create({
   tileBadgesRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
     marginTop: 8,
-  },
-  tileBadgesLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    flexShrink: 1,
-  },
-  portionTagGlass: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: theme.primary + "0A",
-    borderColor: theme.primary + "20",
-    borderWidth: 1,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  portionTagTextGlass: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: theme.primary,
-  },
-  portionTagCarafe: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: theme.accent + "0A",
-    borderColor: theme.accent + "20",
-    borderWidth: 1,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  portionTagTextCarafe: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: theme.accent,
-  },
-  compactGlassBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-    backgroundColor: theme.background,
-    borderColor: theme.border,
-    borderWidth: 1,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  compactGlassText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: theme.textSecondary,
   },
   tileInboundBadge: {
     flexDirection: "row",
@@ -3463,20 +3413,7 @@ const styles = StyleSheet.create({
     color: theme.textSecondary,
     letterSpacing: 0.5,
   },
-  openGlassesBadge: {
-    backgroundColor: theme.background,
-    borderColor: theme.border,
-    borderWidth: 1,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-    marginLeft: 4,
-  },
-  openGlassesText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: theme.textSecondary,
-  },
+
   deficitBadge: {
     flexDirection: "row",
     alignItems: "center",
