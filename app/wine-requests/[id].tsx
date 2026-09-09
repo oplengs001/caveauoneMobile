@@ -24,7 +24,7 @@ import {
   Truck,
   Wine,
 } from "lucide-react-native";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -46,7 +46,7 @@ export default function WineRequestDetail() {
   }>();
   const router = useRouter();
   const { profile } = useAuth();
-  const { horizontalPadding } = useResponsivePadding(24);
+  const { horizontalPadding, isLandscape, width } = useResponsivePadding(24);
 
   const [scanning, setScanning] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
@@ -95,35 +95,35 @@ export default function WineRequestDetail() {
   const isBottleHandled = (bottle: { bottleId: string; readableId?: string }) =>
     isBottleVerified(bottle) || isBottleSkipped(bottle);
 
-  const getItemExpectedQty = (
-    item: any,
-    bottlesList?: typeof batchBottles,
-  ) => {
-    // If the item is marked as discontinued or awaiting restock and wasn't pulled
-    if (
-      (item.itemStatus === "discontinued" || item.itemStatus === "awaiting_restock") &&
-      (!item.pulledQty || item.pulledQty <= 0)
-    ) {
+  const getItemExpectedQty = useCallback(
+    (item: any, bottlesList?: typeof batchBottles) => {
+      // If the item is marked as discontinued or awaiting restock and wasn't pulled
+      if (
+        (item.itemStatus === "discontinued" || item.itemStatus === "awaiting_restock") &&
+        (!item.pulledQty || item.pulledQty <= 0)
+      ) {
+        if (bottlesList && bottlesList.length > 0) {
+          const countForWine = bottlesList.filter(
+            (b) => b.masterWineId === item.masterWineId,
+          ).length;
+          if (countForWine > 0) return countForWine;
+        }
+        return 0;
+      }
+
       if (bottlesList && bottlesList.length > 0) {
         const countForWine = bottlesList.filter(
           (b) => b.masterWineId === item.masterWineId,
         ).length;
         if (countForWine > 0) return countForWine;
       }
-      return 0;
-    }
-
-    if (bottlesList && bottlesList.length > 0) {
-      const countForWine = bottlesList.filter(
-        (b) => b.masterWineId === item.masterWineId,
-      ).length;
-      if (countForWine > 0) return countForWine;
-    }
-    if (item.pulledQty !== undefined && item.pulledQty !== null && item.pulledQty > 0) {
-      return item.pulledQty;
-    }
-    return Math.max(0, item.qty - (item.skippedQty || 0));
-  };
+      if (item.pulledQty !== undefined && item.pulledQty !== null && item.pulledQty > 0) {
+        return item.pulledQty;
+      }
+      return Math.max(0, item.qty - (item.skippedQty || 0));
+    },
+    [],
+  );
 
   const checkIsAllReceived = (
     currentItems: any[],
@@ -151,6 +151,29 @@ export default function WineRequestDetail() {
       return (i.ingressedQty || 0) + (i.skippedQty || 0) >= expected;
     });
   };
+
+  const leftColumnWidth = useMemo(() => {
+    if (!isLandscape) return "100%";
+    return Math.min(Math.max(width * 0.44, 380), 540);
+  }, [isLandscape, width]);
+
+  const totalExpectedBottles = useMemo(() => {
+    if (!request?.items) return 0;
+    return request.items.reduce(
+      (sum, i) => sum + getItemExpectedQty(i, batchBottles),
+      0,
+    );
+  }, [request?.items, batchBottles, getItemExpectedQty]);
+
+  const totalReceivedBottles = useMemo(() => {
+    if (!request?.items) return 0;
+    return request.items.reduce((sum, i) => sum + (i.ingressedQty || 0), 0);
+  }, [request?.items]);
+
+  const totalSkippedBottles = useMemo(() => {
+    if (!request?.items) return 0;
+    return request.items.reduce((sum, i) => sum + (i.skippedQty || 0), 0);
+  }, [request?.items]);
 
   const finalizeBatchReceiving = async (
     customVerified?: Set<string>,
@@ -1029,11 +1052,11 @@ export default function WineRequestDetail() {
     }
   };
 
-  if (!permission && scanning) {
+  if (!permission && scanning && !isLandscape) {
     return <View />;
   }
 
-  if (!permission?.granted && scanning) {
+  if (!permission?.granted && scanning && !isLandscape) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: "#000", justifyContent: "center", alignItems: "center" }]}>
         <Text style={styles.permissionText}>Camera permission required</Text>
@@ -1057,6 +1080,317 @@ export default function WineRequestDetail() {
     const isAllBatchHandled =
       batchBottles.length > 0 && batchBottles.every(isBottleHandled);
     const verifiedBatchBottles = batchBottles.filter(isBottleVerified);
+    const skippedBatchBottles = batchBottles.filter(isBottleSkipped);
+
+    if (isLandscape) {
+      return (
+        <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+          <Stack.Screen options={{ headerShown: false }} />
+          {/* Landscape Header for Batch Mode */}
+          <View style={[styles.landscapeHeader, { backgroundColor: theme.background }]}>
+            <View style={styles.landscapeHeaderLeft}>
+              <TouchableOpacity
+                onPress={async () => {
+                  if (isAllBatchHandled) {
+                    await finalizeBatchReceiving();
+                    fetchRequest();
+                  }
+                  setIsBatchMode(false);
+                }}
+                style={styles.backButton}
+              >
+                <ArrowLeft size={24} color={theme.primary} />
+              </TouchableOpacity>
+              <View>
+                <Text style={[styles.landscapeTitle, { color: theme.primary }]}>Batch Receive</Text>
+                <Text style={[styles.landscapeSubtitle, { color: theme.textSecondary }]}>
+                  REQ: {request?.id.slice(0, 8).toUpperCase()}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.landscapeHeaderRight}>
+              <View
+                style={[
+                  styles.landscapeStatusBadge,
+                  { backgroundColor: theme.card, borderColor: theme.border },
+                ]}
+              >
+                <View
+                  style={[
+                    styles.statusDot,
+                    { backgroundColor: isAllBatchHandled ? "#10b981" : "#f59e0b" },
+                  ]}
+                />
+                <Text style={[styles.landscapeStatusBadgeText, { color: theme.text }]}>
+                  {isAllBatchHandled ? "READY TO FINALIZE" : "SCANNING EXPECTED"}
+                </Text>
+              </View>
+
+              <View
+                style={[
+                  styles.landscapeProgressBadge,
+                  {
+                    backgroundColor: isAllBatchHandled ? "#10b98115" : theme.primary + "15",
+                    borderColor: isAllBatchHandled ? "#10b98140" : theme.primary + "30",
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.landscapeProgressBadgeText,
+                    { color: isAllBatchHandled ? "#10b981" : theme.primary },
+                  ]}
+                >
+                  {verifiedBatchBottles.length} / {batchBottles.length} RECEIVED
+                  {skippedBatchBottles.length > 0 ? ` • ${skippedBatchBottles.length} SKIPPED` : ""}
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Landscape Split Consoles */}
+          <View style={styles.landscapeMainWrapper}>
+            {/* Left Console: Camera or Completion Card */}
+            <View style={[styles.landscapeLeftColumn, { width: leftColumnWidth }]}>
+              {!isAllBatchHandled ? (
+                <View style={styles.landscapeScannerCard}>
+                  <CameraView
+                    style={StyleSheet.absoluteFill}
+                    onBarcodeScanned={handleBatchQRScan}
+                    barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
+                  />
+                  <View
+                    style={{
+                      ...StyleSheet.absoluteFillObject,
+                      justifyContent: "center",
+                      alignItems: "center",
+                      backgroundColor: "rgba(0,0,0,0.35)",
+                    }}
+                  >
+                    <View
+                      style={{
+                        width: 140,
+                        height: 140,
+                        borderWidth: 2,
+                        borderColor: theme.primary,
+                        borderRadius: 14,
+                        backgroundColor: "rgba(79, 70, 229, 0.08)",
+                      }}
+                    />
+                    <Text style={{ color: "#fff", fontSize: 12, fontWeight: "800", marginTop: 10, textTransform: "uppercase", letterSpacing: 1 }}>
+                      Scan expected QR label
+                    </Text>
+                  </View>
+                </View>
+              ) : (
+                <View
+                  style={[
+                    styles.landscapeCompletedCard,
+                    { backgroundColor: "#d1fae5", borderColor: "#a7f3d0" },
+                  ]}
+                >
+                  <View style={[styles.completedIconWrapper, { backgroundColor: "rgba(16, 185, 129, 0.2)" }]}>
+                    <CheckCircle2 size={44} color="#059669" strokeWidth={2.5} />
+                  </View>
+                  <Text style={[styles.completedTitle, { color: "#065f46" }]}>ALL WINES PROCESSED</Text>
+                  <Text style={[styles.completedSubtitle, { color: "#047857" }]}>
+                    You have successfully scanned or skipped all expected bottles.
+                  </Text>
+                  <View style={[styles.completedStatsRow, { backgroundColor: "rgba(255, 255, 255, 0.6)" }]}>
+                    <View style={styles.completedStatItem}>
+                      <Text style={[styles.completedStatNumber, { color: "#059669" }]}>
+                        {verifiedBatchBottles.length}
+                      </Text>
+                      <Text style={[styles.completedStatLabel, { color: "#065f46" }]}>RECEIVED</Text>
+                    </View>
+                    <View style={styles.completedStatItem}>
+                      <Text style={[styles.completedStatNumber, { color: skippedBatchBottles.length > 0 ? "#ef4444" : "#065f46" }]}>
+                        {skippedBatchBottles.length}
+                      </Text>
+                      <Text style={[styles.completedStatLabel, { color: "#065f46" }]}>SKIPPED</Text>
+                    </View>
+                    <View style={styles.completedStatItem}>
+                      <Text style={[styles.completedStatNumber, { color: "#065f46" }]}>
+                        {batchBottles.length}
+                      </Text>
+                      <Text style={[styles.completedStatLabel, { color: "#065f46" }]}>TOTAL</Text>
+                    </View>
+                  </View>
+                </View>
+              )}
+
+              {/* Left Column Quick Actions */}
+              <View style={{ gap: 8, marginTop: 4 }}>
+                {isAllBatchHandled && verifiedBatchBottles.length > 0 && (
+                  <TouchableOpacity
+                    style={[styles.landscapeActionButton, { backgroundColor: "#10b981" }]}
+                    onPress={async () => {
+                      await finalizeBatchReceiving();
+                      const firstBottle = verifiedBatchBottles[0];
+                      const isMultipleWines = verifiedBatchBottles.some(
+                        (b) => b.masterWineId !== firstBottle?.masterWineId,
+                      );
+
+                      router.replace({
+                        pathname: "/tagging",
+                        params: {
+                          bottleIds: verifiedBatchBottles.map((b) => b.bottleId).join(","),
+                          mode: "tagging",
+                          source: "wine-request",
+                          fromRequestId: id,
+                          wineName: isMultipleWines ? "Multiple Wines" : (firstBottle?.wineName || "Received Wines"),
+                          wineVintage: isMultipleWines ? "" : (firstBottle?.vintage || ""),
+                          wineProducer: isMultipleWines ? "" : (firstBottle?.producer || ""),
+                          wineFormat: isMultipleWines ? "" : (firstBottle?.format || ""),
+                        },
+                      });
+                    }}
+                  >
+                    <MapPin size={18} color="#fff" strokeWidth={2.5} />
+                    <Text style={styles.landscapeActionButtonText}>
+                      Tag {verifiedBatchBottles.length} Location{verifiedBatchBottles.length > 1 ? "s" : ""}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+
+                {!isAllBatchHandled && (
+                  <TouchableOpacity
+                    style={[styles.landscapeActionButton, { backgroundColor: "#f59e0b" }]}
+                    onPress={handleBatchBulkNoQR}
+                  >
+                    <QrCode size={18} color="#fff" strokeWidth={2.5} />
+                    <Text style={styles.landscapeActionButtonText}>Batch Skip QR</Text>
+                  </TouchableOpacity>
+                )}
+
+                <TouchableOpacity
+                  style={[styles.landscapeActionButton, { backgroundColor: theme.card, borderWidth: 1, borderColor: theme.border }]}
+                  onPress={async () => {
+                    if (isAllBatchHandled) {
+                      await finalizeBatchReceiving();
+                      fetchRequest();
+                    }
+                    setIsBatchMode(false);
+                  }}
+                >
+                  <Text style={[styles.landscapeActionButtonText, { color: theme.text }]}>
+                    {isAllBatchHandled ? "Done" : "Cancel Batch"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Right Console: Expected Bottle Rows */}
+            <View style={styles.landscapeRightColumn}>
+              <View style={styles.landscapeRightHeader}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  <Package size={16} color={theme.primary} />
+                  <Text style={[styles.sectionTitle, { color: theme.text, fontSize: 13 }]}>
+                    Expected Bottles ({batchBottles.length})
+                  </Text>
+                </View>
+                <Text style={{ fontSize: 11, fontWeight: "800", color: theme.textSecondary }}>
+                  {verifiedBatchBottles.length}/{batchBottles.length} VERIFIED
+                </Text>
+              </View>
+
+              <ScrollView
+                style={{ flex: 1 }}
+                contentContainerStyle={{ paddingBottom: 16, gap: 8 }}
+                showsVerticalScrollIndicator={true}
+              >
+                {batchBottles.map((bottle, index) => {
+                  const isVerified = isBottleVerified(bottle);
+                  const isSkipped = isBottleSkipped(bottle);
+                  const isPending = !isVerified && !isSkipped;
+
+                  return (
+                    <View
+                      key={bottle.bottleId}
+                      style={[
+                        styles.landscapeBatchItemRow,
+                        {
+                          backgroundColor: theme.card,
+                          borderColor: isVerified ? "#10b981" : isSkipped ? "#ef4444" : theme.border,
+                        },
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.batchIndexPill,
+                          {
+                            backgroundColor: isVerified
+                              ? "rgba(16,185,129,0.15)"
+                              : isSkipped
+                              ? "rgba(239,68,68,0.15)"
+                              : theme.background,
+                          },
+                        ]}
+                      >
+                        {isVerified ? (
+                          <CheckCircle2 size={16} color="#10b981" />
+                        ) : isSkipped ? (
+                          <Ban size={16} color="#ef4444" />
+                        ) : (
+                          <Text style={{ color: theme.textSecondary, fontSize: 12, fontWeight: "900" }}>
+                            {index + 1}
+                          </Text>
+                        )}
+                      </View>
+
+                      <View style={{ flex: 1, paddingRight: 8 }}>
+                        <Text style={{ color: theme.text, fontSize: 13, fontWeight: "700" }} numberOfLines={1}>
+                          {bottle.wineName}
+                        </Text>
+                        <Text style={{ color: theme.textSecondary, fontSize: 11, fontWeight: "500", marginTop: 2 }}>
+                          {[bottle.producer, bottle.vintage, bottle.format].filter(Boolean).join(" · ")}
+                        </Text>
+                        <Text style={{ color: theme.textSecondary, fontSize: 11, fontWeight: "700", fontFamily: "monospace", marginTop: 3 }}>
+                          {bottle.readableId || bottle.bottleId}
+                        </Text>
+                      </View>
+
+                      <View style={{ alignItems: "flex-end", gap: 6 }}>
+                        {(isVerified || isSkipped) && (
+                          <Text
+                            style={{
+                              color: isVerified ? "#10b981" : "#ef4444",
+                              fontSize: 11,
+                              fontWeight: "800",
+                              textTransform: "uppercase",
+                            }}
+                          >
+                            {isVerified ? "✓ Received" : "Not Arrived"}
+                          </Text>
+                        )}
+                        {isPending && (
+                          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                            <TouchableOpacity
+                              onPress={() => handleBatchNoQR(bottle.bottleId)}
+                              style={styles.skipQrButton}
+                            >
+                              <QrCode size={12} color="#f59e0b" strokeWidth={2.5} />
+                              <Text style={{ color: "#f59e0b", fontSize: 11, fontWeight: "700" }}>Skip QR</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              onPress={() => handleBatchSkip(bottle.bottleId, bottle.masterWineId)}
+                              style={styles.skipBottleButton}
+                            >
+                              <Text style={{ color: "#ef4444", fontSize: 11, fontWeight: "700" }}>Skip</Text>
+                            </TouchableOpacity>
+                          </View>
+                        )}
+                      </View>
+                    </View>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          </View>
+        </SafeAreaView>
+      );
+    }
 
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
@@ -1247,7 +1581,7 @@ export default function WineRequestDetail() {
     );
   }
 
-  if (scanning) {
+  if (scanning && !isLandscape) {
     return (
       <View style={styles.container}>
         <CameraView
@@ -1311,6 +1645,374 @@ export default function WineRequestDetail() {
       verifiedBottleIds,
       skippedBottleIds,
     );
+
+  if (isLandscape) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+        <Stack.Screen options={{ headerShown: false }} />
+
+        {/* Landscape Header */}
+        <View style={[styles.landscapeHeader, { backgroundColor: theme.background }]}>
+          <View style={styles.landscapeHeaderLeft}>
+            <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+              <ArrowLeft size={24} color={theme.primary} />
+            </TouchableOpacity>
+            <View>
+              <Text style={[styles.landscapeTitle, { color: theme.primary }]}>
+                Request Details
+              </Text>
+              <Text style={[styles.landscapeSubtitle, { color: theme.textSecondary }]}>
+                REQ: {request.id.slice(0, 8).toUpperCase()}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.landscapeHeaderRight}>
+            <View
+              style={[
+                styles.landscapeStatusBadge,
+                { backgroundColor: theme.card, borderColor: theme.border },
+              ]}
+            >
+              <View
+                style={[
+                  styles.statusDot,
+                  { backgroundColor: statusConfig.color },
+                ]}
+              />
+              <Text style={[styles.landscapeStatusBadgeText, { color: theme.text }]}>
+                {statusConfig.label.toUpperCase()}
+              </Text>
+            </View>
+
+            <View
+              style={[
+                styles.landscapeProgressBadge,
+                {
+                  backgroundColor: isAllReceived ? "#10b98115" : theme.primary + "15",
+                  borderColor: isAllReceived ? "#10b98140" : theme.primary + "30",
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.landscapeProgressBadgeText,
+                  { color: isAllReceived ? "#10b981" : theme.primary },
+                ]}
+              >
+                {totalReceivedBottles} / {totalExpectedBottles} RCVD
+                {totalSkippedBottles > 0 ? ` • ${totalSkippedBottles} SKIPPED` : ""}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Landscape Main Split Consoles */}
+        <View style={styles.landscapeMainWrapper}>
+          {/* Left Console: Overview & Controls OR Embedded Live Scanner */}
+          <View style={[styles.landscapeLeftColumn, { width: leftColumnWidth }]}>
+            {scanning ? (
+              /* Embedded Live Scanner in Left Console */
+              <View style={styles.landscapeScannerCard}>
+                <CameraView
+                  style={StyleSheet.absoluteFill}
+                  onBarcodeScanned={handleBarcodeScanned}
+                  barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
+                />
+                <View style={styles.scannerOverlay}>
+                  <View style={styles.scanTargetLandscape} />
+                  <Text style={styles.scanTextSmall}>Scan bottle QR to receive</Text>
+                  <TouchableOpacity
+                    onPress={() => setScanning(false)}
+                    style={styles.cancelScanButtonLandscape}
+                  >
+                    <Text style={styles.cancelScanTextLandscape}>Cancel Scan</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : (
+              /* Overview, Metrics & Action Cards */
+              <ScrollView
+                style={{ flex: 1 }}
+                contentContainerStyle={{ gap: 10 }}
+                showsVerticalScrollIndicator={false}
+              >
+                {/* Status Banner */}
+                <View
+                  style={[
+                    styles.statusBanner,
+                    { backgroundColor: statusConfig.bg, padding: 14, borderRadius: 16 },
+                  ]}
+                >
+                  <StatusIcon size={20} color={statusConfig.color} strokeWidth={2.5} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.statusLabel, { color: statusConfig.color, fontSize: 13 }]}>
+                      {statusConfig.label}
+                    </Text>
+                    {request.status === "rejected" && request.rejectionReason && (
+                      <Text
+                        style={[
+                          styles.statusDate,
+                          { color: statusConfig.color + "AA", marginTop: 4, fontSize: 11 },
+                        ]}
+                      >
+                        Reason: {request.rejectionReason}
+                      </Text>
+                    )}
+                    <Text
+                      style={[styles.statusDate, { color: statusConfig.color + "AA", fontSize: 11 }]}
+                    >
+                      {formatDate(request.createdAt, {
+                        weekday: "short",
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      })}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Metrics Summary Tiles */}
+                <View
+                  style={[
+                    styles.landscapeMetricsCard,
+                    { backgroundColor: theme.card, borderColor: theme.border },
+                  ]}
+                >
+                  <View style={styles.landscapeMetricRow}>
+                    <View style={styles.landscapeMetricItem}>
+                      <Text style={[styles.landscapeMetricNumber, { color: theme.primary }]}>
+                        {totalReceivedBottles} / {totalExpectedBottles}
+                      </Text>
+                      <Text style={[styles.landscapeMetricLabel, { color: theme.textSecondary }]}>
+                        BOTTLES RCVD
+                      </Text>
+                    </View>
+                    <View style={[styles.landscapeMetricDivider, { backgroundColor: theme.border }]} />
+                    <View style={styles.landscapeMetricItem}>
+                      <Text style={[styles.landscapeMetricNumber, { color: "#10b981" }]}>
+                        ₱{request.totalAmount > 0 ? request.totalAmount.toLocaleString() : "0"}
+                      </Text>
+                      <Text style={[styles.landscapeMetricLabel, { color: theme.textSecondary }]}>
+                        TOTAL VALUE
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                {/* If all received, show completion card */}
+                {isAllReceived ? (
+                  <View
+                    style={[
+                      styles.landscapeCompletedCard,
+                      { backgroundColor: "#d1fae5", borderColor: "#a7f3d0", padding: 18 },
+                    ]}
+                  >
+                    <CheckCircle2 size={36} color="#059669" strokeWidth={2.5} />
+                    <Text style={[styles.completedTitle, { color: "#065f46", fontSize: 15, marginTop: 8 }]}>
+                      ALL ITEMS RECEIVED
+                    </Text>
+                    <Text style={[styles.completedSubtitle, { color: "#047857", fontSize: 12, marginBottom: 14 }]}>
+                      All requested inventory has arrived and been reconciled.
+                    </Text>
+                    <TouchableOpacity
+                      style={[styles.landscapeActionButton, { backgroundColor: "#059669", width: "100%" }]}
+                      onPress={() => router.dismissTo("/wine-requests")}
+                    >
+                      <ArrowLeft size={18} color="#fff" strokeWidth={2.5} />
+                      <Text style={styles.landscapeActionButtonText}>Return to Requests</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  /* Receiving Actions */
+                  (request.status === "receiving" ||
+                    request.status === "outbound" ||
+                    (request.status === "ingress_complete" && !isAllReceived)) && (
+                    <View
+                      style={[
+                        styles.landscapeActionsCard,
+                        { backgroundColor: theme.card, borderColor: theme.border },
+                      ]}
+                    >
+                      <Text style={[styles.landscapeActionsTitle, { color: theme.text }]}>
+                        Receiving Actions
+                      </Text>
+                      <Text style={[styles.landscapeActionsSubtitle, { color: theme.textSecondary }]}>
+                        Scan bottles as they arrive at your store.
+                      </Text>
+
+                      <View style={{ gap: 8, marginTop: 10 }}>
+                        {batchBottles.length > 0 && (
+                          <TouchableOpacity
+                            style={[styles.landscapeActionButton, { backgroundColor: "#4f46e5" }]}
+                            onPress={() => setIsBatchMode(true)}
+                          >
+                            <ScanQrCode size={18} color="#fff" strokeWidth={2.5} />
+                            <Text style={styles.landscapeActionButtonText}>
+                              Batch Receive ({batchBottles.length} btls)
+                            </Text>
+                          </TouchableOpacity>
+                        )}
+
+                        <TouchableOpacity
+                          style={[
+                            styles.landscapeActionButton,
+                            { backgroundColor: theme.background, borderWidth: 1, borderColor: theme.border },
+                          ]}
+                          onPress={() => setScanning(true)}
+                        >
+                          <ScanQrCode size={18} color={theme.text} strokeWidth={2.5} />
+                          <Text style={[styles.landscapeActionButtonText, { color: theme.text }]}>
+                            Scan One Bottle
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  )
+                )}
+              </ScrollView>
+            )}
+          </View>
+
+          {/* Right Console: Requested Items List */}
+          <View style={styles.landscapeRightColumn}>
+            <View style={styles.landscapeRightHeader}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <Wine size={16} color={theme.primary} />
+                <Text style={[styles.sectionTitle, { color: theme.text, fontSize: 13 }]}>
+                  Requested Items ({request.items.length})
+                </Text>
+              </View>
+              <Text style={{ fontSize: 11, fontWeight: "800", color: theme.textSecondary }}>
+                {totalReceivedBottles}/{totalExpectedBottles} RCVD
+              </Text>
+            </View>
+
+            <ScrollView
+              style={{ flex: 1 }}
+              contentContainerStyle={{ paddingBottom: 16, gap: 8 }}
+              showsVerticalScrollIndicator={true}
+            >
+              {request.items.map((wine, idx) => {
+                const expectedQty = getItemExpectedQty(wine, batchBottles);
+                const isFullySkipped = expectedQty === 0;
+                const isItemFulfilled = (wine.ingressedQty || 0) >= expectedQty;
+
+                return (
+                  <View
+                    key={idx}
+                    style={[
+                      styles.landscapeItemRow,
+                      { backgroundColor: theme.card, borderColor: theme.border },
+                    ]}
+                  >
+                    {/* Qty pill */}
+                    <View
+                      style={[
+                        styles.qtyPill,
+                        {
+                          backgroundColor: isFullySkipped
+                            ? "#fee2e2"
+                            : theme.primary + "18",
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.qtyText,
+                          { color: isFullySkipped ? "#ef4444" : theme.primary },
+                        ]}
+                      >
+                        {wine.qty}x
+                      </Text>
+                    </View>
+
+                    {/* Wine info */}
+                    <View style={{ flex: 1, paddingRight: 4 }}>
+                      <Text
+                        style={[
+                          styles.wineName,
+                          { color: theme.text, fontSize: 13 },
+                          isFullySkipped && styles.textMuted,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {wine.wineName}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.wineMeta,
+                          { color: theme.textSecondary, fontSize: 11 },
+                          isFullySkipped && styles.textMuted,
+                        ]}
+                      >
+                        {[wine.vintage, wine.format].filter(Boolean).join(" · ")}
+                      </Text>
+                      {wine.sku && wine.sku !== "N/A" && (
+                        <Text
+                          style={[
+                            styles.wineSku,
+                            { color: theme.textSecondary + "88", fontSize: 10 },
+                          ]}
+                        >
+                          SKU: {wine.sku}
+                        </Text>
+                      )}
+                      {wine.itemNote ? (
+                        <Text
+                          style={[
+                            styles.itemNoteText,
+                            { color: theme.primary, fontSize: 10 },
+                          ]}
+                        >
+                          Note: {wine.itemNote}
+                        </Text>
+                      ) : null}
+                    </View>
+
+                    {/* Status indicators & item status pills */}
+                    <View style={{ alignItems: "flex-end", gap: 4 }}>
+                      {wine.itemStatus === "available" && (
+                        <View style={[styles.itemStatusPill, { backgroundColor: "#10b98118", borderColor: "#10b98150" }]}>
+                          <Text style={[styles.itemStatusPillText, { color: "#10b981" }]}>Available</Text>
+                        </View>
+                      )}
+                      {wine.itemStatus === "awaiting_restock" && (
+                        <View style={[styles.itemStatusPill, { backgroundColor: "#f59e0b18", borderColor: "#f59e0b50" }]}>
+                          <Text style={[styles.itemStatusPillText, { color: "#f59e0b" }]}>Awaiting Restock</Text>
+                        </View>
+                      )}
+                      {wine.itemStatus === "discontinued" && (
+                        <View style={[styles.itemStatusPill, { backgroundColor: "#ef444418", borderColor: "#ef444450" }]}>
+                          <Text style={[styles.itemStatusPillText, { color: "#ef4444" }]}>Discontinued</Text>
+                        </View>
+                      )}
+
+                      {(request.status === "converted" ||
+                        request.status === "receiving" ||
+                        request.status === "ingress_complete") && (
+                        <View
+                          style={[
+                            styles.progressContainer,
+                            isItemFulfilled && { backgroundColor: "#d1fae5" },
+                          ]}
+                        >
+                          <Text style={styles.progressText}>
+                            {wine.ingressedQty || 0} / {expectedQty}
+                          </Text>
+                          <Text style={styles.progressLabel}>RCVD</Text>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView
@@ -1843,5 +2545,282 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "900",
     textTransform: "uppercase",
+  },
+  // Landscape Styles
+  landscapeHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(150, 150, 150, 0.15)",
+  },
+  landscapeHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  landscapeTitle: {
+    fontSize: 18,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: -0.3,
+  },
+  landscapeSubtitle: {
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  landscapeHeaderRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  landscapeStatusBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  landscapeStatusBadgeText: {
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+  },
+  landscapeProgressBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  landscapeProgressBadgeText: {
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+  },
+  landscapeMainWrapper: {
+    flex: 1,
+    flexDirection: "row",
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 8,
+    gap: 14,
+  },
+  landscapeLeftColumn: {
+    height: "100%",
+    flexDirection: "column",
+    gap: 8,
+  },
+  landscapeRightColumn: {
+    flex: 1,
+    height: "100%",
+    flexDirection: "column",
+  },
+  landscapeRightHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+    paddingHorizontal: 4,
+  },
+  landscapeScannerCard: {
+    flex: 1,
+    borderRadius: 18,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "#334155",
+    backgroundColor: "#000",
+  },
+  scanTargetLandscape: {
+    width: 160,
+    height: 160,
+    borderWidth: 2,
+    borderColor: theme.primary,
+    borderRadius: 20,
+    marginBottom: 12,
+    backgroundColor: "rgba(79, 70, 229, 0.05)",
+  },
+  scanTextSmall: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 1.5,
+    marginBottom: 12,
+  },
+  cancelScanButtonLandscape: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.25)",
+  },
+  cancelScanTextLandscape: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+  },
+  landscapeMetricsCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 14,
+  },
+  landscapeMetricRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  landscapeMetricItem: {
+    flex: 1,
+    alignItems: "center",
+  },
+  landscapeMetricNumber: {
+    fontSize: 17,
+    fontWeight: "900",
+  },
+  landscapeMetricLabel: {
+    fontSize: 9,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginTop: 2,
+  },
+  landscapeMetricDivider: {
+    width: 1,
+    height: 32,
+  },
+  landscapeCompletedCard: {
+    flex: 1,
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 20,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  completedIconWrapper: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  completedTitle: {
+    fontSize: 16,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginTop: 10,
+  },
+  completedSubtitle: {
+    fontSize: 12,
+    fontWeight: "600",
+    textAlign: "center",
+    marginTop: 4,
+    lineHeight: 17,
+  },
+  completedStatsRow: {
+    flexDirection: "row",
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    width: "100%",
+    marginTop: 14,
+    marginBottom: 14,
+    justifyContent: "space-around",
+  },
+  completedStatItem: {
+    alignItems: "center",
+  },
+  completedStatNumber: {
+    fontSize: 16,
+    fontWeight: "900",
+  },
+  completedStatLabel: {
+    fontSize: 9,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginTop: 2,
+  },
+  landscapeActionsCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 14,
+  },
+  landscapeActionsTitle: {
+    fontSize: 13,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  landscapeActionsSubtitle: {
+    fontSize: 11,
+    fontWeight: "500",
+    marginTop: 2,
+  },
+  landscapeActionButton: {
+    height: 48,
+    borderRadius: 14,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 8,
+  },
+  landscapeActionButtonText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  landscapeItemRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  landscapeBatchItemRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 10,
+  },
+  batchIndexPill: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  skipQrButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    backgroundColor: "rgba(245,158,11,0.1)",
+  },
+  skipBottleButton: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    backgroundColor: "rgba(239,68,68,0.1)",
   },
 });

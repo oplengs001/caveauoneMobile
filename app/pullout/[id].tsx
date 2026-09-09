@@ -9,6 +9,7 @@ import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 
 import {
   AlertCircle,
+  Camera,
   CheckCircle2,
   ChevronLeft,
   MapPin,
@@ -16,7 +17,7 @@ import {
   QrCode,
   Search
 } from "lucide-react-native";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -33,6 +34,7 @@ import {
   Location,
   MasterWine,
   PulloutRequest,
+  PulloutRequestItem,
 } from "../../types";
 
 const SEARCH_PAGE_SIZE = 20;
@@ -40,11 +42,12 @@ const SEARCH_PAGE_SIZE = 20;
 export default function PulloutDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { profile } = useAuth();
-  const { horizontalPadding } = useResponsivePadding(24);
+  const { horizontalPadding, isLandscape, width } = useResponsivePadding(24);
   const isStore = profile?.role === "store" || profile?.role === "store_manager" || profile?.role === "store_staff";
   const theme = isStore ? Colors.store : Colors.warehouse;
   const [request, setRequest] = useState<PulloutRequest | null>(null);
   const [loading, setLoading] = useState(true);
+  const [landscapeLeftTab, setLandscapeLeftTab] = useState<"scanner" | "location">("scanner");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<
     (InventoryBottle & {
@@ -613,7 +616,10 @@ export default function PulloutDetailScreen() {
       return;
     }
 
-    if (specificSku) setSearchQuery(specificSku);
+    if (specificSku) {
+      setSearchQuery(specificSku);
+      if (isLandscape) setLandscapeLeftTab("location");
+    }
 
     setSearchLoading(true);
     setSearchResults([]);
@@ -678,6 +684,333 @@ export default function PulloutDetailScreen() {
     }
   };
 
+  const leftColumnWidth = useMemo(() => {
+    if (width >= 1024) return Math.min(480, Math.round(width * 0.40));
+    if (width >= 768) return Math.min(420, Math.round(width * 0.44));
+    return Math.round(width * 0.46);
+  }, [width]);
+
+  const totalRequested = useMemo(
+    () => request?.items.reduce((sum, i) => sum + i.requestedQty, 0) || 0,
+    [request?.items]
+  );
+  const totalPulled = useMemo(
+    () => request?.items.reduce((sum, i) => sum + i.pulledQty, 0) || 0,
+    [request?.items]
+  );
+  const totalSkipped = useMemo(
+    () => request?.items.reduce((sum, i) => sum + (i.skippedQty || 0), 0) || 0,
+    [request?.items]
+  );
+  const allFulfilled = useMemo(
+    () =>
+      request?.items.every(
+        (i) => i.pulledQty + (i.skippedQty || 0) >= i.requestedQty
+      ) || false,
+    [request?.items]
+  );
+
+  const renderLocationResults = (isLandscapeMode: boolean = false) => {
+    const totalResults = Object.values(groupedResults).flat().length;
+
+    if (totalResults === 0) {
+      if (isLandscapeMode) {
+        return (
+          <View style={styles.emptyLocationSearch}>
+            <MapPin size={28} color={theme.textSecondary} style={{ opacity: 0.5, marginBottom: 8 }} />
+            <Text style={[styles.emptyLocationText, { color: theme.textSecondary }]}>
+              {searchQuery
+                ? `No bottles found for "${searchQuery}".`
+                : "Enter an SKU above or tap 🔍 on any wine card to check where bottles are shelved."}
+            </Text>
+            {request?.status !== "completed" && (
+              <TouchableOpacity
+                style={[styles.backToScannerButton, { borderColor: theme.border, backgroundColor: theme.background }]}
+                onPress={() => setLandscapeLeftTab("scanner")}
+              >
+                <Camera size={14} color={theme.primary} />
+                <Text style={[styles.backToScannerText, { color: theme.primary }]}>
+                  Return to Scanner
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        );
+      }
+      return null;
+    }
+
+    return (
+      <View style={styles.searchResults}>
+        <View style={styles.searchResultHeader}>
+          <Text style={[styles.searchResultCountText, { color: theme.textSecondary }]}>
+            {totalResults} RESULT{totalResults !== 1 ? "S" : ""}
+          </Text>
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            <TouchableOpacity
+              onPress={() => setShowResults((v) => !v)}
+              style={[
+                styles.searchResultAction,
+                { borderColor: theme.border, backgroundColor: theme.background },
+              ]}
+            >
+              <Text style={{ fontSize: 11, fontWeight: "700", color: theme.textSecondary }}>
+                {showResults ? "Hide" : "Show"}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => {
+                setGroupedResults({});
+                setSearchQuery("");
+                setLastVisible(null);
+                setShowResults(true);
+              }}
+              style={[
+                styles.searchResultAction,
+                { borderColor: theme.danger + "40", backgroundColor: theme.danger + "10" },
+              ]}
+            >
+              <Text style={{ fontSize: 11, fontWeight: "700", color: theme.danger }}>Clear</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {showResults && (
+          <>
+            {Object.entries(groupedResults).map(([locationName, bottles]) => (
+              <Collapsible
+                key={locationName}
+                title={`${locationName} (${bottles.length} bottles)`}
+              >
+                {bottles.map((res) => (
+                  <View
+                    key={res.id}
+                    style={[
+                      styles.searchResultItem,
+                      {
+                        backgroundColor: theme.background,
+                        borderColor: theme.border,
+                      },
+                    ]}
+                  >
+                    <View style={styles.resultInfo}>
+                      <Text style={[styles.resultWineName, { color: theme.text }]}>
+                        {res.wineName}
+                      </Text>
+                      <Text
+                        style={{
+                          fontSize: 12,
+                          color: theme.textSecondary,
+                          fontWeight: "500",
+                          marginBottom: 4,
+                        }}
+                      >
+                        {res.vintage} • {res.producer} • {res.format}
+                      </Text>
+                      <Text style={[styles.resultId, { color: theme.textSecondary }]}>
+                        Bottle ID: {res.bottleId || res.id}
+                      </Text>
+                    </View>
+                    <View style={[styles.resultBadge, { backgroundColor: theme.card }]}>
+                      <Text style={[styles.resultStatus, { color: theme.textSecondary }]}>
+                        {res.status.toUpperCase()}
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+              </Collapsible>
+            ))}
+            {lastVisible && (
+              <TouchableOpacity
+                style={[styles.loadMoreButton, { backgroundColor: theme.primary }]}
+                onPress={handleLoadMore}
+                disabled={loadingMore}
+              >
+                {loadingMore ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.loadMoreButtonText}>Load More</Text>
+                )}
+              </TouchableOpacity>
+            )}
+          </>
+        )}
+      </View>
+    );
+  };
+
+  const renderItemCard = (item: PulloutRequestItem, index: number, isLandscapeMode: boolean = false) => {
+    const skippedCount =
+      item.skippedQty ||
+      (item.skipped ? item.requestedQty - item.pulledQty : 0);
+    const isFullyAddressed =
+      item.pulledQty + skippedCount >= item.requestedQty;
+    const isFullySkipped = skippedCount === item.requestedQty;
+    const isFullyPulled = item.pulledQty === item.requestedQty;
+    const isPartiallySkipped = skippedCount > 0 && !isFullySkipped;
+    const remaining = Math.max(
+      0,
+      item.requestedQty - item.pulledQty - skippedCount,
+    );
+
+    return (
+      <View
+        key={index}
+        style={[
+          styles.itemCard,
+          {
+            backgroundColor: theme.card,
+            borderColor: theme.border,
+          },
+          isFullyPulled && styles.itemCardFulfilled,
+          isFullySkipped && styles.itemCardSkipped,
+          isPartiallySkipped &&
+            isFullyAddressed &&
+            !isFullyPulled &&
+            !isFullySkipped &&
+            styles.itemCardWarning,
+          isLandscapeMode && styles.itemCardLandscape,
+        ]}
+      >
+        <View style={[styles.itemMain, isLandscapeMode && styles.itemMainLandscape]}>
+          <TouchableOpacity
+            style={styles.itemInfo}
+            activeOpacity={0.7}
+            onPress={() => {
+              if (!isFullyAddressed) {
+                if (isLandscape) setLandscapeLeftTab("location");
+                handleSearch(item.sku);
+              }
+            }}
+          >
+            <View style={styles.itemHeaderRow}>
+              <View style={{ flex: 1, paddingRight: 8 }}>
+                <Text
+                  style={[
+                    styles.itemName,
+                    { color: theme.text },
+                    isLandscapeMode && styles.itemNameLandscape,
+                    isFullySkipped && styles.textMuted,
+                  ]}
+                  numberOfLines={isLandscapeMode ? 2 : undefined}
+                >
+                  {item.wineName}
+                </Text>
+                <Text
+                  style={[
+                    {
+                      fontSize: 12,
+                      color: theme.textSecondary,
+                      fontWeight: "600",
+                      marginTop: 2,
+                    },
+                    isFullySkipped && styles.textMuted,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {item.vintage} • {item.producer || "Independent Producer"} • {item.format}
+                </Text>
+              </View>
+
+              <View style={styles.itemActions}>
+                {isFullyAddressed ? (
+                  isFullyPulled ? (
+                    <CheckCircle2 size={20} color="#10b981" strokeWidth={2.5} />
+                  ) : isFullySkipped ? (
+                    <AlertCircle size={20} color="#ef4444" strokeWidth={2.5} />
+                  ) : (
+                    <CheckCircle2 size={20} color="#eab308" strokeWidth={2.5} />
+                  )
+                ) : (
+                  <View style={styles.actionButtons}>
+                    <TouchableOpacity
+                      onPress={() => {
+                        if (isLandscape) setLandscapeLeftTab("location");
+                        handleSearch(item.sku);
+                      }}
+                      style={[
+                        styles.actionIcon,
+                        {
+                          backgroundColor: theme.background,
+                          borderColor: theme.border,
+                        },
+                      ]}
+                    >
+                      <Search size={16} color={theme.primary} strokeWidth={2} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => handlePullWithoutQR(index)}
+                      style={[
+                        styles.actionIcon,
+                        {
+                          backgroundColor: "#f59e0b1A",
+                          borderColor: "#f59e0b33",
+                        },
+                      ]}
+                    >
+                      <QrCode size={16} color="#f59e0b" strokeWidth={2} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => handleSkipItem(index)}
+                      style={[
+                        styles.skipButton,
+                        {
+                          backgroundColor: theme.danger + "1A",
+                          borderColor: theme.danger + "33",
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.skipButtonText, { color: theme.danger }]}>
+                        Skip
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+            </View>
+
+            <View style={styles.itemMetaRow}>
+              <Text style={[styles.itemSku, { color: theme.primary }]}>
+                SKU: {item.sku}
+              </Text>
+              <Text style={[styles.itemProgress, { color: theme.textSecondary }]}>
+                {item.pulledQty} PULLED • {skippedCount} SKIPPED • {item.requestedQty} REQ
+              </Text>
+            </View>
+
+            <View style={styles.progressContainer}>
+              <View style={[styles.progressBarBg, { backgroundColor: theme.background }]}>
+                {item.pulledQty > 0 && (
+                  <View
+                    style={[
+                      styles.progressBarFill,
+                      {
+                        flex: item.pulledQty,
+                        backgroundColor: theme.primary,
+                      },
+                    ]}
+                  />
+                )}
+                {skippedCount > 0 && (
+                  <View
+                    style={[
+                      styles.progressBarSkipped,
+                      {
+                        flex: skippedCount,
+                        backgroundColor: theme.danger,
+                      },
+                    ]}
+                  />
+                )}
+                {remaining > 0 && <View style={{ flex: remaining }} />}
+              </View>
+            </View>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
+
   if (!permission) return <View />;
   if (!permission.granted) {
     return (
@@ -708,17 +1041,88 @@ export default function PulloutDetailScreen() {
       style={[styles.container, { backgroundColor: theme.background }]}
     >
       <Stack.Screen options={{ headerShown: false }} />
-      <View style={[styles.header, { paddingHorizontal: horizontalPadding }]}>
-        <TouchableOpacity
-          onPress={() => router.back()}
-          style={styles.backButton}
-        >
-          <ChevronLeft size={28} color={theme.primary} strokeWidth={2.5} />
-        </TouchableOpacity>
-        <Text style={[styles.title, { color: theme.text }]}>
-          Pullout Details
-        </Text>
-      </View>
+
+      {/* Header Bar */}
+      {isLandscape ? (
+        <View style={[styles.landscapeHeader, { backgroundColor: theme.background }]}>
+          <View style={styles.landscapeHeaderLeft}>
+            <TouchableOpacity
+              onPress={() => router.back()}
+              style={styles.backButton}
+            >
+              <ChevronLeft size={24} color={theme.primary} strokeWidth={2.5} />
+            </TouchableOpacity>
+            <View>
+              <Text style={[styles.landscapeTitle, { color: theme.text }]}>
+                Pullout Details
+              </Text>
+              <Text style={[styles.landscapeSubtitle, { color: theme.textSecondary }]}>
+                ID: {request?.id ? `...${request.id.slice(-8).toUpperCase()}` : id}
+              </Text>
+            </View>
+          </View>
+
+          {request && (
+            <View style={styles.landscapeHeaderRight}>
+              <View
+                style={[
+                  styles.landscapeStatusBadge,
+                  { backgroundColor: theme.card, borderColor: theme.border },
+                ]}
+              >
+                <View
+                  style={[
+                    styles.statusDot,
+                    {
+                      backgroundColor:
+                        request.status === "completed"
+                          ? "#10b981"
+                          : request.status === "in_progress"
+                          ? "#3b82f6"
+                          : "#f59e0b",
+                    },
+                  ]}
+                />
+                <Text style={[styles.landscapeStatusBadgeText, { color: theme.text }]}>
+                  {request.status.replace("_", " ").toUpperCase()}
+                </Text>
+              </View>
+
+              <View
+                style={[
+                  styles.landscapeProgressBadge,
+                  {
+                    backgroundColor: allFulfilled ? "#10b98115" : theme.primary + "15",
+                    borderColor: allFulfilled ? "#10b98140" : theme.primary + "30",
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.landscapeProgressBadgeText,
+                    { color: allFulfilled ? "#10b981" : theme.primary },
+                  ]}
+                >
+                  {totalPulled} / {totalRequested} PULLED
+                  {totalSkipped > 0 ? ` • ${totalSkipped} SKIPPED` : ""}
+                </Text>
+              </View>
+            </View>
+          )}
+        </View>
+      ) : (
+        <View style={[styles.header, { paddingHorizontal: horizontalPadding }]}>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={styles.backButton}
+          >
+            <ChevronLeft size={28} color={theme.primary} strokeWidth={2.5} />
+          </TouchableOpacity>
+          <Text style={[styles.title, { color: theme.text }]}>
+            Pullout Details
+          </Text>
+        </View>
+      )}
 
       {loading && !request ? (
         <ActivityIndicator
@@ -727,472 +1131,379 @@ export default function PulloutDetailScreen() {
           style={{ flex: 1 }}
         />
       ) : request ? (
-        <>
-          <ScrollView contentContainerStyle={[styles.scrollContent, { paddingHorizontal: horizontalPadding }]}>
-            <View
-              style={[
-                styles.statusCard,
-                { backgroundColor: theme.card, borderLeftColor: theme.primary },
-              ]}
-            >
-              <Text
-                style={[styles.statusLabel, { color: theme.textSecondary }]}
-              >
-                TASK STATUS
-              </Text>
-              <Text style={[styles.statusValue, { color: theme.text }]}>
-                {request.status.replace("_", " ").toUpperCase()}
-              </Text>
-            </View>
-            <View
-              style={[
-                styles.searchSection,
-                { backgroundColor: theme.card, borderColor: theme.border },
-              ]}
-            >
-              <View style={styles.sectionHeader}>
-                <MapPin size={16} color={theme.primary} />
-                <Text style={[styles.sectionTitle, { color: theme.text }]}>
-                  Check Location
-                </Text>
-              </View>
-              <View style={styles.searchBar}>
-                <TextInput
+        isLandscape ? (
+          /* Landscape Split Layout */
+          <View style={styles.landscapeMainWrapper}>
+            {/* Left Console: Scanner / Location Finder */}
+            <View style={[styles.landscapeLeftColumn, { width: leftColumnWidth }]}>
+              {request.status !== "completed" ? (
+                <View
                   style={[
-                    styles.searchInput,
-                    {
-                      backgroundColor: theme.background,
-                      borderColor: theme.border,
-                      color: theme.text,
-                    },
+                    styles.landscapeTabSwitcher,
+                    { backgroundColor: theme.card, borderColor: theme.border },
                   ]}
-                  placeholder="Enter SKU..."
-                  placeholderTextColor={theme.textSecondary}
-                  value={searchQuery}
-                  onChangeText={setSearchQuery}
-                  autoCapitalize="characters"
-                />
-                <TouchableOpacity
-                  style={[
-                    styles.searchButton,
-                    { backgroundColor: theme.primary },
-                  ]}
-                  onPress={() => handleSearch()}
-                  disabled={searchLoading}
                 >
-                  {searchLoading ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                  ) : (
-                    <Search size={20} color="#fff" strokeWidth={2.5} />
-                  )}
-                </TouchableOpacity>
-              </View>
-
-              {Object.keys(groupedResults).length > 0 && (
-                <View style={styles.searchResults}>
-                  {/* Results header with Hide + Clear actions */}
-                  <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-                    <Text style={{ fontSize: 11, fontWeight: "800", color: theme.textSecondary, letterSpacing: 0.5 }}>
-                      {Object.values(groupedResults).flat().length} RESULT{Object.values(groupedResults).flat().length !== 1 ? "S" : ""}
+                  <TouchableOpacity
+                    style={[
+                      styles.landscapeTabItem,
+                      landscapeLeftTab === "scanner" && [
+                        styles.landscapeTabItemActive,
+                        { backgroundColor: theme.primary },
+                      ],
+                    ]}
+                    onPress={() => setLandscapeLeftTab("scanner")}
+                  >
+                    <Camera
+                      size={14}
+                      color={landscapeLeftTab === "scanner" ? "#fff" : theme.textSecondary}
+                    />
+                    <Text
+                      style={[
+                        styles.landscapeTabText,
+                        { color: landscapeLeftTab === "scanner" ? "#fff" : theme.textSecondary },
+                      ]}
+                    >
+                      SCANNER
                     </Text>
-                    <View style={{ flexDirection: "row", gap: 8 }}>
-                      <TouchableOpacity
-                        onPress={() => setShowResults((v) => !v)}
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.landscapeTabItem,
+                      landscapeLeftTab === "location" && [
+                        styles.landscapeTabItemActive,
+                        { backgroundColor: theme.primary },
+                      ],
+                    ]}
+                    onPress={() => setLandscapeLeftTab("location")}
+                  >
+                    <MapPin
+                      size={14}
+                      color={landscapeLeftTab === "location" ? "#fff" : theme.textSecondary}
+                    />
+                    <Text
+                      style={[
+                        styles.landscapeTabText,
+                        { color: landscapeLeftTab === "location" ? "#fff" : theme.textSecondary },
+                      ]}
+                    >
+                      LOCATIONS{Object.keys(groupedResults).length > 0 ? ` (${Object.values(groupedResults).flat().length})` : ""}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              ) : null}
+
+              {request.status !== "completed" && landscapeLeftTab === "scanner" ? (
+                <View style={styles.landscapeScannerCard}>
+                  <CameraView
+                    style={StyleSheet.absoluteFill}
+                    onBarcodeScanned={handleBarcodeScanned}
+                    barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
+                  >
+                    <View style={styles.scannerOverlay}>
+                      <View
                         style={[
-                          styles.searchResultAction,
-                          { borderColor: theme.border, backgroundColor: theme.background },
+                          styles.scanTargetLandscape,
+                          {
+                            borderColor: scanFeedback
+                              ? scanFeedback.success ? "#10b981" : "#ef4444"
+                              : theme.primary,
+                            backgroundColor: scanFeedback
+                              ? scanFeedback.success ? "#10b98120" : "#ef444420"
+                              : theme.primary + "0D",
+                          },
                         ]}
-                      >
-                        <Text style={{ fontSize: 11, fontWeight: "700", color: theme.textSecondary }}>
-                          {showResults ? "Hide" : "Show"}
+                      />
+
+                      {scanFeedback ? (
+                        <View
+                          style={[
+                            styles.scanToast,
+                            { backgroundColor: scanFeedback.success ? "#10b981" : "#ef4444" },
+                          ]}
+                        >
+                          <Text style={styles.scanToastText}>{scanFeedback.message}</Text>
+                        </View>
+                      ) : (
+                        <Text style={styles.scanTextSmall}>
+                          Scan bottle QR to pull
                         </Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        onPress={() => {
-                          setGroupedResults({});
-                          setSearchQuery("");
-                          setLastVisible(null);
-                          setShowResults(true);
-                        }}
-                        style={[
-                          styles.searchResultAction,
-                          { borderColor: theme.danger + "40", backgroundColor: theme.danger + "10" },
-                        ]}
-                      >
-                        <Text style={{ fontSize: 11, fontWeight: "700", color: theme.danger }}>Clear</Text>
-                      </TouchableOpacity>
+                      )}
+                    </View>
+                  </CameraView>
+                </View>
+              ) : request.status === "completed" && Object.keys(groupedResults).length === 0 ? (
+                <View
+                  style={[
+                    styles.landscapeCompletedCard,
+                    { backgroundColor: theme.card, borderColor: theme.border },
+                  ]}
+                >
+                  <View style={styles.completedIconWrapper}>
+                    <CheckCircle2 size={44} color="#10b981" strokeWidth={2.5} />
+                  </View>
+                  <Text style={[styles.completedTitle, { color: theme.text }]}>TASK COMPLETED</Text>
+                  <Text style={[styles.completedSubtitle, { color: theme.textSecondary }]}>
+                    All items have been fulfilled and staged for outbound delivery.
+                  </Text>
+                  <View style={[styles.completedStatsRow, { backgroundColor: theme.background }]}>
+                    <View style={styles.completedStatItem}>
+                      <Text style={[styles.completedStatNumber, { color: "#10b981" }]}>{totalPulled}</Text>
+                      <Text style={[styles.completedStatLabel, { color: theme.textSecondary }]}>PULLED</Text>
+                    </View>
+                    <View style={styles.completedStatItem}>
+                      <Text style={[styles.completedStatNumber, { color: totalSkipped > 0 ? "#ef4444" : theme.textSecondary }]}>
+                        {totalSkipped}
+                      </Text>
+                      <Text style={[styles.completedStatLabel, { color: theme.textSecondary }]}>SKIPPED</Text>
+                    </View>
+                    <View style={styles.completedStatItem}>
+                      <Text style={[styles.completedStatNumber, { color: theme.primary }]}>{totalRequested}</Text>
+                      <Text style={[styles.completedStatLabel, { color: theme.textSecondary }]}>TOTAL REQ</Text>
                     </View>
                   </View>
+                </View>
+              ) : (
+                <ScrollView
+                  style={[
+                    styles.landscapeLocationCard,
+                    { backgroundColor: theme.card, borderColor: theme.border },
+                  ]}
+                  contentContainerStyle={{ padding: 14 }}
+                  showsVerticalScrollIndicator={true}
+                >
+                  <View style={[styles.sectionHeader, { marginBottom: 10 }]}>
+                    <MapPin size={15} color={theme.primary} />
+                    <Text style={[styles.sectionTitle, { color: theme.text, fontSize: 12 }]}>Check Location</Text>
+                  </View>
+                  <View style={styles.searchBar}>
+                    <TextInput
+                      style={[
+                        styles.searchInput,
+                        {
+                          backgroundColor: theme.background,
+                          borderColor: theme.border,
+                          color: theme.text,
+                          height: 44,
+                          fontSize: 13,
+                        },
+                      ]}
+                      placeholder="Enter SKU..."
+                      placeholderTextColor={theme.textSecondary}
+                      value={searchQuery}
+                      onChangeText={setSearchQuery}
+                      autoCapitalize="characters"
+                    />
+                    <TouchableOpacity
+                      style={[
+                        styles.searchButton,
+                        { backgroundColor: theme.primary, width: 44, height: 44 },
+                      ]}
+                      onPress={() => handleSearch()}
+                      disabled={searchLoading}
+                    >
+                      {searchLoading ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <Search size={18} color="#fff" strokeWidth={2.5} />
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                  {renderLocationResults(true)}
+                </ScrollView>
+              )}
+            </View>
 
-                  {showResults && (
-                    <>
-                      {Object.entries(groupedResults).map(
-                        ([locationName, bottles]) => (
-                          <Collapsible
-                            key={locationName}
-                            title={`${locationName} (${bottles.length} bottles)`}
-                          >
-                            {bottles.map((res) => (
-                              <View
-                                key={res.id}
-                                style={[
-                                  styles.searchResultItem,
-                                  {
-                                    backgroundColor: theme.background,
-                                    borderColor: theme.border,
-                                  },
-                                ]}
-                              >
-                                <View style={styles.resultInfo}>
-                                  <Text
-                                    style={[
-                                      styles.resultWineName,
-                                      { color: theme.text },
-                                    ]}
-                                  >
-                                    {res.wineName}
-                                  </Text>
-                                  <Text
-                                    style={{
-                                      fontSize: 12,
-                                      color: theme.textSecondary,
-                                      fontWeight: "500",
-                                      marginBottom: 4,
-                                    }}
-                                  >
-                                    {res.vintage} • {res.producer} • {res.format}
-                                  </Text>
-                                  <Text
-                                    style={[
-                                      styles.resultId,
-                                      { color: theme.textSecondary },
-                                    ]}
-                                  >
-                                    Bottle ID: {res.bottleId || res.id}
-                                  </Text>
-                                </View>
-                                <View
-                                  style={[
-                                    styles.resultBadge,
-                                    { backgroundColor: theme.card },
-                                  ]}
-                                >
-                                  <Text
-                                    style={[
-                                      styles.resultStatus,
-                                      { color: theme.textSecondary },
-                                    ]}
-                                  >
-                                    {res.status.toUpperCase()}
-                                  </Text>
-                                </View>
-                              </View>
-                            ))}
-                          </Collapsible>
-                        ),
-                      )}
-                      {lastVisible && (
-                        <TouchableOpacity
-                          style={[
-                            styles.loadMoreButton,
-                            { backgroundColor: theme.primary },
-                          ]}
-                          onPress={handleLoadMore}
-                          disabled={loadingMore}
-                        >
-                          {loadingMore ? (
-                            <ActivityIndicator size="small" color="#fff" />
-                          ) : (
-                            <Text style={styles.loadMoreButtonText}>Load More</Text>
-                          )}
-                        </TouchableOpacity>
-                      )}
-                    </>
+            {/* Right Pane: Items to Pull & Actions */}
+            <View style={styles.landscapeRightColumn}>
+              <View style={styles.landscapeRightHeader}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  <PackageSearch size={15} color={theme.primary} />
+                  <Text style={[styles.sectionTitle, { color: theme.text, fontSize: 13 }]}>
+                    Items to Pull ({request.items.length})
+                  </Text>
+                </View>
+                <Text style={{ fontSize: 11, fontWeight: "800", color: theme.textSecondary }}>
+                  {totalPulled}/{totalRequested} PULLED
+                </Text>
+              </View>
+
+              <ScrollView
+                style={{ flex: 1 }}
+                contentContainerStyle={{ paddingBottom: 12, gap: 10 }}
+                showsVerticalScrollIndicator={true}
+              >
+                {request.items.map((item, index) => renderItemCard(item, index, true))}
+              </ScrollView>
+
+              {request.status !== "completed" && (
+                <View style={styles.landscapeFooter}>
+                  {allFulfilled ? (
+                    <TouchableOpacity
+                      style={[styles.completeButtonLandscape, { backgroundColor: "#10b981" }]}
+                      onPress={handleCompleteRequest}
+                    >
+                      <CheckCircle2 size={20} color="#fff" strokeWidth={2.5} />
+                      <Text style={styles.completeButtonTextLandscape}>Finalize Task</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity
+                      style={[styles.completeButtonLandscape, { backgroundColor: "#f59e0b" }]}
+                      onPress={handlePullAllRemainingWithoutQR}
+                    >
+                      <QrCode size={20} color="#fff" strokeWidth={2.5} />
+                      <Text style={styles.completeButtonTextLandscape}>Pull All Manually</Text>
+                    </TouchableOpacity>
                   )}
                 </View>
               )}
             </View>
-
-            {request.status !== "completed" && (
-              <View style={styles.inlineScannerContainer}>
-                <CameraView
-                  style={StyleSheet.absoluteFill}
-                  onBarcodeScanned={handleBarcodeScanned}
-                  barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
+          </View>
+        ) : (
+          /* Portrait Layout */
+          <>
+            <ScrollView contentContainerStyle={[styles.scrollContent, { paddingHorizontal: horizontalPadding }]}>
+              <View
+                style={[
+                  styles.statusCard,
+                  { backgroundColor: theme.card, borderLeftColor: theme.primary },
+                ]}
+              >
+                <Text
+                  style={[styles.statusLabel, { color: theme.textSecondary }]}
                 >
-                  <View style={styles.scannerOverlay}>
-                    {/* Scan target box */}
-                    <View
-                      style={[
-                        styles.scanTarget,
-                        {
-                          borderColor: scanFeedback
-                            ? scanFeedback.success ? "#10b981" : "#ef4444"
-                            : theme.primary,
-                          backgroundColor: scanFeedback
-                            ? scanFeedback.success ? "#10b98120" : "#ef444420"
-                            : theme.primary + "0D",
-                        },
-                      ]}
-                    />
+                  TASK STATUS
+                </Text>
+                <Text style={[styles.statusValue, { color: theme.text }]}>
+                  {request.status.replace("_", " ").toUpperCase()}
+                </Text>
+              </View>
+              <View
+                style={[
+                  styles.searchSection,
+                  { backgroundColor: theme.card, borderColor: theme.border },
+                ]}
+              >
+                <View style={styles.sectionHeader}>
+                  <MapPin size={16} color={theme.primary} />
+                  <Text style={[styles.sectionTitle, { color: theme.text }]}>
+                    Check Location
+                  </Text>
+                </View>
+                <View style={styles.searchBar}>
+                  <TextInput
+                    style={[
+                      styles.searchInput,
+                      {
+                        backgroundColor: theme.background,
+                        borderColor: theme.border,
+                        color: theme.text,
+                      },
+                    ]}
+                    placeholder="Enter SKU..."
+                    placeholderTextColor={theme.textSecondary}
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                    autoCapitalize="characters"
+                  />
+                  <TouchableOpacity
+                    style={[
+                      styles.searchButton,
+                      { backgroundColor: theme.primary },
+                    ]}
+                    onPress={() => handleSearch()}
+                    disabled={searchLoading}
+                  >
+                    {searchLoading ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <Search size={20} color="#fff" strokeWidth={2.5} />
+                    )}
+                  </TouchableOpacity>
+                </View>
 
-                    {/* Toast feedback for continuous mode */}
-                    {scanFeedback && (
+                {renderLocationResults(false)}
+              </View>
+
+              {request.status !== "completed" && (
+                <View style={styles.inlineScannerContainer}>
+                  <CameraView
+                    style={StyleSheet.absoluteFill}
+                    onBarcodeScanned={handleBarcodeScanned}
+                    barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
+                  >
+                    <View style={styles.scannerOverlay}>
+                      {/* Scan target box */}
                       <View
                         style={[
-                          styles.scanToast,
-                          { backgroundColor: scanFeedback.success ? "#10b981" : "#ef4444" },
+                          styles.scanTarget,
+                          {
+                            borderColor: scanFeedback
+                              ? scanFeedback.success ? "#10b981" : "#ef4444"
+                              : theme.primary,
+                            backgroundColor: scanFeedback
+                              ? scanFeedback.success ? "#10b98120" : "#ef444420"
+                              : theme.primary + "0D",
+                          },
                         ]}
-                      >
-                        <Text style={styles.scanToastText}>{scanFeedback.message}</Text>
-                      </View>
-                    )}
+                      />
 
-                    {!scanFeedback && (
-                      <Text style={styles.scanText}>
-                        Scan bottle QR to pull
-                      </Text>
-                    )}
-                  </View>
-                </CameraView>
+                      {/* Toast feedback for continuous mode */}
+                      {scanFeedback && (
+                        <View
+                          style={[
+                            styles.scanToast,
+                            { backgroundColor: scanFeedback.success ? "#10b981" : "#ef4444" },
+                          ]}
+                        >
+                          <Text style={styles.scanToastText}>{scanFeedback.message}</Text>
+                        </View>
+                      )}
+
+                      {!scanFeedback && (
+                        <Text style={styles.scanText}>
+                          Scan bottle QR to pull
+                        </Text>
+                      )}
+                    </View>
+                  </CameraView>
+                </View>
+              )}
+
+              <View style={styles.sectionHeader}>
+                <PackageSearch size={16} color={theme.primary} />
+                <Text style={[styles.sectionTitle, { color: theme.text }]}>
+                  Items to Pull
+                </Text>
+              </View>
+              <View style={styles.itemsList}>
+                {request.items.map((item, index) => renderItemCard(item, index, false))}
+              </View>
+            </ScrollView>
+
+            {request.status !== "completed" && (
+              <View style={styles.footer}>
+                {allFulfilled ? (
+                  <TouchableOpacity
+                    style={[styles.completeButton, { backgroundColor: "#10b981" }]}
+                    onPress={handleCompleteRequest}
+                  >
+                    <CheckCircle2 size={24} color="#fff" strokeWidth={2.5} />
+                    <Text style={styles.completeButtonText}>Finalize Task</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    style={[styles.completeButton, { backgroundColor: "#f59e0b" }]}
+                    onPress={handlePullAllRemainingWithoutQR}
+                  >
+                    <QrCode size={24} color="#fff" strokeWidth={2.5} />
+                    <Text style={styles.completeButtonText}>Pull All Manually</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             )}
-
-            <View style={styles.sectionHeader}>
-              <PackageSearch size={16} color={theme.primary} />
-              <Text style={[styles.sectionTitle, { color: theme.text }]}>
-                Items to Pull
-              </Text>
-            </View>
-            <View style={styles.itemsList}>
-              {request.items.map((item, index) => {
-                const skippedCount =
-                  item.skippedQty ||
-                  (item.skipped ? item.requestedQty - item.pulledQty : 0);
-                const isFullyAddressed =
-                  item.pulledQty + skippedCount >= item.requestedQty;
-                const isFullySkipped = skippedCount === item.requestedQty;
-                const isFullyPulled = item.pulledQty === item.requestedQty;
-                const isPartiallySkipped = skippedCount > 0 && !isFullySkipped;
-                const remaining = Math.max(
-                  0,
-                  item.requestedQty - item.pulledQty - skippedCount,
-                );
-
-                return (
-                  <View
-                    key={index}
-                    style={[
-                      styles.itemCard,
-                      {
-                        backgroundColor: theme.card,
-                        borderColor: theme.border,
-                      },
-                      isFullyPulled && styles.itemCardFulfilled,
-                      isFullySkipped && styles.itemCardSkipped,
-                      isPartiallySkipped &&
-                      isFullyAddressed &&
-                      !isFullyPulled &&
-                      !isFullySkipped &&
-                      styles.itemCardWarning,
-                    ]}
-                  >
-                    <View style={styles.itemMain}>
-                      <TouchableOpacity
-                        style={styles.itemInfo}
-                        onPress={() =>
-                          !isFullyAddressed && handleSearch(item.sku)
-                        }
-                      >
-                        <View style={styles.itemHeaderRow}>
-                          <View style={{ flex: 1, paddingRight: 10 }}>
-                            <Text
-                              style={[
-                                [styles.itemName, { color: theme.text }],
-                                isFullySkipped && styles.textMuted,
-                              ]}
-                            >
-                              {item.wineName}
-                            </Text>
-                            <Text
-                              style={[
-                                {
-                                  fontSize: 12,
-                                  color: theme.textSecondary,
-                                  fontWeight: "600",
-                                  marginTop: 2,
-                                },
-                                isFullySkipped && styles.textMuted,
-                              ]}
-                            >
-                              {item.vintage} •{" "}
-                              {item.producer || "Independent Producer"} •{" "}
-                              {item.format}
-                            </Text>
-                          </View>
-                          <View style={styles.itemActions}>
-                            {isFullyAddressed ? (
-                              isFullyPulled ? (
-                                <CheckCircle2
-                                  size={20}
-                                  color="#10b981"
-                                  strokeWidth={2.5}
-                                />
-                              ) : isFullySkipped ? (
-                                <AlertCircle
-                                  size={20}
-                                  color="#ef4444"
-                                  strokeWidth={2.5}
-                                />
-                              ) : (
-                                <CheckCircle2
-                                  size={20}
-                                  color="#eab308"
-                                  strokeWidth={2.5}
-                                />
-                              )
-                            ) : (
-                              <View style={styles.actionButtons}>
-                                <TouchableOpacity
-                                  onPress={() => handleSearch(item.sku)}
-                                  style={[
-                                    styles.actionIcon,
-                                    {
-                                      backgroundColor: theme.background,
-                                      borderColor: theme.border,
-                                    },
-                                  ]}
-                                >
-                                  <Search
-                                    size={18}
-                                    color={theme.primary}
-                                    strokeWidth={2}
-                                  />
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                  onPress={() => handlePullWithoutQR(index)}
-                                  style={[
-                                    styles.actionIcon,
-                                    {
-                                      backgroundColor: "#f59e0b1A",
-                                      borderColor: "#f59e0b33",
-                                      marginRight: 6
-                                    },
-                                  ]}
-                                >
-                                  <QrCode
-                                    size={18}
-                                    color="#f59e0b"
-                                    strokeWidth={2}
-                                  />
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                  onPress={() => handleSkipItem(index)}
-                                  style={[
-                                    styles.skipButton,
-                                    {
-                                      backgroundColor: theme.danger + "1A",
-                                      borderColor: theme.danger + "33",
-                                    },
-                                  ]}
-                                >
-                                  <Text
-                                    style={[
-                                      styles.skipButtonText,
-                                      { color: theme.danger },
-                                    ]}
-                                  >
-                                    Skip
-                                  </Text>
-                                </TouchableOpacity>
-                              </View>
-                            )}
-                          </View>
-                        </View>
-
-                        <View style={styles.itemMetaRow}>
-                          <Text
-                            style={[styles.itemSku, { color: theme.primary }]}
-                          >
-                            SKU: {item.sku}
-                          </Text>
-                          <Text
-                            style={[
-                              styles.itemProgress,
-                              { color: theme.textSecondary },
-                            ]}
-                          >
-                            {item.pulledQty} PULLED • {skippedCount} SKIPPED •{" "}
-                            {item.requestedQty} REQ
-                          </Text>
-                        </View>
-
-                        <View style={styles.progressContainer}>
-                          <View
-                            style={[
-                              styles.progressBarBg,
-                              { backgroundColor: theme.background },
-                            ]}
-                          >
-                            {item.pulledQty > 0 && (
-                              <View
-                                style={[
-                                  styles.progressBarFill,
-                                  {
-                                    flex: item.pulledQty,
-                                    backgroundColor: theme.primary,
-                                  },
-                                ]}
-                              />
-                            )}
-                            {skippedCount > 0 && (
-                              <View
-                                style={[
-                                  styles.progressBarSkipped,
-                                  {
-                                    flex: skippedCount,
-                                    backgroundColor: theme.danger,
-                                  },
-                                ]}
-                              />
-                            )}
-                            {remaining > 0 && (
-                              <View style={{ flex: remaining }} />
-                            )}
-                          </View>
-                        </View>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                );
-              })}
-            </View>
-          </ScrollView>
-
-          {request.status !== "completed" && (
-            <View style={styles.footer}>
-              {request.items.every(
-                (i) => i.pulledQty + (i.skippedQty || 0) >= i.requestedQty,
-              ) ? (
-                <TouchableOpacity
-                  style={[styles.completeButton, { backgroundColor: "#10b981" }]}
-                  onPress={handleCompleteRequest}
-                >
-                  <CheckCircle2 size={24} color="#fff" strokeWidth={2.5} />
-                  <Text style={styles.completeButtonText}>Finalize Task</Text>
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity
-                  style={[styles.completeButton, { backgroundColor: "#f59e0b" }]}
-                  onPress={handlePullAllRemainingWithoutQR}
-                >
-                  <QrCode size={24} color="#fff" strokeWidth={2.5} />
-                  <Text style={styles.completeButtonText}>Pull All Manually</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          )}
-        </>
+          </>
+        )
       ) : (
         <Text style={[styles.errorText, { color: theme.danger }]}>
           Task not found.
@@ -1565,5 +1876,268 @@ const styles = StyleSheet.create({
   loadMoreButtonText: {
     color: "#fff",
     fontWeight: "700",
+  },
+  // Landscape Styles
+  landscapeHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(150, 150, 150, 0.15)",
+  },
+  landscapeHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  landscapeTitle: {
+    fontSize: 18,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: -0.3,
+  },
+  landscapeSubtitle: {
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  landscapeHeaderRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  landscapeStatusBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  landscapeStatusBadgeText: {
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+  },
+  landscapeProgressBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  landscapeProgressBadgeText: {
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+  },
+  landscapeMainWrapper: {
+    flex: 1,
+    flexDirection: "row",
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 8,
+    gap: 14,
+  },
+  landscapeLeftColumn: {
+    height: "100%",
+    flexDirection: "column",
+    gap: 8,
+  },
+  landscapeTabSwitcher: {
+    flexDirection: "row",
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 3,
+    gap: 4,
+  },
+  landscapeTabItem: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 7,
+    borderRadius: 10,
+    gap: 6,
+  },
+  landscapeTabItemActive: {
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  landscapeTabText: {
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+  },
+  landscapeScannerCard: {
+    flex: 1,
+    borderRadius: 18,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "#334155",
+    backgroundColor: "#0f172a",
+  },
+  scanTargetLandscape: {
+    width: 170,
+    height: 170,
+    borderWidth: 2,
+    borderRadius: 24,
+    marginBottom: 10,
+  },
+  scanTextSmall: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 1.5,
+    marginBottom: 10,
+  },
+  landscapeLocationCard: {
+    flex: 1,
+    borderRadius: 18,
+    borderWidth: 1,
+  },
+  emptyLocationSearch: {
+    padding: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 10,
+  },
+  emptyLocationText: {
+    fontSize: 12,
+    fontWeight: "600",
+    textAlign: "center",
+    lineHeight: 18,
+  },
+  backToScannerButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginTop: 14,
+  },
+  backToScannerText: {
+    fontSize: 12,
+    fontWeight: "800",
+    textTransform: "uppercase",
+  },
+  landscapeCompletedCard: {
+    flex: 1,
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 20,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  completedIconWrapper: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "rgba(16, 185, 129, 0.12)",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 14,
+  },
+  completedTitle: {
+    fontSize: 15,
+    fontWeight: "900",
+    letterSpacing: 1,
+    marginBottom: 6,
+  },
+  completedSubtitle: {
+    fontSize: 12,
+    fontWeight: "600",
+    textAlign: "center",
+    marginBottom: 18,
+    paddingHorizontal: 12,
+  },
+  completedStatsRow: {
+    flexDirection: "row",
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    gap: 16,
+  },
+  completedStatItem: {
+    alignItems: "center",
+  },
+  completedStatNumber: {
+    fontSize: 17,
+    fontWeight: "900",
+  },
+  completedStatLabel: {
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+    marginTop: 2,
+  },
+  landscapeRightColumn: {
+    flex: 1,
+    height: "100%",
+    flexDirection: "column",
+  },
+  landscapeRightHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+    paddingHorizontal: 2,
+  },
+  landscapeFooter: {
+    paddingTop: 8,
+    paddingBottom: 2,
+  },
+  completeButtonLandscape: {
+    height: 48,
+    borderRadius: 16,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 8,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  completeButtonTextLandscape: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+  },
+  itemCardLandscape: {
+    borderRadius: 18,
+  },
+  itemMainLandscape: {
+    padding: 14,
+  },
+  itemNameLandscape: {
+    fontSize: 14,
+    lineHeight: 18,
+  },
+  searchResultHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  searchResultCountText: {
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.5,
   },
 });
