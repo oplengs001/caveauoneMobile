@@ -13,9 +13,12 @@ import {
   AlertTriangle,
   Box,
   Camera,
+  Check,
   CheckCircle2,
   ChevronLeft,
+  Layers,
   Map,
+  MapPin,
   Plus,
   RefreshCw,
   Save,
@@ -45,6 +48,24 @@ import { Customer, InventoryBottle, Location, MasterWine } from "../../types";
 
 type TaggingState = "entry" | "scanning_qr" | "displaying" | "updating" | "success";
 
+export type BottleTagMeta = {
+  bottleId: string;
+  masterWineId: string;
+  wineName: string;
+  vintage?: string;
+  format?: string;
+  producer?: string;
+};
+
+export type WineGroup = {
+  masterWineId: string;
+  wineName: string;
+  vintage?: string;
+  format?: string;
+  producer?: string;
+  bottleIds: string[];
+};
+
 const STORAGE_CATEGORIES = [
   { label: "Locker", prefix: "L", icon: "🔒", major: "Locker", minor: "Box" },
   { label: "Room", prefix: "R", icon: "🚪", major: "Room", minor: "Shelf" },
@@ -72,6 +93,7 @@ export default function TaggingScreen() {
   const {
     bottleId: initialBottleId,
     bottleIds: bulkBottleIdsParam,
+    bottleMetadata: bottleMetadataParam,
     mode,
     source,
     fromRequestId,
@@ -83,6 +105,7 @@ export default function TaggingScreen() {
   } = useLocalSearchParams<{
     bottleId?: string;
     bottleIds?: string;
+    bottleMetadata?: string;
     mode?: "sell";
     source?: string;
     fromRequestId?: string;
@@ -97,8 +120,116 @@ export default function TaggingScreen() {
   const bulkBottleIds = bulkBottleIdsParam
     ? bulkBottleIdsParam.split(",").filter(Boolean)
     : null;
-  const isBulkMode = bulkBottleIds && bulkBottleIds.length > 1;
+  const isBulkMode = Boolean(bulkBottleIds && bulkBottleIds.length > 1);
   const effectiveInitialBottleId = initialBottleId || (bulkBottleIds && bulkBottleIds.length === 1 ? bulkBottleIds[0] : undefined);
+
+  // Group bottles by wine for multi-wine split tagging
+  const parsedBottleMetadata: BottleTagMeta[] | null = useMemo(() => {
+    if (!bottleMetadataParam) return null;
+    try {
+      const parsed = JSON.parse(bottleMetadataParam);
+      return Array.isArray(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  }, [bottleMetadataParam]);
+
+  const wineGroups: WineGroup[] = useMemo(() => {
+    if (!isBulkMode || !parsedBottleMetadata || parsedBottleMetadata.length === 0) return [];
+    const groupMap: Record<string, WineGroup> = {};
+    for (const b of parsedBottleMetadata) {
+      const key = b.masterWineId || b.wineName;
+      if (!groupMap[key]) {
+        groupMap[key] = {
+          masterWineId: b.masterWineId,
+          wineName: b.wineName,
+          vintage: b.vintage,
+          format: b.format,
+          producer: b.producer,
+          bottleIds: [],
+        };
+      }
+      groupMap[key].bottleIds.push(b.bottleId);
+    }
+    return Object.values(groupMap);
+  }, [isBulkMode, parsedBottleMetadata]);
+
+  const isSplitMode = Boolean(isBulkMode && wineGroups.length > 1);
+
+  // Split wizard state & multi-selection
+  const [selectedGroupKeys, setSelectedGroupKeys] = useState<Set<string>>(new Set());
+  const [groupLocations, setGroupLocations] = useState<
+    Record<string, { locationId: string; locationName: string }>
+  >({});
+  const [taggedGroupKeys, setTaggedGroupKeys] = useState<Set<string>>(new Set());
+
+  // Initialize selectedGroupKeys when wineGroups is first available
+  useEffect(() => {
+    if (wineGroups.length > 0 && selectedGroupKeys.size === 0 && taggedGroupKeys.size === 0) {
+      const firstKey = wineGroups[0].masterWineId || wineGroups[0].wineName;
+      setSelectedGroupKeys(new Set([firstKey]));
+    }
+  }, [wineGroups]);
+
+  // Derived selected wine groups
+  const selectedWineGroups = useMemo(() => {
+    return wineGroups.filter((g) =>
+      selectedGroupKeys.has(g.masterWineId || g.wineName)
+    );
+  }, [wineGroups, selectedGroupKeys]);
+
+  const selectedBottlesCount = useMemo(() => {
+    return selectedWineGroups.reduce((sum, g) => sum + g.bottleIds.length, 0);
+  }, [selectedWineGroups]);
+
+  const allUntaggedKeys = useMemo(() => {
+    return wineGroups
+      .filter((g) => !taggedGroupKeys.has(g.masterWineId || g.wineName))
+      .map((g) => g.masterWineId || g.wineName);
+  }, [wineGroups, taggedGroupKeys]);
+
+  const isAllUntaggedSelected = useMemo(() => {
+    const targetKeys =
+      allUntaggedKeys.length > 0
+        ? allUntaggedKeys
+        : wineGroups.map((g) => g.masterWineId || g.wineName);
+    return targetKeys.length > 0 && targetKeys.every((k) => selectedGroupKeys.has(k));
+  }, [allUntaggedKeys, wineGroups, selectedGroupKeys]);
+
+  const handleToggleSelectAll = () => {
+    if (isAllUntaggedSelected) {
+      if (allUntaggedKeys.length > 0) {
+        setSelectedGroupKeys(new Set([allUntaggedKeys[0]]));
+      } else if (wineGroups.length > 0) {
+        setSelectedGroupKeys(new Set([wineGroups[0].masterWineId || wineGroups[0].wineName]));
+      }
+    } else {
+      const keysToSelect =
+        allUntaggedKeys.length > 0
+          ? allUntaggedKeys
+          : wineGroups.map((g) => g.masterWineId || g.wineName);
+      setSelectedGroupKeys(new Set(keysToSelect));
+    }
+  };
+
+  const handleToggleSingleGroup = (key: string) => {
+    setSelectedGroupKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
+
+  const handleSelectExclusiveGroup = (group: WineGroup) => {
+    const key = group.masterWineId || group.wineName;
+    setSelectedGroupKeys(new Set([key]));
+    const loc = groupLocations[key];
+    setSelectedLocationId(loc?.locationId || null);
+  };
 
   const [permission, requestPermission] = useCameraPermissions();
   const [state, setState] = useState<TaggingState>(
@@ -434,7 +565,50 @@ export default function TaggingScreen() {
     if (!isBulkMode && !bottle) return;
     setState("updating");
     try {
-      if (isBulkMode && bulkBottleIds) {
+      if (isSplitMode && selectedWineGroups.length > 0) {
+        const bottleIdsToTag = selectedWineGroups.flatMap((g) => g.bottleIds);
+        await Promise.all(
+          bottleIdsToTag.map((bid) =>
+            apiFetch(`/bottles/${bid}`, {
+              method: "PATCH",
+              body: JSON.stringify({
+                locationId: locId,
+                status: "shelved",
+              }),
+            })
+          ),
+        );
+        const locName = locations.find((l) => l.id === locId)?.name || locId;
+        const updatedLocations = { ...groupLocations };
+        const nextTaggedKeys = new Set(taggedGroupKeys);
+
+        selectedWineGroups.forEach((g) => {
+          const key = g.masterWineId || g.wineName;
+          updatedLocations[key] = { locationId: locId, locationName: locName };
+          nextTaggedKeys.add(key);
+        });
+
+        setGroupLocations(updatedLocations);
+        setTaggedGroupKeys(nextTaggedKeys);
+
+        // Find remaining untagged groups
+        const remainingUntagged = wineGroups.filter(
+          (g) => !nextTaggedKeys.has(g.masterWineId || g.wineName)
+        );
+
+        if (remainingUntagged.length > 0) {
+          // Auto-select the first remaining untagged wine
+          const nextKey = remainingUntagged[0].masterWineId || remainingUntagged[0].wineName;
+          setSelectedGroupKeys(new Set([nextKey]));
+          setSelectedLocationId(null);
+          setState("displaying");
+        } else {
+          // All wine groups tagged!
+          await AsyncStorage.setItem("forceDashboardRefresh", "true");
+          setSuccessAction("tagged");
+          setState("success");
+        }
+      } else if (isBulkMode && bulkBottleIds) {
         await Promise.all(
           bulkBottleIds.map((bid) =>
             apiFetch(`/bottles/${bid}`, {
@@ -446,6 +620,9 @@ export default function TaggingScreen() {
             })
           ),
         );
+        await AsyncStorage.setItem("forceDashboardRefresh", "true");
+        setSuccessAction("tagged");
+        setState("success");
       } else {
         await apiFetch(`/bottles/${bottle!.id}`, {
           method: "PATCH",
@@ -454,10 +631,10 @@ export default function TaggingScreen() {
             status: "shelved",
           }),
         });
+        await AsyncStorage.setItem("forceDashboardRefresh", "true");
+        setSuccessAction("tagged");
+        setState("success");
       }
-      await AsyncStorage.setItem("forceDashboardRefresh", "true");
-      setSuccessAction("tagged");
-      setState("success");
     } catch (error) {
       console.error("Error updating bottle:", error);
       Alert.alert("Error", "Failed to finalize shelving.");
@@ -681,6 +858,215 @@ export default function TaggingScreen() {
   );
   const sortedLocationTypes = Object.keys(groupedLocations).sort();
 
+  const renderWineGroupsProgress = (compact = false) => {
+    if (!isSplitMode) return null;
+    return (
+      <View
+        style={[
+          styles.card,
+          {
+            backgroundColor: theme.card,
+            borderColor: theme.border,
+            padding: compact ? 12 : 14,
+            marginBottom: 10,
+          },
+        ]}
+      >
+        {/* Header row with Title and Select All button */}
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginBottom: 10,
+          }}
+        >
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+            <Layers size={14} color={theme.primary} />
+            <Text
+              style={{
+                fontSize: 11,
+                fontWeight: "800",
+                color: theme.primary,
+                textTransform: "uppercase",
+                letterSpacing: 0.5,
+              }}
+            >
+              Tag by Wine ({taggedGroupKeys.size}/{wineGroups.length} Done)
+            </Text>
+          </View>
+
+          {/* Select All / Deselect All Button */}
+          <TouchableOpacity
+            onPress={handleToggleSelectAll}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 4,
+              backgroundColor: isAllUntaggedSelected ? theme.primary + "18" : theme.card,
+              borderWidth: 1,
+              borderColor: isAllUntaggedSelected ? theme.primary : theme.border,
+              paddingVertical: 4,
+              paddingHorizontal: 8,
+              borderRadius: 8,
+            }}
+          >
+            <Check size={12} color={isAllUntaggedSelected ? theme.primary : theme.textSecondary} strokeWidth={3} />
+            <Text
+              style={{
+                fontSize: 11,
+                fontWeight: "700",
+                color: isAllUntaggedSelected ? theme.primary : theme.textSecondary,
+              }}
+            >
+              {isAllUntaggedSelected ? "Deselect All" : "Select All"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView
+          horizontal={compact}
+          showsHorizontalScrollIndicator={false}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ gap: 6 }}
+        >
+          {wineGroups.map((group, idx) => {
+            const key = group.masterWineId || group.wineName;
+            const isSelected = selectedGroupKeys.has(key);
+            const isTagged = taggedGroupKeys.has(key);
+            const assignedLocation = groupLocations[key];
+
+            return (
+              <TouchableOpacity
+                key={key + idx}
+                onPress={() => handleSelectExclusiveGroup(group)}
+                activeOpacity={0.7}
+                style={[
+                  {
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    paddingVertical: 8,
+                    paddingHorizontal: 10,
+                    borderRadius: 10,
+                    borderWidth: isSelected ? 2 : 1,
+                    borderColor: isSelected
+                      ? theme.primary
+                      : isTagged
+                      ? "#10b98140"
+                      : theme.border,
+                    backgroundColor: isSelected
+                      ? theme.primary + "12"
+                      : isTagged
+                      ? "#10b9810a"
+                      : theme.card,
+                  },
+                  compact && { minWidth: 220 },
+                ]}
+              >
+                {/* Checkbox for toggling multi-selection */}
+                <TouchableOpacity
+                  onPress={() => handleToggleSingleGroup(key)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  style={{
+                    width: 22,
+                    height: 22,
+                    borderRadius: 6,
+                    borderWidth: isSelected ? 0 : 1.5,
+                    borderColor: isSelected ? theme.primary : theme.border,
+                    backgroundColor: isSelected ? theme.primary : "transparent",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    marginRight: 10,
+                  }}
+                >
+                  {isSelected && <Check size={14} color="#fff" strokeWidth={3} />}
+                </TouchableOpacity>
+
+                <View style={{ flex: 1, marginRight: 8 }}>
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      fontWeight: isSelected ? "800" : "600",
+                      color: isSelected ? theme.primary : theme.text,
+                    }}
+                    numberOfLines={1}
+                  >
+                    {group.wineName}
+                  </Text>
+                  <Text
+                    style={{
+                      fontSize: 10,
+                      color: theme.textSecondary,
+                      marginTop: 2,
+                    }}
+                    numberOfLines={1}
+                  >
+                    {[
+                      group.vintage,
+                      group.producer,
+                      `${group.bottleIds.length} btl${group.bottleIds.length > 1 ? "s" : ""}`,
+                    ]
+                      .filter(Boolean)
+                      .join(" • ")}
+                  </Text>
+                </View>
+
+                <View style={{ alignItems: "flex-end" }}>
+                  {isTagged ? (
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 3,
+                        backgroundColor: "#10b98120",
+                        paddingHorizontal: 6,
+                        paddingVertical: 2,
+                        borderRadius: 6,
+                      }}
+                    >
+                      <Check size={10} color="#10b981" strokeWidth={3} />
+                      <Text
+                        style={{
+                          fontSize: 10,
+                          fontWeight: "700",
+                          color: "#10b981",
+                          maxWidth: 80,
+                        }}
+                        numberOfLines={1}
+                      >
+                        {assignedLocation?.locationName || "Tagged"}
+                      </Text>
+                    </View>
+                  ) : (
+                    <View
+                      style={{
+                        backgroundColor: isSelected ? theme.primary : theme.border,
+                        paddingHorizontal: 6,
+                        paddingVertical: 2,
+                        borderRadius: 6,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          fontSize: 9,
+                          fontWeight: "700",
+                          color: isSelected ? "#fff" : theme.textSecondary,
+                        }}
+                      >
+                        {isSelected ? "ACTIVE" : "PENDING"}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
+    );
+  };
+
   if (!permission) return <View style={styles.container} />;
 
   if (!permission.granted) {
@@ -734,18 +1120,22 @@ export default function TaggingScreen() {
                 ? "Bottle Sold!"
                 : successAction === "received"
                   ? "Bottle Received!"
-                  : isBulkMode
-                    ? `${bulkBottleIds!.length} Bottles Tagged!`
-                    : "Location Tagged!"}
+                  : isSplitMode
+                    ? `${bulkBottleIds!.length} Bottles Tagged Across ${wineGroups.length} Wines!`
+                    : isBulkMode
+                      ? `${bulkBottleIds!.length} Bottles Tagged!`
+                      : "Location Tagged!"}
             </Text>
             <Text style={[styles.successDesc, isLandscape && { fontSize: 14, lineHeight: 20, marginBottom: 20 }]}>
               {successAction === "sold"
                 ? "The bottle has been marked as sold and removed from active inventory."
                 : successAction === "received"
                   ? "The bottle has been successfully added to your store's inventory."
-                  : isBulkMode
-                    ? `All ${bulkBottleIds!.length} bottles have been assigned to the same storage location.`
-                    : "The bottle has been assigned to its new storage location."}
+                  : isSplitMode
+                    ? `All ${bulkBottleIds!.length} bottles have been successfully tagged to their designated storage locations.`
+                    : isBulkMode
+                      ? `All ${bulkBottleIds!.length} bottles have been assigned to the same storage location.`
+                      : "The bottle has been assigned to its new storage location."}
             </Text>
 
             <View
@@ -755,121 +1145,178 @@ export default function TaggingScreen() {
                 isLandscape && { padding: 18, borderRadius: 18 },
               ]}
             >
-              <Text
-                style={[
-                  styles.wineName,
-                  { color: theme.text, textAlign: "center" },
-                ]}
-              >
-                {isBulkMode ? wineName : wine?.name}
-              </Text>
-              <Text
-                style={[
-                  styles.wineVintage,
-                  {
-                    color: theme.textSecondary,
-                    textAlign: "center",
-                    marginTop: 8,
-                  },
-                ]}
-              >
-                {isBulkMode
-                  ? [wineVintage, wineProducer, wineFormat]
-                    .filter(Boolean)
-                    .join(" • ")
-                  : `${wine?.vintage} • ${wine?.producer} • ${wine?.format}`}
-              </Text>
-              {successAction === "sold" && numericBase > 0 && (
-                <View
-                  style={[
-                    styles.saleSummaryRow,
-                    { borderTopColor: theme.border },
-                  ]}
-                >
-                  <View style={styles.saleSummaryItem}>
-                    <Text
-                      style={[
-                        styles.saleSummaryLabel,
-                        { color: theme.textSecondary },
-                      ]}
-                    >
-                      BASE
-                    </Text>
-                    <Text
-                      style={[styles.saleSummaryValue, { color: theme.text }]}
-                    >
-                      {formatCurrency(numericBase)}
-                    </Text>
-                  </View>
-                  <View
-                    style={[
-                      styles.saleSummaryDivider,
-                      { backgroundColor: theme.border },
-                    ]}
-                  />
-                  <View style={styles.saleSummaryItem}>
-                    <Text
-                      style={[
-                        styles.saleSummaryLabel,
-                        { color: theme.textSecondary },
-                      ]}
-                    >
-                      VAT 12%
-                    </Text>
-                    <Text
-                      style={[
-                        styles.saleSummaryValue,
-                        { color: theme.textSecondary },
-                      ]}
-                    >
-                      {formatCurrency(vatAmount)}
-                    </Text>
-                  </View>
-                  <View
-                    style={[
-                      styles.saleSummaryDivider,
-                      { backgroundColor: theme.border },
-                    ]}
-                  />
-                  <View style={styles.saleSummaryItem}>
-                    <Text
-                      style={[styles.saleSummaryLabel, { color: theme.primary }]}
-                    >
-                      TOTAL
-                    </Text>
-                    <Text
-                      style={[styles.saleSummaryValue, { color: theme.primary }]}
-                    >
-                      {formatCurrency(totalWithVat)}
-                    </Text>
-                  </View>
+              {isSplitMode ? (
+                <View style={{ width: "100%", gap: 10 }}>
+                  <Text style={[styles.skuLabel, { color: theme.textSecondary, textAlign: "center", marginBottom: 4 }]}>
+                    STORAGE ASSIGNMENTS ({wineGroups.length} WINES • {bulkBottleIds?.length} BOTTLES)
+                  </Text>
+                  {wineGroups.map((group, idx) => {
+                    const key = group.masterWineId || group.wineName;
+                    const assigned = groupLocations[key];
+                    return (
+                      <View
+                        key={key + idx}
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          paddingVertical: 10,
+                          paddingHorizontal: 12,
+                          backgroundColor: theme.background || "#f8fafc",
+                          borderRadius: 12,
+                          borderWidth: 1,
+                          borderColor: theme.border,
+                        }}
+                      >
+                        <View style={{ flex: 1, marginRight: 10 }}>
+                          <Text style={{ fontSize: 13, fontWeight: "700", color: theme.text }} numberOfLines={1}>
+                            {group.wineName}
+                          </Text>
+                          <Text style={{ fontSize: 11, color: theme.textSecondary, marginTop: 2 }}>
+                            {[group.vintage, group.producer, `${group.bottleIds.length} btl${group.bottleIds.length > 1 ? "s" : ""}`].filter(Boolean).join(" • ")}
+                          </Text>
+                        </View>
+                        <View
+                          style={{
+                            flexDirection: "row",
+                            alignItems: "center",
+                            gap: 5,
+                            backgroundColor: "#10b98118",
+                            paddingVertical: 5,
+                            paddingHorizontal: 10,
+                            borderRadius: 8,
+                            borderWidth: 1,
+                            borderColor: "#10b98130",
+                          }}
+                        >
+                          <MapPin size={13} color="#10b981" />
+                          <Text style={{ fontSize: 12, fontWeight: "700", color: "#10b981" }}>
+                            {assigned?.locationName || "Tagged"}
+                          </Text>
+                        </View>
+                      </View>
+                    );
+                  })}
                 </View>
-              )}
+              ) : (
+                <>
+                  <Text
+                    style={[
+                      styles.wineName,
+                      { color: theme.text, textAlign: "center" },
+                    ]}
+                  >
+                    {isBulkMode ? wineName : wine?.name}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.wineVintage,
+                      {
+                        color: theme.textSecondary,
+                        textAlign: "center",
+                        marginTop: 8,
+                      },
+                    ]}
+                  >
+                    {isBulkMode
+                      ? [wineVintage, wineProducer, wineFormat]
+                        .filter(Boolean)
+                        .join(" • ")
+                      : `${wine?.vintage} • ${wine?.producer} • ${wine?.format}`}
+                  </Text>
+                  {successAction === "sold" && numericBase > 0 && (
+                    <View
+                      style={[
+                        styles.saleSummaryRow,
+                        { borderTopColor: theme.border },
+                      ]}
+                    >
+                      <View style={styles.saleSummaryItem}>
+                        <Text
+                          style={[
+                            styles.saleSummaryLabel,
+                            { color: theme.textSecondary },
+                          ]}
+                        >
+                          BASE
+                        </Text>
+                        <Text
+                          style={[styles.saleSummaryValue, { color: theme.text }]}
+                        >
+                          {formatCurrency(numericBase)}
+                        </Text>
+                      </View>
+                      <View
+                        style={[
+                          styles.saleSummaryDivider,
+                          { backgroundColor: theme.border },
+                        ]}
+                      />
+                      <View style={styles.saleSummaryItem}>
+                        <Text
+                          style={[
+                            styles.saleSummaryLabel,
+                            { color: theme.textSecondary },
+                          ]}
+                        >
+                          VAT 12%
+                        </Text>
+                        <Text
+                          style={[
+                            styles.saleSummaryValue,
+                            { color: theme.textSecondary },
+                          ]}
+                        >
+                          {formatCurrency(vatAmount)}
+                        </Text>
+                      </View>
+                      <View
+                        style={[
+                          styles.saleSummaryDivider,
+                          { backgroundColor: theme.border },
+                        ]}
+                      />
+                      <View style={styles.saleSummaryItem}>
+                        <Text
+                          style={[styles.saleSummaryLabel, { color: theme.primary }]}
+                        >
+                          TOTAL
+                        </Text>
+                        <Text
+                          style={[styles.saleSummaryValue, { color: theme.primary }]}
+                        >
+                          {formatCurrency(totalWithVat)}
+                        </Text>
+                      </View>
+                    </View>
+                  )}
 
-              {successAction === "tagged" && selectedLocationId && (
-                <View
-                  style={[
-                    styles.saleSummaryRow,
-                    { borderTopColor: theme.border, marginTop: 16 },
-                  ]}
-                >
-                  <View style={styles.saleSummaryItem}>
-                    <Text
+                  {successAction === "tagged" && !isSplitMode && selectedLocationId && (
+                    <View
                       style={[
-                        styles.saleSummaryLabel,
-                        { color: theme.textSecondary },
+                        styles.saleSummaryRow,
+                        { borderTopColor: theme.border, marginTop: 16 },
                       ]}
                     >
-                      STORAGE LOCATION
-                    </Text>
-                    <Text
-                      style={[styles.saleSummaryValue, { color: theme.primary }]}
-                    >
-                      {locations.find((l) => l.id === selectedLocationId)?.name ||
-                        selectedLocationId}
-                    </Text>
-                  </View>
-                </View>
+                      <View style={styles.saleSummaryItem}>
+                        <Text
+                          style={[
+                            styles.saleSummaryLabel,
+                            { color: theme.textSecondary },
+                          ]}
+                        >
+                          STORAGE LOCATION
+                        </Text>
+                        <Text
+                          style={[styles.saleSummaryValue, { color: theme.primary }]}
+                        >
+                          {locations.find((l) => l.id === selectedLocationId)?.name ||
+                            selectedLocationId}
+                        </Text>
+                      </View>
+                    </View>
+                  )}
+                </>
               )}
             </View>
 
@@ -923,7 +1370,7 @@ export default function TaggingScreen() {
             {/* Landscape Header */}
             <View style={[styles.landscapeHeader, { backgroundColor: theme.background }]}>
               <View style={styles.landscapeHeaderLeft}>
-                <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+                <TouchableOpacity onPress={() => router.back()} style={[styles.backButton, { backgroundColor: theme.card, borderColor: theme.border }]}>
                   <ChevronLeft size={22} color={theme.text} strokeWidth={2.5} />
                 </TouchableOpacity>
                 <View>
@@ -1160,7 +1607,7 @@ export default function TaggingScreen() {
             {/* Landscape Header */}
             <View style={[styles.landscapeHeader, { backgroundColor: theme.background }]}>
               <View style={styles.landscapeHeaderLeft}>
-                <TouchableOpacity onPress={() => setState("entry")} style={styles.backButton}>
+                <TouchableOpacity onPress={() => setState("entry")} style={[styles.backButton, { backgroundColor: theme.card, borderColor: theme.border }]}>
                   <ChevronLeft size={22} color={theme.text} strokeWidth={2.5} />
                 </TouchableOpacity>
                 <View>
@@ -1304,17 +1751,33 @@ export default function TaggingScreen() {
                     isProcessing.current = false;
                     setState("entry");
                   }}
-                  style={styles.backButton}
+                  style={[
+                    styles.backButton,
+                    {
+                      backgroundColor: theme.card,
+                      borderColor: theme.border,
+                    },
+                  ]}
                 >
-                  <RefreshCw size={18} color={theme.primary} strokeWidth={2.5} />
+                  <RefreshCw size={16} color={theme.primary} strokeWidth={2.5} />
                   <Text style={[styles.backText, { color: theme.primary }]}>RESCAN</Text>
                 </TouchableOpacity>
                 <View>
                   <Text style={[styles.landscapeTitle, { color: theme.text }]}>
-                    {mode === "sell" ? "Sell Bottle" : isBulkMode ? "Bulk Tagging" : "Tag Location"}
+                    {mode === "sell"
+                      ? "Sell Bottle"
+                      : isSplitMode
+                      ? selectedWineGroups.length > 1
+                        ? `Tag Multiple Wines (${selectedWineGroups.length} Selected)`
+                        : `Tag by Wine (${wineGroups.findIndex(g => (g.masterWineId || g.wineName) === (selectedWineGroups[0]?.masterWineId || selectedWineGroups[0]?.wineName)) + 1}/${wineGroups.length})`
+                      : isBulkMode
+                      ? "Bulk Tagging"
+                      : "Tag Location"}
                   </Text>
                   <Text style={[styles.landscapeSubtitle, { color: theme.textSecondary }]}>
-                    {isBulkMode
+                    {isSplitMode
+                      ? `${bulkBottleIds?.length} TOTAL BOTTLES • SELECTED: ${selectedBottlesCount} BOTTLE${selectedBottlesCount !== 1 ? "S" : ""}`
+                      : isBulkMode
                       ? `${bulkBottleIds?.length} BOTTLES • ${wineName || wine?.name || ""}`
                       : `BOTTLE ID: ${bottle?.id.toUpperCase() || "..."}`}
                   </Text>
@@ -1565,32 +2028,65 @@ export default function TaggingScreen() {
                         <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 }}>
                           <Box size={14} color={theme.secondary} />
                           <Text style={[styles.skuLabel, { color: theme.textSecondary, fontSize: 9 }]}>
-                            {isBulkMode
+                            {isSplitMode
+                              ? selectedWineGroups.length > 1
+                                ? `${selectedWineGroups.length === wineGroups.length ? "ALL" : selectedWineGroups.length} WINES SELECTED (${selectedBottlesCount} BOTTLES)`
+                                : selectedWineGroups.length === 1
+                                ? `WINE ${wineGroups.findIndex(g => (g.masterWineId || g.wineName) === (selectedWineGroups[0].masterWineId || selectedWineGroups[0].wineName)) + 1} OF ${wineGroups.length} (${selectedWineGroups[0].bottleIds.length} BOTTLE${selectedWineGroups[0].bottleIds.length > 1 ? "S" : ""})`
+                                : "NO WINE SELECTED"
+                              : isBulkMode
                               ? `BULK TAGGING (${bulkBottleIds?.length} BOTTLES)`
                               : `BOTTLE ID: ${bottle?.id.toUpperCase()}`}
                           </Text>
                         </View>
                         <Text style={[styles.wineName, { color: theme.text, fontSize: 15 }]} numberOfLines={2}>
-                          {isBulkMode ? wineName : wine?.name || "Processing..."}
+                          {isSplitMode
+                            ? selectedWineGroups.length > 1
+                              ? `Tag ${selectedWineGroups.length} Wines to Same Location`
+                              : selectedWineGroups.length === 1
+                              ? selectedWineGroups[0].wineName
+                              : "Select Wines to Tag"
+                            : isBulkMode
+                            ? wineName
+                            : wine?.name || "Processing..."}
                         </Text>
                         <View style={styles.wineMetaRow}>
                           <Text style={[styles.wineVintage, { color: theme.textSecondary, fontSize: 12 }]}>
-                            {isBulkMode ? wineVintage : wine?.vintage}
+                            {isSplitMode
+                              ? selectedWineGroups.length > 1
+                                ? `${selectedBottlesCount} total bottles selected`
+                                : selectedWineGroups.length === 1
+                                ? selectedWineGroups[0].vintage
+                                : "Tap checkboxes below or tap Select All"
+                              : isBulkMode
+                              ? wineVintage
+                              : wine?.vintage}
                           </Text>
-                          <View style={[styles.metaDot, { backgroundColor: theme.border }]} />
-                          <Text style={[styles.wineProducer, { color: theme.textSecondary, fontSize: 11 }]}>
-                            {isBulkMode ? wineProducer : (wine?.producer || "Independent Producer")}
-                          </Text>
-                          {(isBulkMode ? wineFormat : wine?.format) && (
+                          {(!isSplitMode || selectedWineGroups.length === 1) && (
                             <>
                               <View style={[styles.metaDot, { backgroundColor: theme.border }]} />
-                              <Text style={[styles.wineFormat, { color: theme.textSecondary, fontSize: 11 }]}>
-                                {isBulkMode ? wineFormat : wine?.format}
+                              <Text style={[styles.wineProducer, { color: theme.textSecondary, fontSize: 11 }]}>
+                                {isSplitMode
+                                  ? (selectedWineGroups[0]?.producer || "Independent Producer")
+                                  : isBulkMode
+                                  ? wineProducer
+                                  : (wine?.producer || "Independent Producer")}
                               </Text>
+                              {(isSplitMode ? selectedWineGroups[0]?.format : isBulkMode ? wineFormat : wine?.format) && (
+                                <>
+                                  <View style={[styles.metaDot, { backgroundColor: theme.border }]} />
+                                  <Text style={[styles.wineFormat, { color: theme.textSecondary, fontSize: 11 }]}>
+                                    {isSplitMode ? selectedWineGroups[0]?.format : isBulkMode ? wineFormat : wine?.format}
+                                  </Text>
+                                </>
+                              )}
                             </>
                           )}
                         </View>
                       </View>
+
+                      {/* Wine groups progress list for split tagging */}
+                      {isSplitMode && renderWineGroupsProgress(false)}
 
                       {/* Selected Location Card */}
                       <View
@@ -1607,7 +2103,11 @@ export default function TaggingScreen() {
                           <Map size={16} color={selectedLocationId ? theme.primary : theme.textSecondary} />
                           <View style={{ flex: 1 }}>
                             <Text style={{ fontSize: 10, fontWeight: "800", color: theme.textSecondary, textTransform: "uppercase" }}>
-                              Assigned Bin / Shelf
+                              {isSplitMode
+                                ? selectedWineGroups.length > 1
+                                  ? `Shared Location for ${selectedWineGroups.length} Wines`
+                                  : `Location for ${selectedWineGroups[0]?.wineName || "Current Wine"}`
+                                : "Assigned Bin / Shelf"}
                             </Text>
                             <Text style={{ fontSize: 16, fontWeight: "900", color: selectedLocationId ? theme.primary : theme.text }}>
                               {locations.find((l) => l.id === selectedLocationId)?.name || "Not Selected (Tap on right)"}
@@ -1829,10 +2329,10 @@ export default function TaggingScreen() {
                               height: 50,
                               borderRadius: 14,
                             },
-                            (!selectedLocationId || state === "updating") && styles.buttonDisabled,
+                            (!selectedLocationId || state === "updating" || (isSplitMode && selectedWineGroups.length === 0)) && styles.buttonDisabled,
                           ]}
                           onPress={() => handleConfirmTagging()}
-                          disabled={!selectedLocationId || state === "updating"}
+                          disabled={!selectedLocationId || state === "updating" || (isSplitMode && selectedWineGroups.length === 0)}
                         >
                           {state === "updating" ? (
                             <ActivityIndicator color="#fff" size="small" />
@@ -1840,7 +2340,23 @@ export default function TaggingScreen() {
                             <>
                               <CheckCircle2 size={18} color="#fff" strokeWidth={2.5} />
                               <Text style={[styles.confirmButtonText, { fontSize: 13 }]}>
-                                {isStore ? "UPDATE LOCATION" : "FINALIZE SHELVING"}
+                                {isSplitMode ? (
+                                  selectedWineGroups.length === 0 ? (
+                                    "SELECT A WINE TO TAG"
+                                  ) : selectedWineGroups.length === 1 ? (
+                                    taggedGroupKeys.size >= wineGroups.length - 1
+                                      ? "FINISH & COMPLETE TAGGING"
+                                      : `CONFIRM & NEXT WINE (${selectedWineGroups[0].bottleIds.length} BTL${selectedWineGroups[0].bottleIds.length > 1 ? "S" : ""})`
+                                  ) : selectedWineGroups.length === wineGroups.length || (allUntaggedKeys.length > 0 && selectedWineGroups.length === allUntaggedKeys.length) ? (
+                                    `TAG ALL ${selectedWineGroups.length} WINES (${selectedBottlesCount} BOTTLES)`
+                                  ) : (
+                                    `TAG ${selectedWineGroups.length} SELECTED WINES (${selectedBottlesCount} BOTTLES)`
+                                  )
+                                ) : isStore ? (
+                                  "UPDATE LOCATION"
+                                ) : (
+                                  "FINALIZE SHELVING"
+                                )}
                               </Text>
                             </>
                           )}
@@ -1877,30 +2393,33 @@ export default function TaggingScreen() {
                 style={[
                   styles.backButton,
                   {
-                    backgroundColor: isStore ? theme.card : "transparent",
-                    padding: isStore ? 10 : 0,
-                    borderRadius: 12,
-                    borderWidth: isStore ? 1 : 0,
+                    backgroundColor: theme.card,
                     borderColor: theme.border,
                   },
                 ]}
               >
                 <RefreshCw
-                  size={20}
-                  color={isStore ? theme.primary : "#fff"}
+                  size={16}
+                  color={theme.primary}
                   strokeWidth={2.5}
                 />
                 <Text
                   style={[
                     styles.backText,
-                    { color: isStore ? theme.primary : "#fff" },
+                    { color: theme.primary },
                   ]}
                 >
                   RESCAN
                 </Text>
               </TouchableOpacity>
               <Text style={[styles.title, { color: theme.text }]}>
-                {mode === "sell" ? "Sell Bottle" : "Tag Location"}
+                {mode === "sell"
+                  ? "Sell Bottle"
+                  : isSplitMode
+                  ? selectedWineGroups.length > 1
+                    ? `Tag Wines (${selectedWineGroups.length} Selected)`
+                    : `Tag Wines (${wineGroups.findIndex(g => (g.masterWineId || g.wineName) === (selectedWineGroups[0]?.masterWineId || selectedWineGroups[0]?.wineName)) + 1}/${wineGroups.length})`
+                  : "Tag Location"}
               </Text>
             </View>
 
@@ -1921,7 +2440,13 @@ export default function TaggingScreen() {
               >
                 <Box size={14} color={theme.secondary} />
                 <Text style={[styles.skuLabel, { color: theme.textSecondary }]}>
-                  {isBulkMode
+                  {isSplitMode
+                    ? selectedWineGroups.length > 1
+                      ? `${selectedWineGroups.length === wineGroups.length ? "ALL" : selectedWineGroups.length} WINES SELECTED (${selectedBottlesCount} BOTTLES)`
+                      : selectedWineGroups.length === 1
+                      ? `WINE ${wineGroups.findIndex(g => (g.masterWineId || g.wineName) === (selectedWineGroups[0].masterWineId || selectedWineGroups[0].wineName)) + 1} OF ${wineGroups.length} (${selectedWineGroups[0].bottleIds.length} BOTTLE${selectedWineGroups[0].bottleIds.length > 1 ? "S" : ""})`
+                      : "NO WINE SELECTED"
+                    : isBulkMode
                     ? `BULK TAGGING (${bulkBottleIds?.length} BOTTLES)`
                     : `BOTTLE ID: ${bottle?.id.toUpperCase()}`}
                 </Text>
@@ -1943,7 +2468,15 @@ export default function TaggingScreen() {
                   { color: theme.text, paddingRight: mode === "sell" ? 80 : 0 },
                 ]}
               >
-                {isBulkMode ? wineName : wine?.name || "Processing..."}
+                {isSplitMode
+                  ? selectedWineGroups.length > 1
+                    ? `Tag ${selectedWineGroups.length} Wines to Same Location`
+                    : selectedWineGroups.length === 1
+                    ? selectedWineGroups[0].wineName
+                    : "Select Wines to Tag"
+                  : isBulkMode
+                  ? wineName
+                  : wine?.name || "Processing..."}
               </Text>
               <View
                 style={[
@@ -1954,26 +2487,42 @@ export default function TaggingScreen() {
                 <Text
                   style={[styles.wineVintage, { color: theme.textSecondary }]}
                 >
-                  {isBulkMode ? wineVintage : wine?.vintage}
+                  {isSplitMode
+                    ? selectedWineGroups.length > 1
+                      ? `${selectedBottlesCount} total bottles selected`
+                      : selectedWineGroups.length === 1
+                      ? selectedWineGroups[0].vintage
+                      : "Tap checkboxes below or tap Select All"
+                    : isBulkMode
+                    ? wineVintage
+                    : wine?.vintage}
                 </Text>
-                <View
-                  style={[styles.metaDot, { backgroundColor: theme.border }]}
-                />
-                <Text
-                  style={[styles.wineProducer, { color: theme.textSecondary }]}
-                >
-                  {isBulkMode ? wineProducer : (wine?.producer || "Independent Producer")}
-                </Text>
-                {(isBulkMode ? wineFormat : wine?.format) && (
+                {(!isSplitMode || selectedWineGroups.length === 1) && (
                   <>
                     <View
                       style={[styles.metaDot, { backgroundColor: theme.border }]}
                     />
                     <Text
-                      style={[styles.wineFormat, { color: theme.textSecondary }]}
+                      style={[styles.wineProducer, { color: theme.textSecondary }]}
                     >
-                      {isBulkMode ? wineFormat : wine?.format}
+                      {isSplitMode
+                        ? (selectedWineGroups[0]?.producer || "Independent Producer")
+                        : isBulkMode
+                        ? wineProducer
+                        : (wine?.producer || "Independent Producer")}
                     </Text>
+                    {(isSplitMode ? selectedWineGroups[0]?.format : isBulkMode ? wineFormat : wine?.format) && (
+                      <>
+                        <View
+                          style={[styles.metaDot, { backgroundColor: theme.border }]}
+                        />
+                        <Text
+                          style={[styles.wineFormat, { color: theme.textSecondary }]}
+                        >
+                          {isSplitMode ? selectedWineGroups[0]?.format : isBulkMode ? wineFormat : wine?.format}
+                        </Text>
+                      </>
+                    )}
                   </>
                 )}
               </View>
@@ -2297,7 +2846,9 @@ export default function TaggingScreen() {
             ) : (
               /* ── Tag location mode ── */
               <>
-                {isStore && (
+                {isSplitMode ? (
+                  renderWineGroupsProgress(false)
+                ) : isStore ? (
                   <View
                     style={[
                       styles.infoBanner,
@@ -2320,7 +2871,7 @@ export default function TaggingScreen() {
                       </Text>
                     </View>
                   </View>
-                )}
+                ) : null}
                 <View style={styles.sectionHeader}>
                   <View
                     style={{
@@ -2331,7 +2882,13 @@ export default function TaggingScreen() {
                     }}
                   >
                     <Map size={18} color="#64748b" />
-                    <Text style={styles.sectionTitle}>Storage Location</Text>
+                    <Text style={styles.sectionTitle}>
+                      {isSplitMode
+                        ? selectedWineGroups.length > 1
+                          ? `Storage Location for ${selectedWineGroups.length} Selected Wines`
+                          : `Storage Location for ${selectedWineGroups[0]?.wineName || "Wine"}`
+                        : "Storage Location"}
+                    </Text>
                   </View>
                   <TouchableOpacity
                     onPress={() => setIsAddModalOpen(true)}
@@ -2697,11 +3254,11 @@ export default function TaggingScreen() {
                               ? theme.secondary
                               : "#10b981",
                           },
-                          (!selectedLocationId || state === "updating") &&
+                          (!selectedLocationId || state === "updating" || (isSplitMode && selectedWineGroups.length === 0)) &&
                           styles.buttonDisabled,
                         ]}
-                        onPress={handleConfirmTagging}
-                        disabled={!selectedLocationId || state === "updating"}
+                        onPress={() => handleConfirmTagging()}
+                        disabled={!selectedLocationId || state === "updating" || (isSplitMode && selectedWineGroups.length === 0)}
                       >
                         {state === "updating" ? (
                           <ActivityIndicator color="#fff" size="small" />
@@ -2713,7 +3270,23 @@ export default function TaggingScreen() {
                               strokeWidth={2.5}
                             />
                             <Text style={styles.confirmButtonText}>
-                              {isStore ? "UPDATE LOCATION" : "FINALIZE SHELVING"}
+                              {isSplitMode ? (
+                                selectedWineGroups.length === 0 ? (
+                                  "SELECT A WINE TO TAG"
+                                ) : selectedWineGroups.length === 1 ? (
+                                  taggedGroupKeys.size >= wineGroups.length - 1
+                                    ? "FINISH & COMPLETE TAGGING"
+                                    : `CONFIRM & NEXT WINE (${selectedWineGroups[0].bottleIds.length} BTL${selectedWineGroups[0].bottleIds.length > 1 ? "S" : ""})`
+                                ) : selectedWineGroups.length === wineGroups.length || (allUntaggedKeys.length > 0 && selectedWineGroups.length === allUntaggedKeys.length) ? (
+                                  `TAG ALL ${selectedWineGroups.length} WINES (${selectedBottlesCount} BOTTLES)`
+                                ) : (
+                                  `TAG ${selectedWineGroups.length} SELECTED WINES (${selectedBottlesCount} BOTTLES)`
+                                )
+                              ) : isStore ? (
+                                "UPDATE LOCATION"
+                              ) : (
+                                "FINALIZE SHELVING"
+                              )}
                             </Text>
                           </>
                         )}
@@ -3011,20 +3584,17 @@ const styles = StyleSheet.create({
   backButton: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#1e293b",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
     borderRadius: 12,
-    marginRight: 16,
+    marginRight: 14,
     borderWidth: 1,
-    borderColor: "#334155",
     gap: 8,
   },
   backText: {
-    color: "#fff",
-    fontSize: 11,
-    fontWeight: "900",
-    letterSpacing: 1,
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.5,
   },
   title: {
     color: "#fff",

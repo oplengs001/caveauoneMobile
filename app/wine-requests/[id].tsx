@@ -545,6 +545,19 @@ export default function WineRequestDetail() {
                     pathname: "/tagging",
                     params: {
                       bottleIds: uniqueBottleIds.join(","),
+                      bottleMetadata: JSON.stringify(
+                        uniqueBottleIds.map((bid) => {
+                          const b = batchBottles.find((bb) => bb.bottleId === bid);
+                          return {
+                            bottleId: bid,
+                            masterWineId: b?.masterWineId || "",
+                            wineName: b?.wineName || item.wineName,
+                            vintage: b?.vintage || item.vintage || "",
+                            producer: b?.producer || item.producer || "",
+                            format: b?.format || item.format || "",
+                          };
+                        })
+                      ),
                       mode: "tagging",
                       source: "wine-request",
                       fromRequestId: id,
@@ -1235,6 +1248,16 @@ export default function WineRequestDetail() {
                         pathname: "/tagging",
                         params: {
                           bottleIds: verifiedBatchBottles.map((b) => b.bottleId).join(","),
+                          bottleMetadata: JSON.stringify(
+                            verifiedBatchBottles.map((b) => ({
+                              bottleId: b.bottleId,
+                              masterWineId: b.masterWineId || "",
+                              wineName: b.wineName,
+                              vintage: b.vintage || "",
+                              producer: b.producer || "",
+                              format: b.format || "",
+                            }))
+                          ),
                           mode: "tagging",
                           source: "wine-request",
                           fromRequestId: id,
@@ -1536,6 +1559,16 @@ export default function WineRequestDetail() {
                     pathname: "/tagging",
                     params: {
                       bottleIds: verifiedBatchBottles.map((b) => b.bottleId).join(","),
+                      bottleMetadata: JSON.stringify(
+                        verifiedBatchBottles.map((b) => ({
+                          bottleId: b.bottleId,
+                          masterWineId: b.masterWineId || "",
+                          wineName: b.wineName,
+                          vintage: b.vintage || "",
+                          producer: b.producer || "",
+                          format: b.format || "",
+                        }))
+                      ),
                       mode: "tagging",
                       source: "wine-request",
                       fromRequestId: id,
