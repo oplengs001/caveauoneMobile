@@ -88,32 +88,6 @@ export default function DeliveryDetail() {
         return;
       }
 
-      if (bottleData.storeId === delivery.storeId) {
-        Alert.alert(
-          "Already Received",
-          "This bottle has already been received at this store.",
-          [{ text: "OK", onPress: () => setScanning(true) }],
-        );
-        return;
-      }
-      if (bottleData.outboundStoreId !== delivery.storeId) {
-        Alert.alert(
-          "Wrong Store",
-          "This bottle is not designated for your location.",
-          [{ text: "OK", onPress: () => setScanning(true) }],
-        );
-        return;
-      }
-
-      if (bottleData.status !== "outbound") {
-        Alert.alert(
-          "Invalid Status",
-          `Bottle status is '${bottleData.status}', not 'outbound'.`,
-          [{ text: "OK", onPress: () => setScanning(true) }],
-        );
-        return;
-      }
-
       const masterWineId = bottleData.masterWineId;
       const itemIndex = delivery.items.findIndex(
         (i) => i.masterWineId === masterWineId,
@@ -139,13 +113,55 @@ export default function DeliveryDetail() {
         return;
       }
 
+      const designatedStore =
+        bottleData.outboundStoreId ||
+        (bottleData as any).outboundLocationId ||
+        bottleData.storeId;
+      if (designatedStore && designatedStore !== delivery.storeId) {
+        Alert.alert(
+          "Wrong Store",
+          "This bottle is not designated for your location.",
+          [{ text: "OK", onPress: () => setScanning(true) }],
+        );
+        return;
+      }
+
+      const isAllocatedToItem =
+        Array.isArray(item.bottleIds) &&
+        (item.bottleIds.includes(bottleData.id) ||
+          item.bottleIds.includes(bottleData.bottleId || "") ||
+          item.bottleIds.includes(data));
+
+      const isAlreadyReceivedForThis =
+        bottleData.status === "received" &&
+        bottleData.storeId === delivery.storeId &&
+        isAllocatedToItem;
+
+      if (bottleData.status !== "outbound" && !isAlreadyReceivedForThis) {
+        if (bottleData.status === "received" && bottleData.storeId === delivery.storeId) {
+          Alert.alert(
+            "Already Received",
+            "This bottle has already been received at this store.",
+            [{ text: "OK", onPress: () => setScanning(true) }],
+          );
+        } else {
+          Alert.alert(
+            "Invalid Status",
+            `Bottle status is '${bottleData.status}', not 'outbound'.`,
+            [{ text: "OK", onPress: () => setScanning(true) }],
+          );
+        }
+        return;
+      }
+
       // Update bottle status via REST API
-      await apiFetch(`/bottles/${data}`, {
+      await apiFetch(`/bottles/${bottleData.id || data}`, {
         method: "PATCH",
         body: JSON.stringify({
           status: "received",
           storeId: delivery.storeId,
           locationId: null,
+          outboundLocationId: null,
           outboundStoreId: null,
         }),
       });
@@ -169,10 +185,6 @@ export default function DeliveryDetail() {
         items: newItems,
         status: newStatus,
       };
-      if (allReceived) {
-        patchPayload.confirmedAt = new Date().toISOString();
-        patchPayload.confirmedBy = profile?.email || "Store Staff";
-      }
 
       await apiFetch(`/deliveries/${delivery.id}`, {
         method: "PATCH",
@@ -289,25 +301,51 @@ export default function DeliveryDetail() {
 
       if (receiveToAdd <= 0) return;
 
-      // Update matching outbound bottles in backend if available
-      try {
-        const bottles = await apiFetch(
-          `/bottles?masterWineId=${item.masterWineId}&status=outbound&limit=${receiveToAdd}`
-        );
-        const matchingBottles = Array.isArray(bottles) ? bottles : (bottles.bottles || []);
-        for (const b of matchingBottles) {
-          await apiFetch(`/bottles/${b.id}`, {
-            method: "PATCH",
-            body: JSON.stringify({
-              status: "received",
-              storeId: delivery.storeId,
-              locationId: null,
-              outboundStoreId: null,
-            }),
-          });
+      // 1. Determine specific bottle IDs to update (prioritize allocated bottleIds)
+      let bottlesToUpdate: string[] = [];
+      if (Array.isArray(item.bottleIds) && item.bottleIds.length > 0) {
+        bottlesToUpdate = item.bottleIds.slice(currentIngressed, currentIngressed + receiveToAdd);
+      }
+
+      if (bottlesToUpdate.length > 0) {
+        for (const bId of bottlesToUpdate) {
+          try {
+            await apiFetch(`/bottles/${bId}`, {
+              method: "PATCH",
+              body: JSON.stringify({
+                status: "received",
+                storeId: delivery.storeId,
+                locationId: null,
+                outboundLocationId: null,
+                outboundStoreId: null,
+              }),
+            });
+          } catch (bottleErr) {
+            console.warn(`Error updating bottle ${bId}:`, bottleErr);
+          }
         }
-      } catch (err) {
-        console.warn("Manual receive bottle status update error:", err);
+      } else {
+        // Fallback: search for outbound bottles of this master wine designated for this store
+        try {
+          const bottles = await apiFetch(
+            `/bottles?masterWineId=${item.masterWineId}&status=outbound&limit=${receiveToAdd}`
+          );
+          const matchingBottles = Array.isArray(bottles) ? bottles : (bottles.bottles || []);
+          for (const b of matchingBottles) {
+            await apiFetch(`/bottles/${b.id}`, {
+              method: "PATCH",
+              body: JSON.stringify({
+                status: "received",
+                storeId: delivery.storeId,
+                locationId: null,
+                outboundLocationId: null,
+                outboundStoreId: null,
+              }),
+            });
+          }
+        } catch (err) {
+          console.warn("Manual receive fallback bottle status update error:", err);
+        }
       }
 
       const newItems = [...delivery.items];
@@ -316,17 +354,13 @@ export default function DeliveryDetail() {
         ingressedQty: currentIngressed + receiveToAdd,
         confirmedAt: new Date().toISOString(),
       };
-      const allReceived = newItems.every((i) => (i.ingressedQty || 0) >= i.qty);
+      const allReceived = newItems.every((i) => (i.ingressedQty || 0) + (i.skippedQty || 0) >= i.qty);
       const newStatus = allReceived ? "ingress_complete" : "receiving";
 
       const patchPayload: Record<string, any> = {
         items: newItems,
         status: newStatus,
       };
-      if (allReceived) {
-        patchPayload.confirmedAt = new Date().toISOString();
-        patchPayload.confirmedBy = profile?.email || "Store Staff";
-      }
 
       await apiFetch(`/deliveries/${delivery.id}`, {
         method: "PATCH",
@@ -337,7 +371,9 @@ export default function DeliveryDetail() {
         action: newStatus === "ingress_complete" ? "DELIVERY_INGRESS_COMPLETE" : "DELIVERY_MANUAL_RECEIVE",
         entity: "deliveries",
         entityId: delivery.id,
-        summary: `Manually received ${receiveToAdd} unit(s) of ${item.wineName} for delivery ${delivery.id}`,
+        summary: `Manually received ${receiveToAdd} unit(s) of ${item.wineName} for delivery ${delivery.id}${
+          newStatus === "ingress_complete" ? " — all items received" : ""
+        }`,
         details: {
           wineName: item.wineName,
           ingressedQty: currentIngressed + receiveToAdd,
