@@ -1301,12 +1301,29 @@ function OnboardingDetailSkeleton() {
                       <Wine size={24} color={iconColor} />
                     </View>
                     <View style={styles.itemInfo}>
-                      <Text style={styles.producerText}>{item.producerName}</Text>
-                      <Text style={styles.wineNameText}>{item.wineName}</Text>
-                      <View style={styles.itemMeta}>
-                        <Text style={styles.metaBadge}>{item.vintage}</Text>
-                        <Text style={styles.metaBadge}>{item.format}</Text>
-                      </View>
+                      <Text
+                        style={{
+                          color: "#818cf8",
+                          fontSize: 10.5,
+                          fontWeight: "900",
+                          letterSpacing: 0.4,
+                          textTransform: "uppercase",
+                        }}
+                        numberOfLines={1}
+                      >
+                        {(item.producerName || "Independent Producer").trim().toUpperCase()}
+                      </Text>
+                      <Text
+                        style={{
+                          color: "#fff",
+                          fontSize: 13,
+                          fontWeight: "700",
+                          marginTop: 1,
+                        }}
+                        numberOfLines={2}
+                      >
+                        {`${item.vintage?.trim() || "NV"} - ${item.wineName?.trim() || "Unnamed Wine"} - ${item.format?.trim() || "750ml"}`}
+                      </Text>
                     </View>
                     <View style={styles.itemProgress}>
                       <Text style={[styles.qtyText, { color: iconColor }]}>
@@ -1417,12 +1434,29 @@ function OnboardingDetailSkeleton() {
                   <Wine size={24} color="#4f46e5" />
                 </View>
                 <View style={styles.itemInfo}>
-                  <Text style={styles.producerText}>{item.producerName}</Text>
-                  <Text style={styles.wineNameText}>{item.wineName}</Text>
-                  <View style={styles.itemMeta}>
-                    <Text style={styles.metaBadge}>{item.vintage}</Text>
-                    <Text style={styles.metaBadge}>{item.format}</Text>
-                  </View>
+                  <Text
+                    style={{
+                      color: "#818cf8",
+                      fontSize: 10.5,
+                      fontWeight: "900",
+                      letterSpacing: 0.4,
+                      textTransform: "uppercase",
+                    }}
+                    numberOfLines={1}
+                  >
+                    {(item.producerName || "Independent Producer").trim().toUpperCase()}
+                  </Text>
+                  <Text
+                    style={{
+                      color: "#fff",
+                      fontSize: 13,
+                      fontWeight: "700",
+                      marginTop: 1,
+                    }}
+                    numberOfLines={2}
+                  >
+                    {`${item.vintage?.trim() || "NV"} - ${item.wineName?.trim() || "Unnamed Wine"} - ${item.format?.trim() || "750ml"}`}
+                  </Text>
                 </View>
                 <View style={styles.itemProgress}>
                   <Text style={styles.qtyText}>

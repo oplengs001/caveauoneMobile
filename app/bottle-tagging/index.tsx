@@ -347,24 +347,27 @@ export default function BottleTaggingScreen() {
                     onPress={() => handleSelectWine(item)}
                   >
                     <View style={styles.wineHeader}>
-                      <Text style={styles.wineName}>{item.name}</Text>
-                      <View style={{ flexDirection: "row", alignItems: "center" }}>
-                        {item.untaggedCount && (
-                          <View style={[styles.wineBadge, { backgroundColor: "#4f46e5", marginLeft: 0 }]}>
-                            <Text style={[styles.wineVintage, { color: "#fff" }]}>
-                              {item.untaggedCount} {item.untaggedCount === 1 ? "Bottle" : "Bottles"}
-                            </Text>
-                          </View>
-                        )}
-                        <View style={styles.wineBadge}>
-                          <Text style={styles.wineVintage}>{item.vintage}</Text>
-                        </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 11, fontWeight: "900", letterSpacing: 0.4, textTransform: "uppercase", color: "#818cf8", marginBottom: 2 }} numberOfLines={1}>
+                          {(item.producer || "Independent Producer").trim().toUpperCase()}
+                        </Text>
+                        <Text style={[styles.wineName, { marginBottom: 4 }]} numberOfLines={2}>
+                          {`${item.vintage?.trim() || "NV"} - ${item.name?.trim() || "Unnamed Wine"} - ${item.format?.trim() || "75cl"}`}
+                        </Text>
                       </View>
+                      {item.untaggedCount ? (
+                        <View style={[styles.wineBadge, { backgroundColor: "#4f46e5", marginLeft: 8 }]}>
+                          <Text style={[styles.wineVintage, { color: "#fff" }]}>
+                            {item.untaggedCount} {item.untaggedCount === 1 ? "Bottle" : "Bottles"}
+                          </Text>
+                        </View>
+                      ) : null}
                     </View>
-                    <Text style={styles.wineMeta}>
-                      SKU: {item.sku} • {item.format || "75cl"}
-                    </Text>
-                    <Text style={styles.wineProducer}>{item.producer}</Text>
+                    {item.sku ? (
+                      <Text style={styles.wineMeta}>
+                        SKU: {item.sku}
+                      </Text>
+                    ) : null}
                   </TouchableOpacity>
                 )}
               />
@@ -377,12 +380,15 @@ export default function BottleTaggingScreen() {
         <View style={[styles.content, { paddingHorizontal: horizontalPadding }]}>
           <View style={styles.wineCard}>
             <View style={styles.wineHeader}>
-              <Text style={styles.wineName}>{selectedWine.name}</Text>
-              <View style={styles.wineBadge}>
-                <Text style={styles.wineVintage}>{selectedWine.vintage}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 11, fontWeight: "900", letterSpacing: 0.4, textTransform: "uppercase", color: "#818cf8", marginBottom: 2 }} numberOfLines={1}>
+                  {(selectedWine.producer || "Independent Producer").trim().toUpperCase()}
+                </Text>
+                <Text style={[styles.wineName, { marginBottom: 4 }]} numberOfLines={2}>
+                  {`${selectedWine.vintage?.trim() || "NV"} - ${selectedWine.name?.trim() || "Unnamed Wine"} - ${selectedWine.format?.trim() || "75cl"}`}
+                </Text>
               </View>
             </View>
-            <Text style={styles.wineProducer}>{selectedWine.producer}</Text>
 
             <View style={{ marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: "#334155" }}>
               {selectedWine.sku && <Text style={styles.wineMeta}>SKU: {selectedWine.sku}</Text>}

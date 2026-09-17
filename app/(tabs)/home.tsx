@@ -25,6 +25,7 @@ import {
   PackageCheck,
   QrCode,
   Search,
+  TrendingUp,
   Truck,
   Wine,
   Zap,
@@ -2125,6 +2126,58 @@ export default function HomeScreen() {
                     <Text style={[styles.bigTileTitle, { color: theme.text }]} numberOfLines={1}>Bottle Lookup</Text>
                     <Text style={[styles.bigTileDesc, { color: theme.textSecondary }]} numberOfLines={1}>
                       SKU & bin lookup
+                    </Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+
+              {/* Tile 5: Delivery Intake Logs */}
+              <TouchableOpacity
+                style={[
+                  styles.storeBigTile,
+                  {
+                    width: storeOpTileWidth,
+                    backgroundColor: theme.card,
+                    borderColor: theme.border,
+                  },
+                ]}
+                onPress={() => router.push("/delivery-logs")}
+                activeOpacity={0.85}
+              >
+                <View style={styles.bigTileContentRow}>
+                  <View style={[styles.bigTileIconCircle, { backgroundColor: "#05966918" }]}>
+                    <PackageCheck size={22} color="#059669" strokeWidth={2.2} />
+                  </View>
+                  <View style={styles.bigTileTextContainer}>
+                    <Text style={[styles.bigTileTitle, { color: theme.text }]} numberOfLines={1}>Intake Logs</Text>
+                    <Text style={[styles.bigTileDesc, { color: theme.textSecondary }]} numberOfLines={1}>
+                      Arrivals & history
+                    </Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+
+              {/* Tile 6: Sales Report */}
+              <TouchableOpacity
+                style={[
+                  styles.storeBigTile,
+                  {
+                    width: storeOpTileWidth,
+                    backgroundColor: theme.card,
+                    borderColor: theme.border,
+                  },
+                ]}
+                onPress={() => router.push("/sales")}
+                activeOpacity={0.85}
+              >
+                <View style={styles.bigTileContentRow}>
+                  <View style={[styles.bigTileIconCircle, { backgroundColor: "#d9770618" }]}>
+                    <TrendingUp size={22} color="#d97706" strokeWidth={2.2} />
+                  </View>
+                  <View style={styles.bigTileTextContainer}>
+                    <Text style={[styles.bigTileTitle, { color: theme.text }]} numberOfLines={1}>Sales Report</Text>
+                    <Text style={[styles.bigTileDesc, { color: theme.textSecondary }]} numberOfLines={1}>
+                      Revenue & audit
                     </Text>
                   </View>
                 </View>

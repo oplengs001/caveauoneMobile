@@ -1169,11 +1169,14 @@ export default function TaggingScreen() {
                         }}
                       >
                         <View style={{ flex: 1, marginRight: 10 }}>
-                          <Text style={{ fontSize: 13, fontWeight: "700", color: theme.text }} numberOfLines={1}>
-                            {group.wineName}
+                          <Text style={{ fontSize: 10.5, fontWeight: "900", letterSpacing: 0.4, textTransform: "uppercase", color: theme.primary }} numberOfLines={1}>
+                            {(group.producer || "Independent Producer").trim().toUpperCase()}
+                          </Text>
+                          <Text style={{ fontSize: 13, fontWeight: "700", color: theme.text, marginTop: 1 }} numberOfLines={1}>
+                            {`${group.vintage?.trim() || "NV"} - ${group.wineName?.trim() || "Unnamed Wine"} - ${group.format?.trim() || "750ml"}`}
                           </Text>
                           <Text style={{ fontSize: 11, color: theme.textSecondary, marginTop: 2 }}>
-                            {[group.vintage, group.producer, `${group.bottleIds.length} btl${group.bottleIds.length > 1 ? "s" : ""}`].filter(Boolean).join(" • ")}
+                            {`${group.bottleIds.length} btl${group.bottleIds.length > 1 ? "s" : ""}`}
                           </Text>
                         </View>
                         <View
@@ -1201,28 +1204,28 @@ export default function TaggingScreen() {
               ) : (
                 <>
                   <Text
-                    style={[
-                      styles.wineName,
-                      { color: theme.text, textAlign: "center" },
-                    ]}
+                    style={{
+                      fontSize: 11,
+                      fontWeight: "900",
+                      letterSpacing: 0.5,
+                      textTransform: "uppercase",
+                      color: theme.primary,
+                      textAlign: "center",
+                      marginBottom: 3,
+                    }}
+                    numberOfLines={1}
                   >
-                    {isBulkMode ? wineName : wine?.name}
+                    {(isBulkMode ? wineProducer : wine?.producer || "Independent Producer")?.trim().toUpperCase()}
                   </Text>
                   <Text
                     style={[
-                      styles.wineVintage,
-                      {
-                        color: theme.textSecondary,
-                        textAlign: "center",
-                        marginTop: 8,
-                      },
+                      styles.wineName,
+                      { color: theme.text, textAlign: "center", fontSize: 16 },
                     ]}
                   >
                     {isBulkMode
-                      ? [wineVintage, wineProducer, wineFormat]
-                        .filter(Boolean)
-                        .join(" • ")
-                      : `${wine?.vintage} • ${wine?.producer} • ${wine?.format}`}
+                      ? `${wineVintage?.trim() || "NV"} - ${wineName?.trim() || "Unnamed Wine"} - ${wineFormat?.trim() || "750ml"}`
+                      : `${wine?.vintage?.trim() || "NV"} - ${wine?.name?.trim() || "Unnamed Wine"} - ${wine?.format?.trim() || "750ml"}`}
                   </Text>
                   {successAction === "sold" && numericBase > 0 && (
                     <View
@@ -1466,11 +1469,11 @@ export default function TaggingScreen() {
                         <Wine size={18} color={theme.primary} />
                       </View>
                       <View style={{ flex: 1, paddingRight: 8 }}>
-                        <Text style={{ fontSize: 14, fontWeight: "800", color: theme.text }} numberOfLines={1}>
-                          {w.name}
+                        <Text style={{ fontSize: 10.5, fontWeight: "900", letterSpacing: 0.4, textTransform: "uppercase", color: theme.primary }} numberOfLines={1}>
+                          {(w.producer || "Independent Producer").trim().toUpperCase()}
                         </Text>
-                        <Text style={{ fontSize: 11, color: theme.textSecondary, marginTop: 2 }}>
-                          {[w.vintage, w.producer, w.format].filter(Boolean).join(" • ")}
+                        <Text style={{ fontSize: 13.5, fontWeight: "700", color: theme.text, marginTop: 1 }} numberOfLines={1}>
+                          {`${w.vintage?.trim() || "NV"} - ${w.name?.trim() || "Unnamed Wine"} - ${w.format?.trim() || "75cl"}`}
                         </Text>
                       </View>
                     </TouchableOpacity>
@@ -1570,8 +1573,12 @@ export default function TaggingScreen() {
                     <Wine size={20} color={theme.primary} />
                   </View>
                   <View style={{ flex: 1, marginLeft: 16 }}>
-                    <Text style={{ fontSize: 16, fontWeight: "800", color: theme.text }}>{w.name}</Text>
-                    <Text style={{ fontSize: 14, color: theme.textSecondary }}>{w.vintage} • {w.producer}</Text>
+                    <Text style={{ fontSize: 11, fontWeight: "900", letterSpacing: 0.4, textTransform: "uppercase", color: theme.primary }} numberOfLines={1}>
+                      {(w.producer || "Independent Producer").trim().toUpperCase()}
+                    </Text>
+                    <Text style={{ fontSize: 15, fontWeight: "700", color: theme.text, marginTop: 1 }}>
+                      {`${w.vintage?.trim() || "NV"} - ${w.name?.trim() || "Unnamed Wine"} - ${w.format?.trim() || "75cl"}`}
+                    </Text>
                   </View>
                 </TouchableOpacity>
               ))}
@@ -1690,11 +1697,11 @@ export default function TaggingScreen() {
                         <Wine size={18} color={theme.primary} />
                       </View>
                       <View style={{ flex: 1, paddingRight: 8 }}>
-                        <Text style={{ fontSize: 13, fontWeight: "800", color: theme.text }} numberOfLines={1}>
-                          {w.name}
+                        <Text style={{ fontSize: 10.5, fontWeight: "900", letterSpacing: 0.4, textTransform: "uppercase", color: theme.primary }} numberOfLines={1}>
+                          {(w.producer || "Independent Producer").trim().toUpperCase()}
                         </Text>
-                        <Text style={{ fontSize: 11, color: theme.textSecondary, marginTop: 2 }}>
-                          {[w.vintage, w.producer].filter(Boolean).join(" • ")}
+                        <Text style={{ fontSize: 13, fontWeight: "700", color: theme.text, marginTop: 1 }} numberOfLines={1}>
+                          {`${w.vintage?.trim() || "NV"} - ${w.name?.trim() || "Unnamed Wine"} - ${w.format?.trim() || "75cl"}`}
                         </Text>
                       </View>
                     </TouchableOpacity>
@@ -1830,20 +1837,12 @@ export default function TaggingScreen() {
                             </View>
                           )}
                         </View>
-                        <Text style={[styles.wineName, { color: theme.text, fontSize: 16 }]} numberOfLines={2}>
-                          {wine?.name || "Processing..."}
+                        <Text style={{ fontSize: 11, fontWeight: "900", letterSpacing: 0.4, textTransform: "uppercase", color: theme.primary, marginBottom: 2 }} numberOfLines={1}>
+                          {(wine?.producer || "Independent Producer").trim().toUpperCase()}
                         </Text>
-                        <View style={styles.wineMetaRow}>
-                          <Text style={[styles.wineVintage, { color: theme.textSecondary, fontSize: 13 }]}>{wine?.vintage}</Text>
-                          <View style={[styles.metaDot, { backgroundColor: theme.border }]} />
-                          <Text style={[styles.wineProducer, { color: theme.textSecondary, fontSize: 12 }]}>{wine?.producer || "Independent Producer"}</Text>
-                          {wine?.format && (
-                            <>
-                              <View style={[styles.metaDot, { backgroundColor: theme.border }]} />
-                              <Text style={[styles.wineFormat, { color: theme.textSecondary, fontSize: 12 }]}>{wine?.format}</Text>
-                            </>
-                          )}
-                        </View>
+                        <Text style={[styles.wineName, { color: theme.text, fontSize: 15 }]} numberOfLines={2}>
+                          {`${wine?.vintage?.trim() || "NV"} - ${wine?.name?.trim() || "Processing..."} - ${wine?.format?.trim() || "75cl"}`}
+                        </Text>
                       </View>
 
                       {/* Price input section */}
@@ -2039,50 +2038,32 @@ export default function TaggingScreen() {
                               : `BOTTLE ID: ${bottle?.id.toUpperCase()}`}
                           </Text>
                         </View>
-                        <Text style={[styles.wineName, { color: theme.text, fontSize: 15 }]} numberOfLines={2}>
-                          {isSplitMode
-                            ? selectedWineGroups.length > 1
-                              ? `Tag ${selectedWineGroups.length} Wines to Same Location`
-                              : selectedWineGroups.length === 1
-                              ? selectedWineGroups[0].wineName
-                              : "Select Wines to Tag"
-                            : isBulkMode
-                            ? wineName
-                            : wine?.name || "Processing..."}
-                        </Text>
-                        <View style={styles.wineMetaRow}>
-                          <Text style={[styles.wineVintage, { color: theme.textSecondary, fontSize: 12 }]}>
-                            {isSplitMode
-                              ? selectedWineGroups.length > 1
-                                ? `${selectedBottlesCount} total bottles selected`
-                                : selectedWineGroups.length === 1
-                                ? selectedWineGroups[0].vintage
-                                : "Tap checkboxes below or tap Select All"
-                              : isBulkMode
-                              ? wineVintage
-                              : wine?.vintage}
-                          </Text>
-                          {(!isSplitMode || selectedWineGroups.length === 1) && (
-                            <>
-                              <View style={[styles.metaDot, { backgroundColor: theme.border }]} />
-                              <Text style={[styles.wineProducer, { color: theme.textSecondary, fontSize: 11 }]}>
-                                {isSplitMode
-                                  ? (selectedWineGroups[0]?.producer || "Independent Producer")
-                                  : isBulkMode
-                                  ? wineProducer
-                                  : (wine?.producer || "Independent Producer")}
+                        {isSplitMode && selectedWineGroups.length > 1 ? (
+                          <>
+                            <Text style={[styles.wineName, { color: theme.text, fontSize: 15 }]} numberOfLines={2}>
+                              Tag {selectedWineGroups.length} Wines to Same Location
+                            </Text>
+                            <View style={styles.wineMetaRow}>
+                              <Text style={[styles.wineVintage, { color: theme.textSecondary, fontSize: 12 }]}>
+                                {selectedBottlesCount} total bottles selected
                               </Text>
-                              {(isSplitMode ? selectedWineGroups[0]?.format : isBulkMode ? wineFormat : wine?.format) && (
-                                <>
-                                  <View style={[styles.metaDot, { backgroundColor: theme.border }]} />
-                                  <Text style={[styles.wineFormat, { color: theme.textSecondary, fontSize: 11 }]}>
-                                    {isSplitMode ? selectedWineGroups[0]?.format : isBulkMode ? wineFormat : wine?.format}
-                                  </Text>
-                                </>
-                              )}
-                            </>
-                          )}
-                        </View>
+                            </View>
+                          </>
+                        ) : (
+                          <>
+                            <Text style={{ fontSize: 10.5, fontWeight: "900", letterSpacing: 0.4, textTransform: "uppercase", color: theme.primary, marginBottom: 2 }} numberOfLines={1}>
+                              {(isSplitMode
+                                ? (selectedWineGroups[0]?.producer || "Independent Producer")
+                                : isBulkMode
+                                ? wineProducer
+                                : (wine?.producer || "Independent Producer")
+                              )?.trim().toUpperCase()}
+                            </Text>
+                            <Text style={[styles.wineName, { color: theme.text, fontSize: 14 }]} numberOfLines={2}>
+                              {`${(isSplitMode ? selectedWineGroups[0]?.vintage : isBulkMode ? wineVintage : wine?.vintage)?.trim() || "NV"} - ${(isSplitMode ? selectedWineGroups[0]?.wineName : isBulkMode ? wineName : wine?.name)?.trim() || "Processing..."} - ${(isSplitMode ? selectedWineGroups[0]?.format : isBulkMode ? wineFormat : wine?.format)?.trim() || "750ml"}`}
+                            </Text>
+                          </>
+                        )}
                       </View>
 
                       {/* Wine groups progress list for split tagging */}
@@ -2462,70 +2443,59 @@ export default function TaggingScreen() {
                   </View>
                 )}
               </View>
-              <Text
-                style={[
-                  styles.wineName,
-                  { color: theme.text, paddingRight: mode === "sell" ? 80 : 0 },
-                ]}
-              >
-                {isSplitMode
-                  ? selectedWineGroups.length > 1
-                    ? `Tag ${selectedWineGroups.length} Wines to Same Location`
-                    : selectedWineGroups.length === 1
-                    ? selectedWineGroups[0].wineName
-                    : "Select Wines to Tag"
-                  : isBulkMode
-                  ? wineName
-                  : wine?.name || "Processing..."}
-              </Text>
-              <View
-                style={[
-                  styles.wineMetaRow,
-                  { paddingRight: mode === "sell" ? 80 : 0 },
-                ]}
-              >
-                <Text
-                  style={[styles.wineVintage, { color: theme.textSecondary }]}
-                >
-                  {isSplitMode
-                    ? selectedWineGroups.length > 1
-                      ? `${selectedBottlesCount} total bottles selected`
-                      : selectedWineGroups.length === 1
-                      ? selectedWineGroups[0].vintage
-                      : "Tap checkboxes below or tap Select All"
-                    : isBulkMode
-                    ? wineVintage
-                    : wine?.vintage}
-                </Text>
-                {(!isSplitMode || selectedWineGroups.length === 1) && (
-                  <>
-                    <View
-                      style={[styles.metaDot, { backgroundColor: theme.border }]}
-                    />
-                    <Text
-                      style={[styles.wineProducer, { color: theme.textSecondary }]}
-                    >
-                      {isSplitMode
-                        ? (selectedWineGroups[0]?.producer || "Independent Producer")
-                        : isBulkMode
-                        ? wineProducer
-                        : (wine?.producer || "Independent Producer")}
+              {isSplitMode && selectedWineGroups.length > 1 ? (
+                <>
+                  <Text
+                    style={[
+                      styles.wineName,
+                      { color: theme.text, paddingRight: mode === "sell" ? 80 : 0 },
+                    ]}
+                  >
+                    Tag {selectedWineGroups.length} Wines to Same Location
+                  </Text>
+                  <View
+                    style={[
+                      styles.wineMetaRow,
+                      { paddingRight: mode === "sell" ? 80 : 0 },
+                    ]}
+                  >
+                    <Text style={[styles.wineVintage, { color: theme.textSecondary }]}>
+                      {selectedBottlesCount} total bottles selected
                     </Text>
-                    {(isSplitMode ? selectedWineGroups[0]?.format : isBulkMode ? wineFormat : wine?.format) && (
-                      <>
-                        <View
-                          style={[styles.metaDot, { backgroundColor: theme.border }]}
-                        />
-                        <Text
-                          style={[styles.wineFormat, { color: theme.textSecondary }]}
-                        >
-                          {isSplitMode ? selectedWineGroups[0]?.format : isBulkMode ? wineFormat : wine?.format}
-                        </Text>
-                      </>
-                    )}
-                  </>
-                )}
-              </View>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <Text
+                    style={{
+                      fontSize: 11,
+                      fontWeight: "900",
+                      letterSpacing: 0.5,
+                      textTransform: "uppercase",
+                      color: theme.primary,
+                      marginBottom: 2,
+                      paddingRight: mode === "sell" ? 80 : 0,
+                    }}
+                    numberOfLines={1}
+                  >
+                    {(isSplitMode
+                      ? (selectedWineGroups[0]?.producer || "Independent Producer")
+                      : isBulkMode
+                      ? wineProducer
+                      : (wine?.producer || "Independent Producer")
+                    )?.trim().toUpperCase()}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.wineName,
+                      { color: theme.text, fontSize: 15, paddingRight: mode === "sell" ? 80 : 0 },
+                    ]}
+                    numberOfLines={2}
+                  >
+                    {`${(isSplitMode ? selectedWineGroups[0]?.vintage : isBulkMode ? wineVintage : wine?.vintage)?.trim() || "NV"} - ${(isSplitMode ? selectedWineGroups[0]?.wineName : isBulkMode ? wineName : wine?.name)?.trim() || "Processing..."} - ${(isSplitMode ? selectedWineGroups[0]?.format : isBulkMode ? wineFormat : wine?.format)?.trim() || "750ml"}`}
+                  </Text>
+                </>
+              )}
 
               {/* Positioned at the bottom right */}
               {/* FEATURE TOGGLE: Hide unit cost for now */}

@@ -1927,8 +1927,11 @@ export default function StoreStaffPOSTerminal() {
 
                   {/* Item Details */}
                   <View style={{ flex: 1, paddingHorizontal: 10 }}>
-                    <Text style={styles.orderItemName} numberOfLines={1}>
-                      {item.wine.name}
+                    <Text style={{ fontSize: 10, fontWeight: "900", letterSpacing: 0.4, textTransform: "uppercase", color: MAROON.dark }} numberOfLines={1}>
+                      {(item.wine.producer || "Boutique Selection").trim().toUpperCase()}
+                    </Text>
+                    <Text style={[styles.orderItemName, { marginTop: 1 }]} numberOfLines={2}>
+                      {`${item.wine.vintage?.trim() || "NV"} - ${item.wine.name?.trim() || "Unnamed Wine"} - ${item.wine.format?.trim() || "750ml"}`}
                     </Text>
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 5, flexWrap: "wrap", marginTop: 2 }}>
                       <View style={styles.orderItemPortionBadge}>
@@ -2519,8 +2522,7 @@ export default function StoreStaffPOSTerminal() {
                     <View style={styles.sectionCardsGrid}>
                       {group.wines.map((item) => {
                         const typeTheme = getWineTypeTheme(item.wineType, item.name, item.rawType);
-                        const vintagePrefix = item.vintage ? `${item.vintage} ` : "";
-                        const fullWineTitle = `${vintagePrefix}${item.name}`;
+                        const fullWineTitle = `${item.vintage?.trim() || "NV"} - ${item.name?.trim() || "Unnamed Wine"} - ${item.format?.trim() || "750ml"}`;
                         const canAdd = canAddPortion(item, salesTypeMode, currentOrder);
                         const isOutOfStock = item.stockCount === 0;
 
@@ -3010,8 +3012,7 @@ export default function StoreStaffPOSTerminal() {
 
                       {/* Wine Full Title */}
                       <Text style={styles.locationWineName} numberOfLines={2}>
-                        {locationModalWine.vintage ? `${locationModalWine.vintage} ` : ""}
-                        {locationModalWine.name}
+                        {`${locationModalWine.vintage?.trim() || "NV"} - ${locationModalWine.name?.trim() || "Unnamed Wine"} - ${locationModalWine.format?.trim() || "750ml"}`}
                       </Text>
                     </View>
                   );
@@ -3373,10 +3374,11 @@ export default function StoreStaffPOSTerminal() {
                       <Text style={styles.pullNewBottleHeaderBadgeText}>Replacement</Text>
                     </View>
                   </View>
+                  <Text style={[styles.locationWineProducer, { fontSize: 10.5, marginBottom: 2 }]} numberOfLines={1}>
+                    {(pullNewBottleModalWine?.producer || "Boutique Selection").trim().toUpperCase()}
+                  </Text>
                   <Text style={styles.locationModalSub} numberOfLines={1}>
-                    {pullNewBottleModalWine?.producer ? `${pullNewBottleModalWine.producer} · ` : ""}
-                    {pullNewBottleModalWine?.vintage ? `${pullNewBottleModalWine.vintage} ` : ""}
-                    {pullNewBottleModalWine?.name}
+                    {`${pullNewBottleModalWine?.vintage?.trim() || "NV"} - ${pullNewBottleModalWine?.name?.trim() || "Unnamed Wine"} - ${pullNewBottleModalWine?.format?.trim() || "750ml"}`}
                   </Text>
                 </View>
                 <TouchableOpacity

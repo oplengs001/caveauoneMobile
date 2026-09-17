@@ -36,7 +36,6 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  useWindowDimensions,
   View,
 } from "react-native";
 
@@ -75,7 +74,7 @@ export interface IntakeLogRecord {
 export default function DeliveryLogsScreen() {
   const router = useRouter();
   const { profile } = useAuth();
-  const { horizontalPadding } = useResponsivePadding(20);
+  const { horizontalPadding } = useResponsivePadding(16);
 
   const [records, setRecords] = useState<IntakeLogRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -585,17 +584,13 @@ export default function DeliveryLogsScreen() {
                 >
                   <View style={styles.wineItemTop}>
                     <View style={{ flex: 1, marginRight: 8 }}>
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 2 }}>
-                        <Text style={[styles.wineNameText, { color: theme.text }]} numberOfLines={2}>
-                          {wine.wineName}
-                        </Text>
-                      </View>
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                        {wine.vintage ? (
-                          <View style={styles.wineVintagePill}>
-                            <Text style={styles.wineVintageText}>{wine.vintage}</Text>
-                          </View>
-                        ) : null}
+                      <Text style={[styles.wineProducerText, { color: theme.primary }]} numberOfLines={1}>
+                        {(wine.producer || "Independent Producer").trim().toUpperCase()}
+                      </Text>
+                      <Text style={[styles.wineNameText, { color: theme.text }]} numberOfLines={2}>
+                        {`${wine.vintage?.trim() || "NV"} - ${wine.wineName?.trim() || "Unnamed Wine"} - ${wine.format?.trim() || "750ml"}`}
+                      </Text>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 4 }}>
                         <View
                           style={[
                             styles.wineCatPill,
@@ -606,14 +601,9 @@ export default function DeliveryLogsScreen() {
                             {catConfig.label}
                           </Text>
                         </View>
-                        {wine.format ? (
-                          <Text style={[styles.wineFormatText, { color: theme.textSecondary }]}>
-                            {wine.format}
-                          </Text>
-                        ) : null}
                         {wine.sku ? (
                           <Text style={[styles.wineSkuText, { color: theme.textSecondary }]}>
-                            · SKU: {wine.sku}
+                            SKU: {wine.sku}
                           </Text>
                         ) : null}
                       </View>
@@ -726,87 +716,83 @@ export default function DeliveryLogsScreen() {
 
       {/* Screen Header */}
       <View style={[styles.header, { backgroundColor: theme.card, borderBottomColor: theme.border, paddingHorizontal: horizontalPadding }]}>
-        <View style={styles.headerInner}>
-          <View style={styles.headerTop}>
-            <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-              <ChevronLeft size={28} color={theme.primary} strokeWidth={2.5} />
-            </TouchableOpacity>
-            <View style={{ flex: 1, marginLeft: 4 }}>
-              <Text style={[styles.headerTitle, { color: theme.text }]}>
-                Delivery Intake Logs
-              </Text>
-              <Text style={[styles.headerSubtitle, { color: theme.textSecondary }]}>
-                Store arrivals, confirmed wines & timestamps
-              </Text>
-            </View>
-            <TouchableOpacity style={styles.refreshIconBtn} onPress={onRefresh}>
-              <RefreshCw size={18} color={theme.textSecondary} />
-            </TouchableOpacity>
+        <View style={styles.headerTop}>
+          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+            <ChevronLeft size={28} color={theme.primary} strokeWidth={2.5} />
+          </TouchableOpacity>
+          <View style={{ flex: 1, marginLeft: 4 }}>
+            <Text style={[styles.headerTitle, { color: theme.text }]}>
+              Delivery Intake Logs
+            </Text>
+            <Text style={[styles.headerSubtitle, { color: theme.textSecondary }]}>
+              Store arrivals, confirmed wines & timestamps
+            </Text>
           </View>
+          <TouchableOpacity style={styles.refreshIconBtn} onPress={onRefresh}>
+            <RefreshCw size={18} color={theme.textSecondary} />
+          </TouchableOpacity>
+        </View>
 
-          {/* Search Input */}
-          <View style={[styles.searchBox, { backgroundColor: theme.background, borderColor: theme.border }]}>
-            <Search size={18} color={theme.textSecondary} />
-            <TextInput
-              style={[styles.searchInput, { color: theme.text }]}
-              placeholder="Search wine, vintage, SKU, DEL/REQ ID, or bottle..."
-              placeholderTextColor={theme.textSecondary}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-            />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchQuery("")}>
-                <X size={16} color={theme.textSecondary} />
-              </TouchableOpacity>
-            )}
-          </View>
+        {/* Search Input */}
+        <View style={[styles.searchBox, { backgroundColor: theme.background, borderColor: theme.border }]}>
+          <Search size={18} color={theme.textSecondary} />
+          <TextInput
+            style={[styles.searchInput, { color: theme.text }]}
+            placeholder="Search wine, vintage, SKU, DEL/REQ ID, or bottle..."
+            placeholderTextColor={theme.textSecondary}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery("")}>
+              <X size={16} color={theme.textSecondary} />
+            </TouchableOpacity>
+          )}
+        </View>
 
-          {/* Period Filter Tabs */}
-          <View style={styles.periodFilterRow}>
-            {(
-              [
-                { key: "all", label: "All Time" },
-                { key: "today", label: "Today" },
-                { key: "week", label: "This Week" },
-                { key: "month", label: "This Month" },
-              ] as const
-            ).map((tab) => {
-              const active = periodFilter === tab.key;
-              return (
-                <TouchableOpacity
-                  key={tab.key}
+        {/* Period Filter Tabs */}
+        <View style={styles.periodFilterRow}>
+          {(
+            [
+              { key: "all", label: "All Time" },
+              { key: "today", label: "Today" },
+              { key: "week", label: "This Week" },
+              { key: "month", label: "This Month" },
+            ] as const
+          ).map((tab) => {
+            const active = periodFilter === tab.key;
+            return (
+              <TouchableOpacity
+                key={tab.key}
+                style={[
+                  styles.periodTab,
+                  active && { backgroundColor: theme.primary, borderColor: theme.primary },
+                ]}
+                onPress={() => setPeriodFilter(tab.key)}
+              >
+                <Text
                   style={[
-                    styles.periodTab,
-                    active && { backgroundColor: theme.primary, borderColor: theme.primary },
+                    styles.periodTabText,
+                    { color: active ? "#ffffff" : theme.textSecondary },
                   ]}
-                  onPress={() => setPeriodFilter(tab.key)}
                 >
-                  <Text
-                    style={[
-                      styles.periodTabText,
-                      { color: active ? "#ffffff" : theme.textSecondary },
-                    ]}
-                  >
-                    {tab.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+                  {tab.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
       </View>
 
-      {/* MAIN SQUEEZED CONTENT WRAPPER */}
-      <View style={styles.mainContent}>
-        {/* Main List */}
-        <FlatList
-          data={filteredRecords}
-          keyExtractor={(item) => item.id}
-          renderItem={renderIntakeCard}
-          contentContainerStyle={[
-            styles.listContent,
-            { paddingHorizontal: horizontalPadding },
-          ]}
+      {/* Main List */}
+      <FlatList
+        data={filteredRecords}
+        keyExtractor={(item) => item.id}
+        renderItem={renderIntakeCard}
+        contentContainerStyle={[
+          styles.listContent,
+          { paddingHorizontal: horizontalPadding },
+        ]}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -941,7 +927,6 @@ export default function DeliveryLogsScreen() {
           )
         }
       />
-      </View>
     </SafeAreaView>
   );
 }
@@ -951,21 +936,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    paddingHorizontal: 28,
     paddingTop: 12,
     paddingBottom: 14,
     borderBottomWidth: 1,
-  },
-  headerInner: {
-    width: "100%",
-    maxWidth: 760,
-    alignSelf: "center",
-  },
-  mainContent: {
-    flex: 1,
-    width: "100%",
-    maxWidth: 760,
-    alignSelf: "center",
   },
   headerTop: {
     flexDirection: "row",
@@ -1026,7 +999,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   listContent: {
-    paddingHorizontal: 28,
     paddingTop: 16,
     paddingBottom: 40,
   },
@@ -1244,6 +1216,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
+  },
+  wineProducerText: {
+    fontSize: 10.5,
+    fontWeight: "900",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+    marginBottom: 2,
   },
   wineNameText: {
     fontSize: 12.5,

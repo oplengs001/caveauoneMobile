@@ -389,16 +389,26 @@ export default function CreateWineRequest() {
         disabled={isOutOfStock}
       >
         <View style={styles.wineInfo}>
-          <Text style={[styles.wineName, { color: theme.text }]}>
-            {item.name}
+          <Text
+            style={{
+              color: theme.primary,
+              fontSize: 10.5,
+              fontWeight: "900",
+              letterSpacing: 0.4,
+              textTransform: "uppercase",
+            }}
+            numberOfLines={1}
+          >
+            {(item.producer || "Independent Producer").trim().toUpperCase()}
           </Text>
           <Text
             style={[
-              styles.wineSub,
-              { color: theme.textSecondary, marginBottom: 6 },
+              styles.wineName,
+              { color: theme.text, fontSize: 13, marginTop: 1, marginBottom: 4 },
             ]}
+            numberOfLines={2}
           >
-            {item.vintage} • {item.producer} • {item.format}
+            {`${item.vintage?.trim() || "NV"} - ${item.name?.trim() || "Unnamed Wine"} - ${item.format?.trim() || "750ml"}`}
           </Text>
           {selectedLocationId === "all" && locationsWithStock.length > 0 && (
             <View style={styles.locationInfo}>
@@ -648,22 +658,22 @@ export default function CreateWineRequest() {
                       {/* FIX: Wrapper for Text elements to handle sub-text */}
                       <View style={styles.cartItemInfo}>
                         <Text
-                          style={[styles.cartItemName, { color: theme.text }]}
+                          style={{
+                            color: theme.primary,
+                            fontSize: 10,
+                            fontWeight: "900",
+                            letterSpacing: 0.4,
+                            textTransform: "uppercase",
+                          }}
                           numberOfLines={1}
                         >
-                          {item.wine.name}
+                          {(item.wine.producer || "Independent Producer").trim().toUpperCase()}
                         </Text>
-                        {/* FIX: Added Subtext for Vintage & Producer */}
                         <Text
-                          style={[
-                            styles.cartItemSub,
-                            { color: theme.textSecondary },
-                          ]}
+                          style={[styles.cartItemName, { color: theme.text, fontSize: 12.5, marginTop: 1 }]}
                           numberOfLines={1}
                         >
-                          {[item.wine.vintage, item.wine.producer]
-                            .filter(Boolean)
-                            .join(" • ")}
+                          {`${item.wine.vintage?.trim() || "NV"} - ${item.wine.name?.trim() || "Unnamed Wine"} - ${item.wine.format?.trim() || "750ml"}`}
                         </Text>
                       </View>
 

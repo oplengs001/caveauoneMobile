@@ -604,11 +604,28 @@ export default function DeliveryDetail() {
 
               {/* Wine info */}
               <View style={{ flex: 1 }}>
-                <Text style={[styles.wineName, { color: theme.text }]}>
-                  {wine.wineName}
+                <Text
+                  style={{
+                    color: theme.primary,
+                    fontSize: 10.5,
+                    fontWeight: "900",
+                    letterSpacing: 0.4,
+                    textTransform: "uppercase",
+                  }}
+                  numberOfLines={1}
+                >
+                  {(wine.producer || "Independent Producer").trim().toUpperCase()}
                 </Text>
-                <Text style={[styles.wineMeta, { color: theme.textSecondary }]}>
-                  {[wine.vintage, wine.format].filter(Boolean).join(" · ")}
+                <Text
+                  style={{
+                    color: theme.text,
+                    fontSize: 12.5,
+                    fontWeight: "700",
+                    marginTop: 1,
+                  }}
+                  numberOfLines={2}
+                >
+                  {`${wine.vintage?.trim() || "NV"} - ${wine.wineName?.trim() || "Unnamed Wine"} - ${wine.format?.trim() || "750ml"}`}
                 </Text>
                 {wine.sku && wine.sku !== "N/A" && (
                   <Text

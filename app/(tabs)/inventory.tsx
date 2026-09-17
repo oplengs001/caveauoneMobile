@@ -176,14 +176,23 @@ const WineCard = memo(function WineCard({
 
           {/* Wine info */}
           <View style={styles.wineInfo}>
-            <Text style={[styles.wineName, { color: theme.text }]}>
-              {masterWineData.name}
-            </Text>
             <Text
-              style={[styles.wineProducer, { color: theme.textSecondary }]}
+              style={{
+                color: theme.primary,
+                fontSize: 11,
+                fontWeight: "900",
+                letterSpacing: 0.4,
+                textTransform: "uppercase",
+              }}
               numberOfLines={1}
             >
-              {masterWineData.producer || "Unknown Producer"}
+              {(masterWineData.producer || "Independent Producer").trim().toUpperCase()}
+            </Text>
+            <Text
+              style={[styles.wineName, { color: theme.text, fontSize: 13, marginTop: 1, marginBottom: 4 }]}
+              numberOfLines={2}
+            >
+              {`${masterWineData.vintage?.trim() || "NV"} - ${masterWineData.name?.trim() || "Unnamed Wine"} - ${masterWineData.format?.trim() || "750ml"}`}
             </Text>
 
             <View style={styles.detailsGrid}>

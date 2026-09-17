@@ -29,6 +29,7 @@ interface Props {
   wineName?: string;
   wineVintage?: string;
   wineProducer?: string;
+  wineFormat?: string;
 }
 
 export default function BottlePickerModal({
@@ -41,6 +42,7 @@ export default function BottlePickerModal({
   wineName,
   wineVintage,
   wineProducer,
+  wineFormat,
 }: Props) {
   // Group bottles by location
   const groupedBottles = bottles.reduce((acc, bottle) => {
@@ -71,11 +73,11 @@ export default function BottlePickerModal({
 
           {(wineName || wineVintage || wineProducer) && (
             <View style={[styles.wineCard, { backgroundColor: theme.primary + "12", borderColor: theme.primary + "30" }]}>
-              <Text style={[styles.wineCardName, { color: theme.text }]} numberOfLines={2}>
-                {wineName}
+              <Text style={[styles.wineCardProducer, { color: theme.primary }]} numberOfLines={1}>
+                {(wineProducer || "Independent Producer").trim().toUpperCase()}
               </Text>
-              <Text style={[styles.wineCardMeta, { color: theme.textSecondary }]}>
-                {[wineVintage, wineProducer].filter(Boolean).join(" · ")}
+              <Text style={[styles.wineCardDetails, { color: theme.text }]} numberOfLines={2}>
+                {`${wineVintage?.trim() || "NV"} - ${wineName?.trim() || "Unnamed Wine"}${wineFormat ? ` - ${wineFormat.trim()}` : ""}`}
               </Text>
             </View>
           )}
@@ -152,14 +154,16 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
   },
-  wineCardName: {
-    fontSize: 17,
-    fontWeight: "800",
-    marginBottom: 4,
+  wineCardProducer: {
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+    marginBottom: 3,
   },
-  wineCardMeta: {
-    fontSize: 13,
-    fontWeight: "500",
+  wineCardDetails: {
+    fontSize: 14,
+    fontWeight: "700",
   },
   closeButton: {
     padding: 4,

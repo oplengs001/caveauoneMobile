@@ -165,23 +165,47 @@ export default function OnboardingTasksScreen() {
         <View style={styles.itemsSummary}>
           <Text style={styles.summaryTitle}>Shipment Overview</Text>
           <View style={styles.summaryList}>
-            {item.items.slice(0, 3).map((i, index) => (
-              <View key={index} style={styles.summaryItemRow}>
-                <View style={styles.summaryItemDot} />
-                <View style={styles.summaryItemContent}>
-                  <Text style={styles.summaryItemName} numberOfLines={1}>
-                    {i.wineName}
-                  </Text>
-                  <Text style={styles.summaryItemMeta} numberOfLines={1}>
-                    {i.producerName || "Unknown Producer"} •{" "}
-                    {i.format || "Standard"}
-                  </Text>
+            {item.items.slice(0, 3).map((i, index) => {
+              const producer = (i.producerName || "Independent Producer").trim().toUpperCase();
+              const vintage = i.vintage?.trim() || "NV";
+              const wineName = i.wineName?.trim() || "Unnamed Wine";
+              const format = i.format?.trim() || "750ml";
+              const details = `${vintage} - ${wineName} - ${format}`;
+
+              return (
+                <View key={index} style={styles.summaryItemRow}>
+                  <View style={styles.summaryItemDot} />
+                  <View style={styles.summaryItemContent}>
+                    <Text
+                      style={{
+                        color: "#818cf8",
+                        fontSize: 10.5,
+                        fontWeight: "900",
+                        letterSpacing: 0.4,
+                        textTransform: "uppercase",
+                      }}
+                      numberOfLines={1}
+                    >
+                      {producer}
+                    </Text>
+                    <Text
+                      style={{
+                        color: "#f1f5f9",
+                        fontSize: 12,
+                        fontWeight: "700",
+                        marginTop: 1,
+                      }}
+                      numberOfLines={1}
+                    >
+                      {details}
+                    </Text>
+                  </View>
+                  <View style={styles.summaryItemQtyBadge}>
+                    <Text style={styles.summaryItemQtyText}>{i.qty}</Text>
+                  </View>
                 </View>
-                <View style={styles.summaryItemQtyBadge}>
-                  <Text style={styles.summaryItemQtyText}>{i.qty}</Text>
-                </View>
-              </View>
-            ))}
+              );
+            })}
           </View>
           {item.items.length > 3 && (
             <Text style={styles.summaryMore}>

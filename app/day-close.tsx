@@ -376,6 +376,9 @@ interface UnclosedDay {
 interface FlaggedItemInput {
   masterWineId: string;
   wineName: string;
+  producer?: string;
+  vintage?: string;
+  format?: string;
   systemVolume: number;
   discrepancyType: string; // "breakage" | "tasting" | "complimentary" | "missing" | "other"
   discrepancyUnits: number;
@@ -604,7 +607,10 @@ export default function DayCloseScreen() {
 
     const newItem: FlaggedItemInput = {
       masterWineId: selectedWine.id,
-      wineName: `${selectedWine.name} ${selectedWine.vintage || ""}`.trim(),
+      producer: selectedWine.producer,
+      vintage: selectedWine.vintage,
+      format: selectedWine.format,
+      wineName: selectedWine.name,
       systemVolume: 0,
       discrepancyType: discType,
       discrepancyUnits: units,
@@ -939,8 +945,11 @@ export default function DayCloseScreen() {
                       return (
                         <View key={b.id} style={styles.glassReconcileRow}>
                           <View style={{ flex: 1 }}>
-                            <Text style={styles.glassWineName}>
-                              {b.wineName || b.masterWine?.name || "Open Bottle"}
+                            <Text style={styles.glassProducer} numberOfLines={1}>
+                              {(b.producer || b.masterWine?.producer || "Independent Producer").trim().toUpperCase()}
+                            </Text>
+                            <Text style={styles.glassWineName} numberOfLines={2}>
+                              {`${b.vintage || b.masterWine?.vintage || "NV"} - ${b.wineName || b.masterWine?.name || "Open Bottle"} - ${b.format || b.masterWine?.format || "750ml"}`}
                             </Text>
                             <Text style={styles.glassMeta}>
                               ID: {b.bottleId || b.readableId || b.id.slice(0, 8)} • Currently: {maxGlasses} glass(es) left
@@ -1066,7 +1075,12 @@ export default function DayCloseScreen() {
                   {flaggedItems.map((item, idx) => (
                     <View key={idx} style={styles.flaggedItemCard}>
                       <View style={{ flex: 1 }}>
-                        <Text style={styles.flaggedWineName}>{item.wineName}</Text>
+                        <Text style={styles.flaggedProducer} numberOfLines={1}>
+                          {(item.producer || "Independent Producer").trim().toUpperCase()}
+                        </Text>
+                        <Text style={styles.flaggedWineName}>
+                          {`${item.vintage?.trim() || "NV"} - ${item.wineName?.trim() || "Wine"} - ${item.format?.trim() || "750ml"}`}
+                        </Text>
                         <Text style={styles.flaggedReason}>
                           {item.discrepancyType.toUpperCase()} • {item.discrepancyUnits} bottle(s)
                         </Text>
@@ -1090,9 +1104,20 @@ export default function DayCloseScreen() {
                   {/* Pick Wine Button */}
                   <TouchableOpacity style={styles.pickWineButton} onPress={loadMasterWines}>
                     <Wine size={18} color={theme.primary} />
-                    <Text style={styles.pickWineText}>
-                      {selectedWine ? `${selectedWine.name} (${selectedWine.vintage})` : "Select Wine from Catalog..."}
-                    </Text>
+                    <View style={{ flex: 1 }}>
+                      {selectedWine ? (
+                        <>
+                          <Text style={{ fontSize: 10, fontWeight: "900", letterSpacing: 0.4, textTransform: "uppercase", color: theme.primary }} numberOfLines={1}>
+                            {(selectedWine.producer || "Independent Producer").trim().toUpperCase()}
+                          </Text>
+                          <Text style={styles.pickWineText} numberOfLines={1}>
+                            {`${selectedWine.vintage?.trim() || "NV"} - ${selectedWine.name?.trim() || "Wine"} - ${selectedWine.format?.trim() || "750ml"}`}
+                          </Text>
+                        </>
+                      ) : (
+                        <Text style={styles.pickWineText}>Select Wine from Catalog...</Text>
+                      )}
+                    </View>
                     {loadingWines ? <ActivityIndicator size="small" color={theme.primary} /> : <ChevronRight size={18} color="#94a3b8" />}
                   </TouchableOpacity>
 
@@ -1226,9 +1251,11 @@ export default function DayCloseScreen() {
                 >
                   <Wine size={20} color={theme.primary} />
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.wineRowName, { color: theme.text }]}>{item.name}</Text>
-                    <Text style={styles.wineRowSub}>
-                      {item.producer} • {item.vintage || "NV"} • {item.format || "75cl"}
+                    <Text style={{ fontSize: 11, fontWeight: "900", letterSpacing: 0.4, textTransform: "uppercase", color: theme.primary }} numberOfLines={1}>
+                      {(item.producer || "Independent Producer").trim().toUpperCase()}
+                    </Text>
+                    <Text style={[styles.wineRowName, { color: theme.text, marginTop: 1 }]} numberOfLines={1}>
+                      {`${item.vintage?.trim() || "NV"} - ${item.name?.trim() || "Unnamed Wine"} - ${item.format?.trim() || "75cl"}`}
                     </Text>
                   </View>
                   <ChevronRight size={18} color="#94a3b8" />
@@ -1273,9 +1300,12 @@ export default function DayCloseScreen() {
                 renderItem={({ item }) => (
                   <View style={[styles.saleDrillRow, item.isVoided && styles.saleDrillRowVoided]}>
                     <View style={{ flex: 1 }}>
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                      <Text style={[styles.saleDrillProducer, item.isVoided && { textDecorationLine: "line-through", opacity: 0.6 }]} numberOfLines={1}>
+                        {(item.producer || item.masterWine?.producer || "Independent Producer").trim().toUpperCase()}
+                      </Text>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 1 }}>
                         <Text style={[styles.saleDrillWineName, item.isVoided && styles.saleDrillWineNameVoided]}>
-                          {item.wineName || item.masterWine?.name || "Wine Sale"}
+                          {`${item.vintage || item.masterWine?.vintage || "NV"} - ${item.wineName || item.masterWine?.name || "Wine Sale"} - ${item.format || item.masterWine?.format || "750ml"}`}
                         </Text>
                         {item.isVoided && (
                           <View style={styles.voidTag}>
@@ -1735,6 +1765,22 @@ const styles = StyleSheet.create({
     borderColor: "#e2e8f0",
     gap: 10,
   },
+  glassProducer: {
+    fontSize: 10.5,
+    fontWeight: "900",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+    color: "#4f46e5",
+    marginBottom: 1,
+  },
+  flaggedProducer: {
+    fontSize: 10.5,
+    fontWeight: "900",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+    color: "#b91c1c",
+    marginBottom: 1,
+  },
   glassWineName: {
     fontSize: 13,
     fontWeight: "800",
@@ -1788,6 +1834,14 @@ const styles = StyleSheet.create({
     backgroundColor: "#f8fafc",
     borderWidth: 1,
     borderColor: "#e2e8f0",
+  },
+  saleDrillProducer: {
+    fontSize: 10.5,
+    fontWeight: "900",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+    color: "#4c0519",
+    marginBottom: 1,
   },
   saleDrillWineName: {
     fontSize: 13,

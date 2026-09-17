@@ -517,11 +517,11 @@ export default function SellScreen() {
           <Wine size={16} color={theme.primary} />
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={[styles.wineName, { color: theme.text, fontSize: 13.5, marginBottom: 1 }]} numberOfLines={1}>{selectedWine.name}</Text>
-          <Text style={[styles.wineSub, { color: theme.textSecondary, fontSize: 11.5 }]}>
-            {selectedWine.vintage}
-            {selectedWine.producer ? ` • ${selectedWine.producer}` : ""}
-            {selectedWine.format ? ` • ${selectedWine.format}` : ""}
+          <Text style={{ fontSize: 11, fontWeight: "900", letterSpacing: 0.4, textTransform: "uppercase", color: theme.primary }} numberOfLines={1}>
+            {(selectedWine.producer || "Independent Producer").trim().toUpperCase()}
+          </Text>
+          <Text style={{ fontSize: 13, fontWeight: "700", color: theme.text, marginTop: 1 }} numberOfLines={1}>
+            {`${selectedWine.vintage?.trim() || "NV"} - ${selectedWine.name?.trim() || "Unnamed Wine"} - ${selectedWine.format?.trim() || "750ml"}`}
           </Text>
         </View>
       </View>
@@ -602,11 +602,11 @@ export default function SellScreen() {
                 <Wine size={18} color={theme.primary} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.wineName, { color: theme.text, fontSize: 15 }]} numberOfLines={1}>{w.name}</Text>
-                <Text style={[styles.wineSub, { color: theme.textSecondary, fontSize: 12.5 }]} numberOfLines={1}>
-                  {w.vintage}
-                  {w.producer ? ` • ${w.producer}` : ""}
-                  {w.format ? ` • ${w.format}` : ""}
+                <Text style={{ fontSize: 11, fontWeight: "900", letterSpacing: 0.4, textTransform: "uppercase", color: theme.primary }} numberOfLines={1}>
+                  {(w.producer || "Independent Producer").trim().toUpperCase()}
+                </Text>
+                <Text style={{ fontSize: 13.5, fontWeight: "700", color: theme.text, marginTop: 1 }} numberOfLines={1}>
+                  {`${w.vintage?.trim() || "NV"} - ${w.name?.trim() || "Unnamed Wine"} - ${w.format?.trim() || "750ml"}`}
                 </Text>
                 {openBtl && (
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 5, marginTop: 4, alignSelf: "flex-start", backgroundColor: "#3b82f615", borderColor: "#3b82f640", borderWidth: 1, paddingHorizontal: 8, paddingVertical: 2.5, borderRadius: 6 }}>

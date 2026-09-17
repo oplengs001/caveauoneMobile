@@ -1,8 +1,8 @@
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
+import { useResponsivePadding } from "@/hooks/useResponsivePadding";
 import { apiFetch } from "@/lib/api";
 import { calculateDashboardSalesMetrics } from "@/lib/utils/salesMath";
-import { useResponsivePadding } from "@/hooks/useResponsivePadding";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import {
   Banknote,
@@ -490,6 +490,12 @@ export default function SalesScreen() {
     const itemProfit = price - cost;
     const isProfitable = itemProfit >= 0;
 
+    const producer = (item.producer || "Independent Producer").trim().toUpperCase();
+    const vintage = item.vintage?.trim() || "NV";
+    const wineName = item.wineName?.trim() || "Unnamed Wine";
+    const format = item.format?.trim() || "750ml";
+    const details = `${vintage} - ${wineName} - ${format}`;
+
     return (
       <View
         style={[
@@ -504,14 +510,15 @@ export default function SalesScreen() {
           <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 2 }}>
             <Text
               style={[
-                styles.wineName,
+                styles.wineProducer,
                 {
-                  color: item.isVoided ? "#6b7280" : theme.text,
+                  color: item.isVoided ? "#6b7280" : theme.primary,
                   textDecorationLine: item.isVoided ? "line-through" : "none",
                 },
               ]}
+              numberOfLines={1}
             >
-              {item.wineName} {item.vintage && `(${item.vintage})`}
+              {producer}
             </Text>
             {item.isVoided && (
               <View style={styles.voidBadge}>
@@ -521,8 +528,17 @@ export default function SalesScreen() {
             )}
           </View>
 
-          <Text style={[styles.wineDetails, { color: theme.textSecondary }]}>
-            {item.producer} {item.format && `• ${item.format}`}
+          <Text
+            style={[
+              styles.wineDetails,
+              {
+                color: item.isVoided ? "#9ca3af" : theme.text,
+                textDecorationLine: item.isVoided ? "line-through" : "none",
+              },
+            ]}
+            numberOfLines={2}
+          >
+            {details}
           </Text>
 
           <View style={styles.metaRow}>
@@ -707,8 +723,8 @@ export default function SalesScreen() {
                 {statusFilter === "voided"
                   ? "No voided transactions recorded for this period."
                   : statusFilter === "completed"
-                  ? "No completed sales recorded for this period."
-                  : "No sales recorded for this period."}
+                    ? "No completed sales recorded for this period."
+                    : "No sales recorded for this period."}
               </Text>
             </View>
           }
@@ -889,8 +905,14 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   saleInfo: { flex: 1, paddingRight: 12 },
+  wineProducer: {
+    fontSize: 10.5,
+    fontWeight: "900",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+  },
   wineName: { fontSize: 15, fontWeight: "600", marginBottom: 2 },
-  wineDetails: { fontSize: 13, marginBottom: 4 },
+  wineDetails: { fontSize: 12.5, fontWeight: "700", marginTop: 1, marginBottom: 4 },
   metaRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 2 },
   bottleIdText: { fontSize: 12 },
   profitBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },

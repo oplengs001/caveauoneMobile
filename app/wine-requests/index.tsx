@@ -424,53 +424,73 @@ export default function WineRequestsIndex() {
 
           {/* Items List Preview */}
           <View style={styles.itemsContainer}>
-            {displayItems.map((wine, idx) => (
-              <View key={idx} style={styles.wineRow}>
-                <View
-                  style={[
-                    styles.qtyBadge,
-                    { backgroundColor: theme.primary + "15" },
-                  ]}
-                >
-                  <Text style={[styles.qtyText, { color: theme.primary }]}>
-                    {wine.qty}x
-                  </Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text
-                    style={[styles.wineName, { color: theme.text }]}
-                    numberOfLines={1}
+            {displayItems.map((wine, idx) => {
+              const producer = (wine.producer || "Independent Producer").trim().toUpperCase();
+              const vintage = wine.vintage?.trim() || "NV";
+              const wineName = wine.wineName?.trim() || "Unnamed Wine";
+              const format = wine.format?.trim() || "750ml";
+              const details = `${vintage} - ${wineName} - ${format}`;
+
+              return (
+                <View key={idx} style={styles.wineRow}>
+                  <View
+                    style={[
+                      styles.qtyBadge,
+                      { backgroundColor: theme.primary + "15" },
+                    ]}
                   >
-                    {wine.wineName}
-                  </Text>
-                  <Text style={[styles.wineMeta, { color: theme.textSecondary }]}>
-                    {[wine.producer, wine.vintage, wine.format]
-                      .filter(Boolean)
-                      .join(" • ")}
-                  </Text>
-                  {wine.itemNote ? (
-                    <Text style={[styles.itemNoteText, { color: theme.primary }]}>
-                      Note: {wine.itemNote}
+                    <Text style={[styles.qtyText, { color: theme.primary }]}>
+                      {wine.qty}x
                     </Text>
-                  ) : null}
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      style={{
+                        color: theme.primary,
+                        fontSize: 10.5,
+                        fontWeight: "900",
+                        letterSpacing: 0.4,
+                        textTransform: "uppercase",
+                      }}
+                      numberOfLines={1}
+                    >
+                      {producer}
+                    </Text>
+                    <Text
+                      style={{
+                        color: theme.text,
+                        fontSize: 12.5,
+                        fontWeight: "700",
+                        marginTop: 1,
+                      }}
+                      numberOfLines={2}
+                    >
+                      {details}
+                    </Text>
+                    {wine.itemNote ? (
+                      <Text style={[styles.itemNoteText, { color: theme.primary }]}>
+                        Note: {wine.itemNote}
+                      </Text>
+                    ) : null}
+                  </View>
+                  {wine.itemStatus === "available" && (
+                    <View style={[styles.itemStatusBadge, { backgroundColor: "#10b98118", borderColor: "#10b98150" }]}>
+                      <Text style={[styles.itemStatusText, { color: "#10b981" }]}>Available</Text>
+                    </View>
+                  )}
+                  {wine.itemStatus === "awaiting_restock" && (
+                    <View style={[styles.itemStatusBadge, { backgroundColor: "#f59e0b18", borderColor: "#f59e0b50" }]}>
+                      <Text style={[styles.itemStatusText, { color: "#f59e0b" }]}>Awaiting</Text>
+                    </View>
+                  )}
+                  {wine.itemStatus === "discontinued" && (
+                    <View style={[styles.itemStatusBadge, { backgroundColor: "#ef444418", borderColor: "#ef444450" }]}>
+                      <Text style={[styles.itemStatusText, { color: "#ef4444" }]}>Discontinued</Text>
+                    </View>
+                  )}
                 </View>
-                {wine.itemStatus === "available" && (
-                  <View style={[styles.itemStatusBadge, { backgroundColor: "#10b98118", borderColor: "#10b98150" }]}>
-                    <Text style={[styles.itemStatusText, { color: "#10b981" }]}>Available</Text>
-                  </View>
-                )}
-                {wine.itemStatus === "awaiting_restock" && (
-                  <View style={[styles.itemStatusBadge, { backgroundColor: "#f59e0b18", borderColor: "#f59e0b50" }]}>
-                    <Text style={[styles.itemStatusText, { color: "#f59e0b" }]}>Awaiting</Text>
-                  </View>
-                )}
-                {wine.itemStatus === "discontinued" && (
-                  <View style={[styles.itemStatusBadge, { backgroundColor: "#ef444418", borderColor: "#ef444450" }]}>
-                    <Text style={[styles.itemStatusText, { color: "#ef4444" }]}>Discontinued</Text>
-                  </View>
-                )}
-              </View>
-            ))}
+              );
+            })}
 
             {hiddenCount > 0 && !isExpanded && (
               <TouchableOpacity
