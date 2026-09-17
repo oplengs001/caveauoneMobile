@@ -1,15 +1,5 @@
-import React, { useState } from "react";
-import {
-  ActivityIndicator,
-  FlatList,
-  Modal,
-  Platform,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { Colors } from "@/constants/theme";
+import { MasterWine, StockStatus, StoreWineSetting } from "@/types";
 import {
   CheckCircle2,
   Circle,
@@ -22,8 +12,18 @@ import {
   X,
   Zap,
 } from "lucide-react-native";
-import { Colors } from "@/constants/theme";
-import { MasterWine, StoreWineSetting, StockStatus } from "@/types";
+import React, { useState } from "react";
+import {
+  ActivityIndicator,
+  FlatList,
+  Modal,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
 export interface WineEntry {
   masterWine: MasterWine;

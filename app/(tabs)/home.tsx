@@ -93,6 +93,29 @@ export default function HomeScreen() {
   const [loadingRequests, setLoadingRequests] = useState(true);
   const [initialDataLoaded, setInitialDataLoaded] = useState(false);
   const isStoreUser = profile?.role === "store" || profile?.role === "store_manager" || profile?.role === "store_staff";
+  const [warehouseTaskCounts, setWarehouseTaskCounts] = useState({
+    onboarding: 0,
+    pullout: 0,
+  });
+
+  useEffect(() => {
+    if (!isStoreUser) {
+      AsyncStorage.getItem("warehouse_active_task_counts")
+        .then((raw) => {
+          if (raw) {
+            try {
+              const parsed = JSON.parse(raw);
+              if (parsed?.data) {
+                setWarehouseTaskCounts(parsed.data);
+              }
+            } catch (e) {
+              console.warn("Invalid warehouse tasks cache", e);
+            }
+          }
+        })
+        .catch(() => {});
+    }
+  }, [isStoreUser]);
 
   useEffect(() => {
     if (!isStoreUser) {
@@ -208,7 +231,7 @@ export default function HomeScreen() {
       });
 
       metricsCache.current = { data: metrics, storeId, fetchedAt: Date.now() };
-      AsyncStorage.setItem(storageKey, JSON.stringify({ data: metrics, ts: Date.now() })).catch(() => {});
+      AsyncStorage.setItem(storageKey, JSON.stringify({ data: metrics, ts: Date.now() })).catch(() => { });
       setDashboardMetrics(metrics);
     } catch (err) {
       console.error("Failed to fetch dashboard metrics:", err);
@@ -503,6 +526,63 @@ export default function HomeScreen() {
     }
   }, [profile]);
 
+  const fetchWarehouseTasks = useCallback(async () => {
+    const isWarehouseRole = profile?.role === "warehouse" || (!isStoreUser && profile?.role !== "admin");
+    if (!isWarehouseRole) return;
+
+    try {
+      const sourceIds = ["warehouse"];
+      if (profile?.locationId) sourceIds.push(profile.locationId);
+
+      const pulloutParams = new URLSearchParams({
+        status: "pending,in_progress",
+        sourceStoreId: sourceIds.join(","),
+      });
+
+      const [onboardingData, pulloutData] = await Promise.all([
+        apiFetch("/onboarding?status=warehouse").catch((err) => {
+          console.warn("Failed to fetch onboarding tasks for warehouse:", err);
+          return [];
+        }),
+        apiFetch(`/pullout-requests?${pulloutParams}`).catch((err) => {
+          console.warn("Failed to fetch pullout tasks for warehouse:", err);
+          return [];
+        }),
+      ]);
+
+      const rawOnboarding: any[] =
+        onboardingData?.onboardingTasks ||
+        (Array.isArray(onboardingData) ? onboardingData : []);
+      const activeOnboarding = rawOnboarding.filter((t: any) => {
+        if (t.status === "completed") return false;
+        if (t.items && Array.isArray(t.items) && t.items.length > 0) {
+          return t.items.some((i: any) => (Number(i.onboardedQty) || 0) < (Number(i.qty) || 0));
+        }
+        return true;
+      });
+
+      const rawPullout: any[] =
+        pulloutData?.pulloutRequests ||
+        (Array.isArray(pulloutData) ? pulloutData : []);
+      const activePullout = rawPullout.filter(
+        (p: any) => p.status === "pending" || p.status === "in_progress"
+      );
+
+      const counts = {
+        onboarding: activeOnboarding.length,
+        pullout: activePullout.length,
+      };
+
+      AsyncStorage.setItem(
+        "warehouse_active_task_counts",
+        JSON.stringify({ data: counts, ts: Date.now() })
+      ).catch(() => {});
+      setWarehouseTaskCounts(counts);
+    } catch (err) {
+      console.error("Failed to fetch warehouse task counts:", err);
+    }
+  }, [profile, isStoreUser]);
+
   const isRefreshingDashboard = useRef(false);
 
   const refreshDashboard = useCallback(async (showPullIndicator = false) => {
@@ -517,6 +597,8 @@ export default function HomeScreen() {
           promises.push(fetchMetrics(), fetchOutboundRequests());
         }
         await Promise.all(promises);
+      } else if (profile?.role === "warehouse" || (!isStoreRole && profile?.role !== "admin")) {
+        await fetchWarehouseTasks();
       }
     } catch (e) {
       console.error("Failed to refresh dashboard:", e);
@@ -524,7 +606,7 @@ export default function HomeScreen() {
       isRefreshingDashboard.current = false;
       if (showPullIndicator) setRefreshing(false);
     }
-  }, [profile, fetchMetrics, fetchOutboundRequests, fetchSalesMetrics, fetchTodayCloseStatus]);
+  }, [profile, fetchMetrics, fetchOutboundRequests, fetchSalesMetrics, fetchTodayCloseStatus, fetchWarehouseTasks]);
 
   const onRefresh = useCallback(() => {
     return refreshDashboard(true);
@@ -533,7 +615,7 @@ export default function HomeScreen() {
   useFocusEffect(
     useCallback(() => {
       if (!loading) {
-        AsyncStorage.removeItem("forceDashboardRefresh").catch(() => {});
+        AsyncStorage.removeItem("forceDashboardRefresh").catch(() => { });
         refreshDashboard(false);
       }
     }, [loading, refreshDashboard]),
@@ -545,9 +627,11 @@ export default function HomeScreen() {
       if (isStoreRole) {
         fetchSalesMetrics();
         fetchTodayCloseStatus();
+      } else if (profile?.role === "warehouse" || (!isStoreRole && profile?.role !== "admin")) {
+        fetchWarehouseTasks();
       }
     }
-  }, [loading, profile, salesPeriod, fetchSalesMetrics, fetchTodayCloseStatus]);
+  }, [loading, profile, salesPeriod, fetchSalesMetrics, fetchTodayCloseStatus, fetchWarehouseTasks]);
 
   const handleSignOut = () => {
     Alert.alert("Sign Out", "Are you sure you want to exit the system?", [
@@ -2071,18 +2155,38 @@ export default function HomeScreen() {
                 <View style={styles.heroActionTextContainer}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                     <Text style={styles.heroActionTitle}>Onboarding Tasks</Text>
-                    <View style={styles.heroLiveBadge}>
-                      <View style={styles.heroLiveDot} />
-                      <Text style={styles.heroLiveBadgeText}>Inbound Intake</Text>
-                    </View>
+                    {warehouseTaskCounts.onboarding > 0 ? (
+                      <View style={styles.heroCountBadgeActive}>
+                        <View style={styles.heroLiveDot} />
+                        <Text style={styles.heroCountBadgeActiveText}>
+                          {warehouseTaskCounts.onboarding} ACTIVE
+                        </Text>
+                      </View>
+                    ) : (
+                      <View style={styles.heroLiveBadge}>
+                        <View style={styles.heroLiveDot} />
+                        <Text style={styles.heroLiveBadgeText}>Inbound Intake</Text>
+                      </View>
+                    )}
                   </View>
                   <Text style={styles.heroActionDesc} numberOfLines={1}>
-                    Process deliveries & barcode scans
+                    {warehouseTaskCounts.onboarding > 0
+                      ? `${warehouseTaskCounts.onboarding} active intake task${warehouseTaskCounts.onboarding === 1 ? "" : "s"} ready for processing`
+                      : "Process deliveries & barcode scans"}
                   </Text>
                 </View>
               </View>
-              <View style={styles.heroActionArrow}>
-                <ChevronRight size={16} color="#ffffff" strokeWidth={2.5} />
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                {warehouseTaskCounts.onboarding > 0 && (
+                  <View style={styles.heroCounterPill}>
+                    <Text style={styles.heroCounterPillText}>
+                      {warehouseTaskCounts.onboarding}
+                    </Text>
+                  </View>
+                )}
+                <View style={styles.heroActionArrow}>
+                  <ChevronRight size={16} color="#ffffff" strokeWidth={2.5} />
+                </View>
               </View>
             </TouchableOpacity>
 
@@ -2163,14 +2267,25 @@ export default function HomeScreen() {
                   <View style={[styles.tileIconCircle, { backgroundColor: "#f59e0b18" }]}>
                     <Truck size={18} color="#fbbf24" strokeWidth={2} />
                   </View>
-                  <ChevronRight size={14} color="#94a3b8" />
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                    {warehouseTaskCounts.pullout > 0 && (
+                      <View style={styles.tileCountPill}>
+                        <Text style={styles.tileCountPillText}>
+                          {warehouseTaskCounts.pullout}
+                        </Text>
+                      </View>
+                    )}
+                    <ChevronRight size={14} color="#94a3b8" />
+                  </View>
                 </View>
                 <View style={styles.tileTextContainer}>
                   <Text style={[styles.tileTitle, { color: theme.text }]} numberOfLines={1}>
                     Pullout Tasks
                   </Text>
                   <Text style={[styles.tileDesc, { color: theme.textSecondary }]} numberOfLines={1}>
-                    Fulfill store requests
+                    {warehouseTaskCounts.pullout > 0
+                      ? `${warehouseTaskCounts.pullout} active task${warehouseTaskCounts.pullout === 1 ? "" : "s"}`
+                      : "Fulfill store requests"}
                   </Text>
                 </View>
               </TouchableOpacity>
@@ -2473,6 +2588,38 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  heroCountBadgeActive: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "rgba(255, 255, 255, 0.22)",
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.4)",
+  },
+  heroCountBadgeActiveText: {
+    color: "#ffffff",
+    fontSize: 9,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  heroCounterPill: {
+    backgroundColor: "#ffffff",
+    minWidth: 22,
+    height: 22,
+    paddingHorizontal: 6,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  heroCounterPillText: {
+    color: Colors.warehouse.primary,
+    fontSize: 11.5,
+    fontWeight: "900",
+  },
   storeTwoColGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -2571,6 +2718,20 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     color: "#64748b",
     textAlign: "center",
+  },
+  tileCountPill: {
+    backgroundColor: "#f59e0b",
+    minWidth: 20,
+    height: 20,
+    paddingHorizontal: 6,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tileCountPillText: {
+    color: "#ffffff",
+    fontSize: 11,
+    fontWeight: "900",
   },
 
   // Store Front Mode Footer Badge

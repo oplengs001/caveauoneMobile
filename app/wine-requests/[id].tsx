@@ -1326,6 +1326,11 @@ export default function WineRequestDetail() {
                   const isVerified = isBottleVerified(bottle);
                   const isSkipped = isBottleSkipped(bottle);
                   const isPending = !isVerified && !isSkipped;
+                  const producer = (bottle.producer || "Independent Producer").trim().toUpperCase();
+                  const vintage = bottle.vintage?.trim() || "NV";
+                  const wineName = bottle.wineName?.trim() || "Unnamed Wine";
+                  const format = bottle.format?.trim() || "750ml";
+                  const details = `${vintage} - ${wineName} - ${format}`;
 
                   return (
                     <View
@@ -1362,11 +1367,11 @@ export default function WineRequestDetail() {
                       </View>
 
                       <View style={{ flex: 1, paddingRight: 8 }}>
-                        <Text style={{ color: theme.text, fontSize: 13, fontWeight: "700" }} numberOfLines={1}>
-                          {bottle.wineName}
+                        <Text style={{ color: theme.primary, fontSize: 10.5, fontWeight: "900", letterSpacing: 0.4, textTransform: "uppercase" }} numberOfLines={1}>
+                          {producer}
                         </Text>
-                        <Text style={{ color: theme.textSecondary, fontSize: 11, fontWeight: "500", marginTop: 2 }}>
-                          {[bottle.producer, bottle.vintage, bottle.format].filter(Boolean).join(" · ")}
+                        <Text style={{ color: theme.text, fontSize: 12.5, fontWeight: "700", marginTop: 1 }} numberOfLines={1}>
+                          {details}
                         </Text>
                         <Text style={{ color: theme.textSecondary, fontSize: 11, fontWeight: "700", fontFamily: "monospace", marginTop: 3 }}>
                           {bottle.readableId || bottle.bottleId}
@@ -1483,6 +1488,11 @@ export default function WineRequestDetail() {
               const isVerified = isBottleVerified(bottle);
               const isSkipped = isBottleSkipped(bottle);
               const isPending = !isVerified && !isSkipped;
+              const producer = (bottle.producer || "Independent Producer").trim().toUpperCase();
+              const vintage = bottle.vintage?.trim() || "NV";
+              const wineName = bottle.wineName?.trim() || "Unnamed Wine";
+              const format = bottle.format?.trim() || "750ml";
+              const details = `${vintage} - ${wineName} - ${format}`;
 
               return (
                 <View key={bottle.bottleId} style={{ flexDirection: "row", alignItems: "center", backgroundColor: theme.card, padding: 16, borderRadius: 16, marginBottom: 10, borderWidth: 1, borderColor: isVerified ? "#10b981" : isSkipped ? "#ef4444" : theme.border, gap: 14 }}>
@@ -1490,11 +1500,11 @@ export default function WineRequestDetail() {
                     {isVerified ? <CheckCircle2 size={18} color="#10b981" /> : isSkipped ? <Ban size={18} color="#ef4444" /> : <Text style={{ color: theme.textSecondary, fontSize: 13, fontWeight: "900" }}>{index + 1}</Text>}
                   </View>
                   <View style={{ flex: 1, paddingRight: 8 }}>
-                    <Text style={{ color: theme.text, fontSize: 13, fontWeight: "700" }}>
-                      {bottle.wineName}
+                    <Text style={{ color: theme.primary, fontSize: 10.5, fontWeight: "900", letterSpacing: 0.4, textTransform: "uppercase" }} numberOfLines={1}>
+                      {producer}
                     </Text>
-                    <Text style={{ color: theme.textSecondary, fontSize: 11, fontWeight: "500", marginTop: 2 }}>
-                      {[bottle.producer, bottle.vintage, bottle.format].filter(Boolean).join(" · ")}
+                    <Text style={{ color: theme.text, fontSize: 12.5, fontWeight: "700", marginTop: 1 }} numberOfLines={2}>
+                      {details}
                     </Text>
                     <Text style={{ color: theme.textSecondary, fontSize: 11, fontWeight: "700", fontFamily: "monospace", marginTop: 4 }}>
                       {bottle.readableId || bottle.bottleId}
@@ -1929,6 +1939,11 @@ export default function WineRequestDetail() {
                 const expectedQty = getItemExpectedQty(wine, batchBottles);
                 const isFullySkipped = expectedQty === 0;
                 const isItemFulfilled = (wine.ingressedQty || 0) >= expectedQty;
+                const producer = (wine.producer || "Independent Producer").trim().toUpperCase();
+                const vintage = wine.vintage?.trim() || "NV";
+                const wineName = wine.wineName?.trim() || "Unnamed Wine";
+                const format = wine.format?.trim() || "750ml";
+                const details = `${vintage} - ${wineName} - ${format}`;
 
                 return (
                   <View
@@ -1963,22 +1978,32 @@ export default function WineRequestDetail() {
                     <View style={{ flex: 1, paddingRight: 4 }}>
                       <Text
                         style={[
-                          styles.wineName,
-                          { color: theme.text, fontSize: 13 },
+                          {
+                            color: theme.primary,
+                            fontSize: 10.5,
+                            fontWeight: "900",
+                            letterSpacing: 0.4,
+                            textTransform: "uppercase",
+                          },
                           isFullySkipped && styles.textMuted,
                         ]}
                         numberOfLines={1}
                       >
-                        {wine.wineName}
+                        {producer}
                       </Text>
                       <Text
                         style={[
-                          styles.wineMeta,
-                          { color: theme.textSecondary, fontSize: 11 },
+                          {
+                            color: theme.text,
+                            fontSize: 12.5,
+                            fontWeight: "700",
+                            marginTop: 1,
+                          },
                           isFullySkipped && styles.textMuted,
                         ]}
+                        numberOfLines={2}
                       >
-                        {[wine.vintage, wine.format].filter(Boolean).join(" · ")}
+                        {details}
                       </Text>
                       {wine.sku && wine.sku !== "N/A" && (
                         <Text
@@ -2124,6 +2149,11 @@ export default function WineRequestDetail() {
             const expectedQty = getItemExpectedQty(wine, batchBottles);
             const isFullySkipped = expectedQty === 0;
             const isItemFulfilled = (wine.ingressedQty || 0) >= expectedQty;
+            const producer = (wine.producer || "Independent Producer").trim().toUpperCase();
+            const vintage = wine.vintage?.trim() || "NV";
+            const wineName = wine.wineName?.trim() || "Unnamed Wine";
+            const format = wine.format?.trim() || "750ml";
+            const details = `${vintage} - ${wineName} - ${format}`;
 
             return (
               <View
@@ -2161,21 +2191,32 @@ export default function WineRequestDetail() {
                 <View style={{ flex: 1, paddingRight: 4 }}>
                   <Text
                     style={[
-                      styles.wineName,
-                      { color: theme.text },
+                      {
+                        color: theme.primary,
+                        fontSize: 10.5,
+                        fontWeight: "900",
+                        letterSpacing: 0.4,
+                        textTransform: "uppercase",
+                      },
                       isFullySkipped && styles.textMuted,
                     ]}
+                    numberOfLines={1}
                   >
-                    {wine.wineName}
+                    {producer}
                   </Text>
                   <Text
                     style={[
-                      styles.wineMeta,
-                      { color: theme.textSecondary },
+                      {
+                        color: theme.text,
+                        fontSize: 12.5,
+                        fontWeight: "700",
+                        marginTop: 1,
+                      },
                       isFullySkipped && styles.textMuted,
                     ]}
+                    numberOfLines={2}
                   >
-                    {[wine.vintage, wine.format].filter(Boolean).join(" · ")}
+                    {details}
                   </Text>
                   {wine.sku && wine.sku !== "N/A" && (
                     <Text

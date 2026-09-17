@@ -1,6 +1,6 @@
 import { useAuth } from "@/context/AuthContext";
-import { apiFetch } from "@/lib/api";
 import { useResponsivePadding } from "@/hooks/useResponsivePadding";
+import { apiFetch } from "@/lib/api";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
 import {
   ArrowRight,
@@ -124,17 +124,37 @@ export default function PulloutRequestsScreen() {
 
         <View style={styles.itemsSummary}>
           <Text style={styles.summaryTitle}>Item List Overview</Text>
-          {item.items.map((i, index) => (
-            <Text key={index} style={styles.summaryItem} numberOfLines={2}>
-              • {i.wineName}{" "}
-              <Text style={styles.summaryQty}>({i.requestedQty})</Text>
-              {"\n"}{" "}
-              <Text style={{ fontSize: 11, color: "#94a3b8" }}>
-                {i.vintage} • {i.producer || "Independent Producer"} •{" "}
-                {i.format}
-              </Text>
-            </Text>
-          ))}
+          {item.items.map((i, index) => {
+            const producer = (i.producer || "Independent Producer").trim().toUpperCase();
+            const vintage = i.vintage?.trim() || "NV";
+            const wineName = i.wineName?.trim() || "Unnamed Wine";
+            const format = i.format?.trim() || "750ml";
+            const details = `${vintage} - ${wineName} - ${format}`;
+
+            const isLast = index === item.items.length - 1;
+
+            return (
+              <View
+                key={index}
+                style={[
+                  styles.summaryItemBlock,
+                  !isLast && styles.summaryItemBorder,
+                  isLast && { paddingBottom: 0 },
+                  index === 0 && { paddingTop: 2 },
+                ]}
+              >
+                <View style={styles.summaryProducerRow}>
+                  <Text style={styles.summaryProducer} numberOfLines={1}>
+                    • {producer}
+                  </Text>
+                  <Text style={styles.summaryQty}>( {i.requestedQty} )</Text>
+                </View>
+                <Text style={styles.summaryWineDetails} numberOfLines={2}>
+                  {details}
+                </Text>
+              </View>
+            );
+          })}
         </View>
 
         <View style={styles.cardFooter}>
@@ -398,15 +418,38 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     letterSpacing: 0.5,
   },
-  summaryItem: {
+  summaryItemBlock: {
+    paddingVertical: 9,
+  },
+  summaryItemBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: "#334155",
+  },
+  summaryProducerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  summaryProducer: {
     color: "#f1f5f9",
-    fontSize: 14,
-    fontWeight: "600",
-    marginBottom: 4,
+    fontSize: 13,
+    fontWeight: "800",
+    letterSpacing: 0.3,
+    flex: 1,
+    marginRight: 8,
+  },
+  summaryWineDetails: {
+    color: "#94a3b8",
+    fontSize: 11.5,
+    fontWeight: "500",
+    paddingLeft: 10,
+    marginTop: 1,
   },
   summaryQty: {
-    color: "#64748b",
-    fontWeight: "800",
+    color: "#ffffff",
+    fontSize: 18,
+    fontWeight: "900",
+    letterSpacing: -0.4,
   },
   cardFooter: {
     alignItems: "center",

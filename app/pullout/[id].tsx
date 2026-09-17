@@ -794,18 +794,29 @@ export default function PulloutDetailScreen() {
                     ]}
                   >
                     <View style={styles.resultInfo}>
-                      <Text style={[styles.resultWineName, { color: theme.text }]}>
-                        {res.wineName}
+                      <Text
+                        style={{
+                          color: theme.primary,
+                          fontSize: 10.5,
+                          fontWeight: "900",
+                          letterSpacing: 0.4,
+                          textTransform: "uppercase",
+                        }}
+                        numberOfLines={1}
+                      >
+                        {(res.producer || "Independent Producer").trim().toUpperCase()}
                       </Text>
                       <Text
                         style={{
-                          fontSize: 12,
-                          color: theme.textSecondary,
-                          fontWeight: "500",
+                          color: theme.text,
+                          fontSize: 12.5,
+                          fontWeight: "700",
+                          marginTop: 1,
                           marginBottom: 4,
                         }}
+                        numberOfLines={2}
                       >
-                        {res.vintage} • {res.producer} • {res.format}
+                        {`${res.vintage?.trim() || "NV"} - ${res.wineName?.trim() || "Unnamed Wine"} - ${res.format?.trim() || "750ml"}`}
                       </Text>
                       <Text style={[styles.resultId, { color: theme.textSecondary }]}>
                         Bottle ID: {res.bottleId || res.id}
@@ -852,6 +863,11 @@ export default function PulloutDetailScreen() {
       0,
       item.requestedQty - item.pulledQty - skippedCount,
     );
+    const producer = (item.producer || "Independent Producer").trim().toUpperCase();
+    const vintage = item.vintage?.trim() || "NV";
+    const wineName = item.wineName?.trim() || "Unnamed Wine";
+    const format = item.format?.trim() || "750ml";
+    const details = `${vintage} - ${wineName} - ${format}`;
 
     return (
       <View
@@ -887,28 +903,33 @@ export default function PulloutDetailScreen() {
               <View style={{ flex: 1, paddingRight: 8 }}>
                 <Text
                   style={[
-                    styles.itemName,
-                    { color: theme.text },
-                    isLandscapeMode && styles.itemNameLandscape,
-                    isFullySkipped && styles.textMuted,
-                  ]}
-                  numberOfLines={isLandscapeMode ? 2 : undefined}
-                >
-                  {item.wineName}
-                </Text>
-                <Text
-                  style={[
                     {
-                      fontSize: 12,
-                      color: theme.textSecondary,
-                      fontWeight: "600",
-                      marginTop: 2,
+                      color: theme.primary,
+                      fontSize: 10.5,
+                      fontWeight: "900",
+                      letterSpacing: 0.4,
+                      textTransform: "uppercase",
                     },
                     isFullySkipped && styles.textMuted,
                   ]}
                   numberOfLines={1}
                 >
-                  {item.vintage} • {item.producer || "Independent Producer"} • {item.format}
+                  {producer}
+                </Text>
+                <Text
+                  style={[
+                    {
+                      color: theme.text,
+                      fontSize: 13,
+                      fontWeight: "700",
+                      marginTop: 2,
+                    },
+                    isLandscapeMode && { fontSize: 12.5 },
+                    isFullySkipped && styles.textMuted,
+                  ]}
+                  numberOfLines={2}
+                >
+                  {details}
                 </Text>
               </View>
 
