@@ -207,8 +207,13 @@ export default function LoginScreen() {
             </View>
 
             <View style={styles.footer}>
-              <ShieldCheck size={14} color="#475569" />
-              <Text style={styles.footerText}>SECURE TERMINAL ACCESS</Text>
+              <View style={styles.footerSecurityRow}>
+                <ShieldCheck size={14} color="#475569" />
+                <Text style={styles.footerText}>SECURE TERMINAL ACCESS</Text>
+              </View>
+              <Text style={styles.apiUrlText} numberOfLines={1}>
+                API: {BASE_URL}
+              </Text>
             </View>
           </ScrollView>
         </TouchableWithoutFeedback>
@@ -375,16 +380,26 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   footer: {
-    flexDirection: "row",
-    justifyContent: "center",
     alignItems: "center",
+    justifyContent: "center",
     gap: 6,
     marginTop: 36,
+  },
+  footerSecurityRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
   footerText: {
     color: "#475569",
     fontSize: 10,
     fontWeight: "900",
     letterSpacing: 2,
+  },
+  apiUrlText: {
+    color: "#64748b",
+    fontSize: 11,
+    fontWeight: "600",
+    letterSpacing: 0.2,
   },
 });
