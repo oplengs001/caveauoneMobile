@@ -4,7 +4,8 @@ import { apiFetch } from "@/lib/api";
 import { clearToken } from "@/lib/auth";
 import { prefetchCustomers, recordCustomerSaleInCache } from "@/lib/customerCache";
 import { AppUser, fetchStoreStaff } from "@/lib/queries/users";
-import { Customer } from "@/types";
+import { getStores } from "@/lib/queries";
+import { Customer, Store } from "@/types";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { BlurView } from "expo-blur";
@@ -18,6 +19,7 @@ import {
   ChevronRight,
   ChevronUp,
   Droplets,
+  Lock,
   LogOut,
   Minus,
   Plus,
@@ -262,7 +264,50 @@ export default function StoreStaffPOSTerminal() {
   const isManager = profile?.role === "admin" || profile?.role === "store_manager" || profile?.role === "store";
   const isLandscape = width > height;
   const isTabletLandscape = isLandscape && width >= 680;
-  const storeId = profile?.locationId || null;
+
+  // Store scoping: store staff & store managers are permanently locked to their assigned store location
+  const isStoreUser = Boolean(
+    profile && (
+      profile.role === "store" ||
+      profile.role === "store_manager" ||
+      profile.role === "store_staff" ||
+      (profile.role !== "admin" && profile.locationId)
+    )
+  );
+
+  const [storesList, setStoresList] = useState<Store[]>([]);
+  const [selectedStoreId, setSelectedStoreId] = useState<string | null>(null);
+  const [isStorePickerOpen, setIsStorePickerOpen] = useState(false);
+  const [showAllCatalog, setShowAllCatalog] = useState(false);
+
+  // Effective active store: strictly profile.locationId for store users, otherwise selectedStoreId or first store
+  const storeId = isStoreUser
+    ? (profile?.locationId || null)
+    : (selectedStoreId || profile?.locationId || storesList[0]?.id || null);
+
+  // Restore admin selected store from persistent storage
+  useEffect(() => {
+    if (!isStoreUser) {
+      AsyncStorage.getItem("@caveau:pos_admin_selected_store")
+        .then((saved) => {
+          if (saved) setSelectedStoreId(saved);
+        })
+        .catch(() => {});
+    }
+  }, [isStoreUser]);
+
+  // Handle admin store switch
+  const handleSelectStore = (store: Store) => {
+    setSelectedStoreId(store.id);
+    setStoreName(store.name);
+    AsyncStorage.setItem("@caveau:pos_admin_selected_store", store.id).catch(() => {});
+    setIsStorePickerOpen(false);
+  };
+
+  // Reset cart if store changes
+  useEffect(() => {
+    setCurrentOrder([]);
+  }, [storeId]);
 
   // Data States
   const [storeName, setStoreName] = useState<string>("Boutique Store");
@@ -374,6 +419,7 @@ export default function StoreStaffPOSTerminal() {
         settingsData,
         bottlesData,
         locationsData,
+        allStoresData,
       ] = await Promise.all([
         storeId && (!storeName || isFullRefresh)
           ? apiFetch(`/stores/${storeId}`).catch(() => null)
@@ -388,9 +434,19 @@ export default function StoreStaffPOSTerminal() {
           ? apiFetch(`/bottles?storeId=${storeId}&status=received,shelved,open&pos=true`)
           : Promise.resolve([]),
         apiFetch(storeId ? `/locations?storeId=${storeId}` : "/locations").catch(() => []),
+        !isStoreUser ? getStores().catch(() => []) : Promise.resolve([]),
       ]);
 
-      if (storeData?.name) setStoreName(storeData.name);
+      if (Array.isArray(allStoresData) && allStoresData.length > 0) {
+        setStoresList(allStoresData);
+      }
+
+      if (storeData?.name) {
+        setStoreName(storeData.name);
+      } else if (storeId && Array.isArray(allStoresData)) {
+        const found = allStoresData.find((s: Store) => s.id === storeId);
+        if (found?.name) setStoreName(found.name);
+      }
 
       if (Array.isArray(staff) && staff.length > 0) {
         setStaffList(staff);
@@ -586,7 +642,20 @@ export default function StoreStaffPOSTerminal() {
               : null,
           };
         })
-        .filter((w) => !w.discontinued && (isManager ? true : w.wineCategory !== "reserve"));
+        .filter((w) => {
+          if (w.discontinued) return false;
+          if (!isManager && w.wineCategory === "reserve") return false;
+
+          // Store scope filter:
+          // Store users ONLY ever see wines that belong to their store location.
+          // Admins can toggle showAllCatalog to view all master catalog wines if needed.
+          if (storeId && (isStoreUser || !showAllCatalog)) {
+            const hasStorePresence = w.stockCount > 0 || w.openBottle !== null || settingsMap.has(w.id);
+            if (!hasStorePresence) return false;
+          }
+
+          return true;
+        });
 
       setWines(processedWines);
     } catch (error) {
@@ -595,7 +664,7 @@ export default function StoreStaffPOSTerminal() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [storeId, profile?.id, isManager, storeName, staffList.length, shiftStaffIds.length]);
+  }, [storeId, isStoreUser, showAllCatalog, profile?.id, profile?.displayName, profile?.email, isManager, storeName, staffList, shiftStaffIds.length]);
 
   useEffect(() => {
     loadData();
@@ -2101,10 +2170,27 @@ export default function StoreStaffPOSTerminal() {
             <View style={styles.portraitLogoCircle}>
               <Wine size={20} color="#ffffff" strokeWidth={2.5} />
             </View>
-            <View>
-              <Text style={styles.portraitStoreTitle} numberOfLines={1}>
-                {storeName}
-              </Text>
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                <Text style={styles.portraitStoreTitle} numberOfLines={1}>
+                  {storeName}
+                </Text>
+                {isStoreUser ? (
+                  <View style={styles.storeLockedBadge}>
+                    <Lock size={10} color="#059669" strokeWidth={2.5} />
+                    <Text style={styles.storeLockedText}>Store Scope</Text>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    onPress={() => setIsStorePickerOpen(true)}
+                    style={styles.storeSwitchPill}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.storeSwitchPillText}>Switch</Text>
+                    <ChevronDown size={12} color={MAROON.primary} />
+                  </TouchableOpacity>
+                )}
+              </View>
               <View style={styles.portraitStaffRow}>
                 <View style={styles.onlineDot} />
                 <Text style={styles.portraitStaffName}>
@@ -2115,6 +2201,26 @@ export default function StoreStaffPOSTerminal() {
           </View>
 
           <View style={styles.portraitActionsRow}>
+            {!isStoreUser && (
+              <TouchableOpacity
+                onPress={() => setShowAllCatalog((prev) => !prev)}
+                style={[
+                  styles.adminCatalogToggleBtn,
+                  showAllCatalog && styles.adminCatalogToggleBtnActive,
+                ]}
+                activeOpacity={0.8}
+              >
+                <Text
+                  style={[
+                    styles.adminCatalogToggleText,
+                    showAllCatalog && styles.adminCatalogToggleTextActive,
+                  ]}
+                >
+                  {showAllCatalog ? "All Catalog" : "Store Scoped"}
+                </Text>
+              </TouchableOpacity>
+            )}
+
             {profile?.role !== "store_staff" && (
               <TouchableOpacity
                 onPress={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)/home"))}
@@ -2177,6 +2283,62 @@ export default function StoreStaffPOSTerminal() {
 
         {/* ── 2. CENTER CATALOG AREA ─────────────────────────────────────────── */}
         <View style={styles.centerCatalog}>
+          {/* ── STORE SCOPE / LOCATION BADGE STRIP (Visible in Landscape) ─────── */}
+          {isTabletLandscape && (
+            <View style={styles.storeScopeBanner}>
+              <View style={styles.storeScopeBannerLeft}>
+                <View style={styles.storeScopeIconCircle}>
+                  <Wine size={16} color={MAROON.primary} strokeWidth={2.5} />
+                </View>
+                <View>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                    <Text style={styles.storeScopeTitle}>{storeName}</Text>
+                    {isStoreUser ? (
+                      <View style={styles.storeLockedBadge}>
+                        <Lock size={10} color="#059669" strokeWidth={2.5} />
+                        <Text style={styles.storeLockedText}>Store Scope Locked</Text>
+                      </View>
+                    ) : (
+                      <TouchableOpacity
+                        onPress={() => setIsStorePickerOpen(true)}
+                        style={styles.storeSwitchPill}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={styles.storeSwitchPillText}>Change Store</Text>
+                        <ChevronDown size={12} color={MAROON.primary} />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                  <Text style={styles.storeScopeSubtitle}>
+                    {showAllCatalog
+                      ? `Showing all master catalog wines (${wines.length})`
+                      : `Filtered to ${storeName} inventory & menu (${wines.length} wine${wines.length !== 1 ? "s" : ""})`}
+                  </Text>
+                </View>
+              </View>
+
+              {!isStoreUser && (
+                <TouchableOpacity
+                  onPress={() => setShowAllCatalog((prev) => !prev)}
+                  style={[
+                    styles.adminCatalogToggleBtn,
+                    showAllCatalog && styles.adminCatalogToggleBtnActive,
+                  ]}
+                  activeOpacity={0.8}
+                >
+                  <Text
+                    style={[
+                      styles.adminCatalogToggleText,
+                      showAllCatalog && styles.adminCatalogToggleTextActive,
+                    ]}
+                  >
+                    {showAllCatalog ? "Viewing All Catalog" : "Store Scoped"}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+
           {/* ── HIGH-VISIBILITY PORTION MODE SEGMENTED BAR ───────────────────── */}
           <View style={styles.portionSegmentOuter}>
             <Text style={styles.portionSectionLabel}>SELECT SERVING PORTION</Text>
@@ -3573,6 +3735,75 @@ export default function StoreStaffPOSTerminal() {
             </View>
           </View>
         </KeyboardAvoidingView>
+      </Modal>
+
+      {/* ── Store Picker Modal (For Admin Store Switching) ───────────────── */}
+      <Modal
+        visible={isStorePickerOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsStorePickerOpen(false)}
+      >
+        <View style={styles.locationModalOverlay}>
+          <BlurView intensity={20} tint="systemMaterialDark" style={StyleSheet.absoluteFill} />
+          <View style={[styles.locationModalCard, { maxWidth: 440 }]}>
+            <View style={styles.locationModalHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.locationModalTitle}>Select Store Location</Text>
+                <Text style={styles.locationModalSub}>
+                  Switch active store for POS Terminal
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setIsStorePickerOpen(false)}
+                style={styles.locationCloseBtn}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <MaterialCommunityIcons name="close" size={18} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ maxHeight: 320 }} showsVerticalScrollIndicator={false}>
+              <View style={{ gap: 8, paddingVertical: 4 }}>
+                {storesList
+                  .filter((s) => s.type !== "Warehouse")
+                  .map((store) => {
+                    const isSelected = storeId === store.id;
+                    return (
+                      <TouchableOpacity
+                        key={store.id}
+                        onPress={() => handleSelectStore(store)}
+                        style={[
+                          styles.storeOptionCard,
+                          isSelected && styles.storeOptionCardSelected,
+                        ]}
+                        activeOpacity={0.8}
+                      >
+                        <View style={[styles.storeOptionIcon, isSelected && styles.storeOptionIconSelected]}>
+                          <Wine size={16} color={isSelected ? "#ffffff" : MAROON.primary} />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.storeOptionName, isSelected && styles.storeOptionNameSelected]}>
+                            {store.name}
+                          </Text>
+                          {store.address && (
+                            <Text style={styles.storeOptionAddress} numberOfLines={1}>
+                              {store.address}
+                            </Text>
+                          )}
+                        </View>
+                        {isSelected && (
+                          <View style={styles.storeOptionCheck}>
+                            <Check size={14} color="#ffffff" strokeWidth={3} />
+                          </View>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+              </View>
+            </ScrollView>
+          </View>
+        </View>
       </Modal>
 
     </SafeAreaView>
@@ -5956,5 +6187,157 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
     color: "#ffffff",
+  },
+
+  // ── Store Scope Banner & Lock Indicator Styles ──
+  storeScopeBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#ffffff",
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#f1f5f9",
+    elevation: 1,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+  },
+  storeScopeBannerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flex: 1,
+  },
+  storeScopeIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: MAROON.ultraLight,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: MAROON.border,
+  },
+  storeScopeTitle: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#18181b",
+  },
+  storeScopeSubtitle: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: "#71717a",
+    marginTop: 1,
+  },
+  storeLockedBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#ecfdf5",
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#a7f3d0",
+  },
+  storeLockedText: {
+    fontSize: 9.5,
+    fontWeight: "800",
+    color: "#059669",
+    letterSpacing: 0.2,
+  },
+  storeSwitchPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: MAROON.ultraLight,
+    paddingHorizontal: 8,
+    paddingVertical: 2.5,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: MAROON.border,
+  },
+  storeSwitchPillText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: MAROON.primary,
+  },
+  adminCatalogToggleBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#f8fafc",
+  },
+  adminCatalogToggleBtnActive: {
+    backgroundColor: MAROON.primary,
+    borderColor: MAROON.primary,
+  },
+  adminCatalogToggleText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#475569",
+  },
+  adminCatalogToggleTextActive: {
+    color: "#ffffff",
+  },
+
+  // Store Option Card (Picker Modal)
+  storeOptionCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#f8fafc",
+    gap: 10,
+  },
+  storeOptionCardSelected: {
+    borderColor: MAROON.primary,
+    backgroundColor: MAROON.ultraLight,
+  },
+  storeOptionIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  storeOptionIconSelected: {
+    backgroundColor: MAROON.primary,
+    borderColor: MAROON.primary,
+  },
+  storeOptionName: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#18181b",
+  },
+  storeOptionNameSelected: {
+    color: MAROON.primary,
+    fontWeight: "900",
+  },
+  storeOptionAddress: {
+    fontSize: 11,
+    color: "#64748b",
+    marginTop: 1,
+  },
+  storeOptionCheck: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: MAROON.primary,
+    alignItems: "center",
+    justifyContent: "center",
   },
 });
